@@ -3,10 +3,8 @@ package com.thisux.droidclaw.accessibility
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
 import android.app.DownloadManager
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.graphics.Path
 import android.media.MediaScannerConnection
 import android.net.Uri
@@ -19,7 +17,6 @@ import android.util.Log
 import android.view.accessibility.AccessibilityNodeInfo
 import com.thisux.droidclaw.model.ServerMessage
 import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.resume
 
 data class ActionResult(val success: Boolean, val error: String? = null, val data: String? = null)
@@ -346,78 +343,50 @@ class GestureExecutor(private val service: DroidClawAccessibilityService) {
 
             val dm = service.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
             val downloadId = dm.enqueue(request)
+            Log.d(TAG, "Download enqueued: id=$downloadId url=$url filename=$filename")
 
-            // Wait for the download to complete (up to 120 seconds)
-            val result = withTimeoutOrNull(120_000L) {
-                suspendCancellableCoroutine<ActionResult> { cont ->
-                    val receiver = object : BroadcastReceiver() {
-                        override fun onReceive(context: Context?, intent: Intent?) {
-                            val id = intent?.getLongExtra(
-                                DownloadManager.EXTRA_DOWNLOAD_ID, -1
-                            ) ?: -1
-                            if (id == downloadId) {
-                                try {
-                                    service.unregisterReceiver(this)
-                                } catch (_: Exception) {}
+            // Poll DownloadManager status every 2 seconds (up to 120s)
+            val maxPolls = 60
+            for (i in 1..maxPolls) {
+                kotlinx.coroutines.delay(2000)
 
-                                // Check download status
-                                val query = DownloadManager.Query().setFilterById(downloadId)
-                                val cursor = dm.query(query)
-                                if (cursor != null && cursor.moveToFirst()) {
-                                    val statusIdx = cursor.getColumnIndex(
-                                        DownloadManager.COLUMN_STATUS
-                                    )
-                                    val status = cursor.getInt(statusIdx)
-                                    cursor.close()
+                val query = DownloadManager.Query().setFilterById(downloadId)
+                val cursor = dm.query(query)
+                if (cursor == null || !cursor.moveToFirst()) {
+                    cursor?.close()
+                    return ActionResult(false, "Download disappeared from queue")
+                }
 
-                                    if (status == DownloadManager.STATUS_SUCCESSFUL) {
-                                        // Trigger media scan so file appears in gallery
-                                        val filePath = Environment
-                                            .getExternalStoragePublicDirectory(
-                                                Environment.DIRECTORY_DOWNLOADS
-                                            ).absolutePath + "/$filename"
-                                        MediaScannerConnection.scanFile(
-                                            service, arrayOf(filePath), null, null
-                                        )
-                                        if (cont.isActive) cont.resume(
-                                            ActionResult(true, data = filePath)
-                                        )
-                                    } else {
-                                        if (cont.isActive) cont.resume(
-                                            ActionResult(false, "Download failed with status: $status")
-                                        )
-                                    }
-                                } else {
-                                    cursor?.close()
-                                    if (cont.isActive) cont.resume(
-                                        ActionResult(false, "Could not query download status")
-                                    )
-                                }
-                            }
+                val statusIdx = cursor.getColumnIndex(DownloadManager.COLUMN_STATUS)
+                val status = cursor.getInt(statusIdx)
+                cursor.close()
+
+                when (status) {
+                    DownloadManager.STATUS_SUCCESSFUL -> {
+                        val filePath = Environment
+                            .getExternalStoragePublicDirectory(
+                                Environment.DIRECTORY_DOWNLOADS
+                            ).absolutePath + "/$filename"
+                        MediaScannerConnection.scanFile(
+                            service, arrayOf(filePath), null, null
+                        )
+                        Log.d(TAG, "Download complete: $filePath")
+                        return ActionResult(true, data = filePath)
+                    }
+                    DownloadManager.STATUS_FAILED -> {
+                        return ActionResult(false, "Download failed")
+                    }
+                    else -> {
+                        // STATUS_PENDING or STATUS_RUNNING — keep polling
+                        if (i % 10 == 0) {
+                            Log.d(TAG, "Download still in progress (poll $i/$maxPolls)")
                         }
-                    }
-
-                    val filter = IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE)
-                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                        service.registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
-                    } else {
-                        @Suppress("UnspecifiedRegisterReceiverFlag")
-                        service.registerReceiver(receiver, filter)
-                    }
-
-                    cont.invokeOnCancellation {
-                        try {
-                            service.unregisterReceiver(receiver)
-                            dm.remove(downloadId)
-                        } catch (_: Exception) {}
                     }
                 }
             }
 
-            result ?: run {
-                dm.remove(downloadId)
-                ActionResult(false, "Download timed out after 120 seconds")
-            }
+            dm.remove(downloadId)
+            ActionResult(false, "Download timed out after 120 seconds")
         } catch (e: Exception) {
             Log.e(TAG, "Download failed", e)
             ActionResult(false, "Download failed: ${e.message}")
