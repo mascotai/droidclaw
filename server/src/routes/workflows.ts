@@ -5,7 +5,7 @@ import { sessionMiddleware, type AuthEnv } from "../middleware/auth.js";
 import { sessions } from "../ws/sessions.js";
 import { db } from "../db.js";
 import { env } from "../env.js";
-import { workflow, workflowRun, llmConfig as llmConfigTable } from "../schema.js";
+import { workflowRun, llmConfig as llmConfigTable } from "../schema.js";
 import { activeSessions } from "../agent/active-sessions.js";
 import { runWorkflowServer, type WorkflowStep } from "../agent/workflow-runner.js";
 import { runFlowServer } from "../agent/flow-runner.js";
@@ -41,186 +41,7 @@ function resolveDevice(deviceId: string, userId: string) {
   return { device };
 }
 
-// ── CRUD: Save template ──
-workflows.post("/", sessionMiddleware, async (c) => {
-  const user = c.get("user");
-  const body = await c.req.json<{
-    name: string;
-    description?: string;
-    type?: "workflow" | "flow";
-    steps: unknown[];
-    appId?: string;
-  }>();
-
-  if (!body.name || !body.steps || !Array.isArray(body.steps) || body.steps.length === 0) {
-    return c.json({ error: "name and non-empty steps array are required" }, 400);
-  }
-
-  const id = crypto.randomUUID();
-  await db.insert(workflow).values({
-    id,
-    userId: user.id,
-    name: body.name,
-    description: body.description ?? null,
-    type: body.type ?? "workflow",
-    steps: body.steps,
-    appId: body.appId ?? null,
-  });
-
-  return c.json({ id, name: body.name, type: body.type ?? "workflow" }, 201);
-});
-
-// ── CRUD: List templates ──
-workflows.get("/", sessionMiddleware, async (c) => {
-  const user = c.get("user");
-  const typeFilter = c.req.query("type");
-
-  let query = db.select().from(workflow).where(eq(workflow.userId, user.id)).orderBy(desc(workflow.createdAt));
-  const rows = await query;
-
-  const filtered = typeFilter ? rows.filter((r) => r.type === typeFilter) : rows;
-  return c.json(filtered);
-});
-
-// ── CRUD: Get single template ──
-workflows.get("/:id", sessionMiddleware, async (c) => {
-  const user = c.get("user");
-  const id = c.req.param("id");
-  const rows = await db.select().from(workflow).where(eq(workflow.id, id)).limit(1);
-  if (rows.length === 0) return c.json({ error: "Not found" }, 404);
-  if (rows[0].userId !== user.id) return c.json({ error: "Not your workflow" }, 403);
-  return c.json(rows[0]);
-});
-
-// ── CRUD: Update template ──
-workflows.put("/:id", sessionMiddleware, async (c) => {
-  const user = c.get("user");
-  const id = c.req.param("id");
-  const rows = await db.select().from(workflow).where(eq(workflow.id, id)).limit(1);
-  if (rows.length === 0) return c.json({ error: "Not found" }, 404);
-  if (rows[0].userId !== user.id) return c.json({ error: "Not your workflow" }, 403);
-
-  const body = await c.req.json<{
-    name?: string;
-    description?: string;
-    steps?: unknown[];
-    appId?: string;
-  }>();
-
-  const updates: Record<string, unknown> = {};
-  if (body.name !== undefined) updates.name = body.name;
-  if (body.description !== undefined) updates.description = body.description;
-  if (body.steps !== undefined) updates.steps = body.steps;
-  if (body.appId !== undefined) updates.appId = body.appId;
-
-  if (Object.keys(updates).length > 0) {
-    await db.update(workflow).set(updates).where(eq(workflow.id, id));
-  }
-
-  return c.json({ id, ...updates });
-});
-
-// ── CRUD: Delete template ──
-workflows.delete("/:id", sessionMiddleware, async (c) => {
-  const user = c.get("user");
-  const id = c.req.param("id");
-  const rows = await db.select().from(workflow).where(eq(workflow.id, id)).limit(1);
-  if (rows.length === 0) return c.json({ error: "Not found" }, 404);
-  if (rows[0].userId !== user.id) return c.json({ error: "Not your workflow" }, 403);
-  await db.delete(workflow).where(eq(workflow.id, id));
-  return c.json({ status: "deleted" });
-});
-
-// ── Run saved workflow/flow ──
-workflows.post("/:id/run", sessionMiddleware, async (c) => {
-  const user = c.get("user");
-  const id = c.req.param("id");
-  const body = await c.req.json<{ deviceId: string; llmApiKey?: string; llmProvider?: string; llmModel?: string }>();
-
-  if (!body.deviceId) return c.json({ error: "deviceId is required" }, 400);
-
-  const rows = await db.select().from(workflow).where(eq(workflow.id, id)).limit(1);
-  if (rows.length === 0) return c.json({ error: "Workflow not found" }, 404);
-  if (rows[0].userId !== user.id) return c.json({ error: "Not your workflow" }, 403);
-
-  const wf = rows[0];
-  const result = resolveDevice(body.deviceId, user.id);
-  if ("error" in result) return c.json({ error: result.error }, result.status);
-  const { device } = result;
-
-  const trackingKey = device.persistentDeviceId ?? device.deviceId;
-  if (activeSessions.has(trackingKey)) {
-    return c.json({ error: "Agent already running on this device" }, 409);
-  }
-
-  if (wf.type === "workflow") {
-    const llmCfg = await resolveLLMConfig(user.id, body);
-    if (!llmCfg) return c.json({ error: "No LLM provider configured" }, 400);
-
-    const runId = crypto.randomUUID();
-    const steps = wf.steps as WorkflowStep[];
-    const abort = new AbortController();
-
-    await db.insert(workflowRun).values({
-      id: runId,
-      workflowId: wf.id,
-      userId: user.id,
-      deviceId: device.persistentDeviceId ?? device.deviceId,
-      name: wf.name,
-      type: "workflow",
-      status: "running",
-      totalSteps: steps.length,
-    });
-
-    activeSessions.set(trackingKey, { sessionId: runId, goal: `Workflow: ${wf.name}`, abort });
-
-    runWorkflowServer({
-      runId,
-      deviceId: device.deviceId,
-      persistentDeviceId: device.persistentDeviceId,
-      userId: user.id,
-      name: wf.name,
-      steps,
-      llmConfig: llmCfg,
-      signal: abort.signal,
-    }).finally(() => activeSessions.delete(trackingKey));
-
-    return c.json({ runId, status: "started", type: "workflow" });
-  } else {
-    // Flow
-    const runId = crypto.randomUUID();
-    const steps = wf.steps as any[];
-    const abort = new AbortController();
-
-    await db.insert(workflowRun).values({
-      id: runId,
-      workflowId: wf.id,
-      userId: user.id,
-      deviceId: device.persistentDeviceId ?? device.deviceId,
-      name: wf.name,
-      type: "flow",
-      status: "running",
-      totalSteps: steps.length,
-    });
-
-    activeSessions.set(trackingKey, { sessionId: runId, goal: `Flow: ${wf.name}`, abort });
-
-    runFlowServer({
-      runId,
-      deviceId: device.deviceId,
-      persistentDeviceId: device.persistentDeviceId,
-      userId: user.id,
-      name: wf.name,
-      steps,
-      appId: wf.appId ?? undefined,
-      signal: abort.signal,
-    }).finally(() => activeSessions.delete(trackingKey));
-
-    return c.json({ runId, status: "started", type: "flow" });
-  }
-});
-
-// ── Run ad-hoc workflow/flow (not saved) ──
+// ── Run workflow/flow (send full JSON) ──
 workflows.post("/run", sessionMiddleware, async (c) => {
   const user = c.get("user");
   const body = await c.req.json<{
@@ -258,6 +79,7 @@ workflows.post("/run", sessionMiddleware, async (c) => {
     deviceId: device.persistentDeviceId ?? device.deviceId,
     name: wfName,
     type: wfType,
+    steps: body.steps,
     status: "running",
     totalSteps: body.steps.length,
   });
@@ -327,21 +149,24 @@ workflows.get("/runs/:deviceId", sessionMiddleware, async (c) => {
   return c.json(rows);
 });
 
-// ── Schedule a saved workflow/flow ──
-workflows.post("/:id/schedule", sessionMiddleware, async (c) => {
+// ── Schedule a workflow/flow (send full JSON) ──
+workflows.post("/schedule", sessionMiddleware, async (c) => {
   const user = c.get("user");
-  const id = c.req.param("id");
-  const body = await c.req.json<{ deviceId: string; delay: number }>();
+  const body = await c.req.json<{
+    deviceId: string;
+    delay: number;
+    name?: string;
+    type?: "workflow" | "flow";
+    steps: unknown[];
+    appId?: string;
+  }>();
 
   if (!body.deviceId || !body.delay || body.delay <= 0) {
     return c.json({ error: "deviceId and positive delay (seconds) are required" }, 400);
   }
-
-  const rows = await db.select().from(workflow).where(eq(workflow.id, id)).limit(1);
-  if (rows.length === 0) return c.json({ error: "Workflow not found" }, 404);
-  if (rows[0].userId !== user.id) return c.json({ error: "Not your workflow" }, 403);
-
-  const wf = rows[0];
+  if (!body.steps || !Array.isArray(body.steps) || body.steps.length === 0) {
+    return c.json({ error: "non-empty steps array is required" }, 400);
+  }
 
   const { getQStashClient } = await import("../qstash.js");
   const qstash = getQStashClient();
@@ -349,6 +174,8 @@ workflows.post("/:id/schedule", sessionMiddleware, async (c) => {
     return c.json({ error: "Scheduling requires QStash. Configure QSTASH_TOKEN to enable scheduling." }, 400);
   }
 
+  const wfType = body.type ?? "workflow";
+  const wfName = body.name ?? (wfType === "workflow" ? "Scheduled Workflow" : "Scheduled Flow");
   const runId = crypto.randomUUID();
   const scheduledFor = new Date(Date.now() + body.delay * 1000);
 
@@ -358,13 +185,13 @@ workflows.post("/:id/schedule", sessionMiddleware, async (c) => {
 
   await db.insert(workflowRun).values({
     id: runId,
-    workflowId: wf.id,
     userId: user.id,
     deviceId: persistentDeviceId,
-    name: wf.name,
-    type: wf.type,
+    name: wfName,
+    type: wfType,
+    steps: body.steps,
     status: "scheduled",
-    totalSteps: (wf.steps as unknown[]).length,
+    totalSteps: body.steps.length,
     scheduledFor,
   });
 
@@ -373,10 +200,9 @@ workflows.post("/:id/schedule", sessionMiddleware, async (c) => {
     url: callbackUrl,
     body: {
       runId,
-      workflowId: wf.id,
       deviceId: persistentDeviceId,
       userId: user.id,
-      type: wf.type,
+      type: wfType,
     },
     delay: body.delay,
   });
@@ -388,7 +214,7 @@ workflows.post("/:id/schedule", sessionMiddleware, async (c) => {
   sessions.notifyDashboard(user.id, {
     type: "workflow_scheduled",
     runId,
-    name: wf.name,
+    name: wfName,
     scheduledFor: scheduledFor.toISOString(),
   } as any);
 
@@ -414,29 +240,21 @@ workflows.post("/execute", async (c) => {
 
   const payload = JSON.parse(body) as {
     runId: string;
-    workflowId: string;
     deviceId: string;
     userId: string;
     type: string;
   };
 
-  const { runId, workflowId, deviceId, userId, type: wfType } = payload;
+  const { runId, deviceId, userId, type: wfType } = payload;
 
-  // Check if run was cancelled
-  const [existing] = await db.select().from(workflowRun).where(eq(workflowRun.id, runId)).limit(1);
-  if (!existing) return c.json({ error: "Run not found" }, 200);
-  if (existing.status === "cancelled") return c.json({ status: "cancelled" }, 200);
+  // Load the run (steps are stored in the row)
+  const [run] = await db.select().from(workflowRun).where(eq(workflowRun.id, runId)).limit(1);
+  if (!run) return c.json({ error: "Run not found" }, 200);
+  if (run.status === "cancelled") return c.json({ status: "cancelled" }, 200);
 
   // Check device is online
   const device = sessions.getDeviceByPersistentId(deviceId);
   if (!device) return c.json({ error: "Device not connected" }, 500);
-
-  // Load workflow template
-  const [wf] = await db.select().from(workflow).where(eq(workflow.id, workflowId)).limit(1);
-  if (!wf) {
-    await db.update(workflowRun).set({ status: "failed", completedAt: new Date() }).where(eq(workflowRun.id, runId));
-    return c.json({ error: "Workflow template deleted" }, 200);
-  }
 
   const trackingKey = device.persistentDeviceId ?? device.deviceId;
   if (activeSessions.has(trackingKey)) return c.json({ error: "Device busy" }, 500);
@@ -444,7 +262,7 @@ workflows.post("/execute", async (c) => {
   await db.update(workflowRun).set({ status: "running", startedAt: new Date() }).where(eq(workflowRun.id, runId));
 
   const abort = new AbortController();
-  activeSessions.set(trackingKey, { sessionId: runId, goal: `Scheduled ${wfType}: ${wf.name}`, abort });
+  activeSessions.set(trackingKey, { sessionId: runId, goal: `Scheduled ${wfType}: ${run.name}`, abort });
 
   if (wfType === "workflow") {
     const llmCfg = await resolveLLMConfig(userId);
@@ -459,8 +277,8 @@ workflows.post("/execute", async (c) => {
       deviceId: device.deviceId,
       persistentDeviceId: device.persistentDeviceId,
       userId,
-      name: wf.name,
-      steps: wf.steps as WorkflowStep[],
+      name: run.name,
+      steps: run.steps as WorkflowStep[],
       llmConfig: llmCfg,
       signal: abort.signal,
     }).finally(() => activeSessions.delete(trackingKey));
@@ -470,9 +288,9 @@ workflows.post("/execute", async (c) => {
       deviceId: device.deviceId,
       persistentDeviceId: device.persistentDeviceId,
       userId,
-      name: wf.name,
-      steps: wf.steps as any[],
-      appId: wf.appId ?? undefined,
+      name: run.name,
+      steps: run.steps as any[],
+      appId: undefined,
       signal: abort.signal,
     }).finally(() => activeSessions.delete(trackingKey));
   }
