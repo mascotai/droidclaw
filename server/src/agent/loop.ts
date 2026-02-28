@@ -236,6 +236,9 @@ function actionToCommand(
     case "done":
       return { type: "done" };
 
+    case "download":
+      return { type: "download", url: action.url ?? "", text: action.text ?? "" };
+
     default:
       // Pass through unknown actions -- the device can decide what to do
       return { type: action.action };

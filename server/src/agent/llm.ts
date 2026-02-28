@@ -94,6 +94,7 @@ Data:
 
 Device:
   {"action": "screenshot", "reason": "Take a screenshot and save to gallery"}
+  {"action": "download", "url": "https://example.com/file.mp4", "text": "my_video.mp4", "reason": "Download file from URL to device storage (appears in gallery). 'text' is optional filename."}
   {"action": "notifications", "reason": "Read notification bar content"}
   {"action": "recents", "reason": "Open recent apps / app switcher (overview screen)"}
   {"action": "split_screen", "reason": "Toggle split-screen mode (current app goes to top half, pick second app for bottom)"}

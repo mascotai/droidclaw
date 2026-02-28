@@ -2,10 +2,16 @@ package com.thisux.droidclaw.accessibility
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
+import android.app.DownloadManager
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.Path
+import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Bundle
+import android.os.Environment
 import android.provider.ContactsContract
 import android.provider.CalendarContract
 import android.provider.Settings
@@ -13,6 +19,7 @@ import android.util.Log
 import android.view.accessibility.AccessibilityNodeInfo
 import com.thisux.droidclaw.model.ServerMessage
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.resume
 
 data class ActionResult(val success: Boolean, val error: String? = null, val data: String? = null)
@@ -52,6 +59,7 @@ class GestureExecutor(private val service: DroidClawAccessibilityService) {
                 "wait" -> executeWait(msg.duration ?: 1000)
                 "intent" -> executeIntent(msg)
                 "screenshot" -> executeScreenshot()
+                "download" -> executeDownload(msg)
                 else -> ActionResult(false, "Unknown action: ${msg.type}")
             }
         } catch (e: Exception) {
@@ -313,6 +321,106 @@ class GestureExecutor(private val service: DroidClawAccessibilityService) {
             else ActionResult(false, "Screenshot global action failed")
         } else {
             ActionResult(false, "Screenshot requires Android 9+")
+        }
+    }
+
+    private suspend fun executeDownload(msg: ServerMessage): ActionResult {
+        val url = msg.url ?: return ActionResult(false, "No URL provided")
+        val filename = msg.text ?: Uri.parse(url).lastPathSegment
+            ?: "download_${System.currentTimeMillis()}.mp4"
+
+        return try {
+            val request = DownloadManager.Request(Uri.parse(url)).apply {
+                setTitle(filename)
+                setDescription("Downloaded by DroidClaw")
+                setNotificationVisibility(
+                    DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED
+                )
+                setDestinationInExternalPublicDir(
+                    Environment.DIRECTORY_DOWNLOADS,
+                    filename
+                )
+                @Suppress("DEPRECATION")
+                allowScanningByMediaScanner()
+            }
+
+            val dm = service.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+            val downloadId = dm.enqueue(request)
+
+            // Wait for the download to complete (up to 120 seconds)
+            val result = withTimeoutOrNull(120_000L) {
+                suspendCancellableCoroutine<ActionResult> { cont ->
+                    val receiver = object : BroadcastReceiver() {
+                        override fun onReceive(context: Context?, intent: Intent?) {
+                            val id = intent?.getLongExtra(
+                                DownloadManager.EXTRA_DOWNLOAD_ID, -1
+                            ) ?: -1
+                            if (id == downloadId) {
+                                try {
+                                    service.unregisterReceiver(this)
+                                } catch (_: Exception) {}
+
+                                // Check download status
+                                val query = DownloadManager.Query().setFilterById(downloadId)
+                                val cursor = dm.query(query)
+                                if (cursor != null && cursor.moveToFirst()) {
+                                    val statusIdx = cursor.getColumnIndex(
+                                        DownloadManager.COLUMN_STATUS
+                                    )
+                                    val status = cursor.getInt(statusIdx)
+                                    cursor.close()
+
+                                    if (status == DownloadManager.STATUS_SUCCESSFUL) {
+                                        // Trigger media scan so file appears in gallery
+                                        val filePath = Environment
+                                            .getExternalStoragePublicDirectory(
+                                                Environment.DIRECTORY_DOWNLOADS
+                                            ).absolutePath + "/$filename"
+                                        MediaScannerConnection.scanFile(
+                                            service, arrayOf(filePath), null, null
+                                        )
+                                        if (cont.isActive) cont.resume(
+                                            ActionResult(true, data = filePath)
+                                        )
+                                    } else {
+                                        if (cont.isActive) cont.resume(
+                                            ActionResult(false, "Download failed with status: $status")
+                                        )
+                                    }
+                                } else {
+                                    cursor?.close()
+                                    if (cont.isActive) cont.resume(
+                                        ActionResult(false, "Could not query download status")
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    val filter = IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE)
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                        service.registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
+                    } else {
+                        @Suppress("UnspecifiedRegisterReceiverFlag")
+                        service.registerReceiver(receiver, filter)
+                    }
+
+                    cont.invokeOnCancellation {
+                        try {
+                            service.unregisterReceiver(receiver)
+                            dm.remove(downloadId)
+                        } catch (_: Exception) {}
+                    }
+                }
+            }
+
+            result ?: run {
+                dm.remove(downloadId)
+                ActionResult(false, "Download timed out after 120 seconds")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Download failed", e)
+            ActionResult(false, "Download failed: ${e.message}")
         }
     }
 
