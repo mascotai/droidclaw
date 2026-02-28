@@ -12,6 +12,7 @@
  *   read_screen      — Scroll through page, collect all text, set clipboard
  *   wait_for_content — Poll for new content to appear
  *   compose_email    — Launch mailto: intent, paste body
+ *   download         — Download file from URL to device storage (130s timeout)
  */
 
 import { sessions } from "../ws/sessions.js";
@@ -41,6 +42,7 @@ const SKILL_ACTIONS = new Set([
   "read_screen",
   "wait_for_content",
   "compose_email",
+  "download",
 ]);
 
 export function isSkillAction(action: string): boolean {
@@ -71,6 +73,8 @@ export async function executeSkill(
       return waitForContent(deviceId, currentElements);
     case "compose_email":
       return composeEmail(deviceId, action);
+    case "download":
+      return downloadFile(deviceId, action);
     default:
       return { success: false, message: `Unknown skill: ${action.action}` };
   }
@@ -465,4 +469,51 @@ async function composeEmail(
     success: true,
     message: `Email compose opened to ${emailAddress}${subject ? ` with subject "${subject}"` : ""}${bodyContent ? ", body filled" : ""}. Use submit_message or tap Send to send it.`,
   };
+}
+
+// ─── Skill: download ────────────────────────────────────────────
+
+async function downloadFile(
+  deviceId: string,
+  action: SkillAction
+): Promise<SkillResult> {
+  const url = action.url as string | undefined;
+  const filename = action.text;
+
+  if (!url) {
+    return {
+      success: false,
+      message: 'download requires url. Example: {"action": "download", "url": "https://example.com/video.mp4", "text": "my_video.mp4"}',
+    };
+  }
+
+  console.log(`[Skill] download: Downloading ${url}${filename ? ` as "${filename}"` : ""}`);
+
+  try {
+    // Send download command with 130s timeout (companion app waits up to 120s)
+    const result = (await sessions.sendCommand(
+      deviceId,
+      { type: "download", url, text: filename ?? "" },
+      130_000
+    )) as { success?: boolean; error?: string; data?: string };
+
+    if (result.success === false) {
+      return {
+        success: false,
+        message: `Download failed: ${result.error ?? "unknown error"}`,
+      };
+    }
+
+    const filePath = result.data ?? "Downloads folder";
+    return {
+      success: true,
+      message: `File downloaded successfully to ${filePath}`,
+      data: filePath,
+    };
+  } catch (err) {
+    return {
+      success: false,
+      message: `Download failed: ${(err as Error).message}`,
+    };
+  }
 }
