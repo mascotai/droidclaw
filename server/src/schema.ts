@@ -171,3 +171,34 @@ export const appHint = pgTable("app_hint", {
   }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+// ── Workflow & Flow Templates + Execution Tracking ──
+
+export const workflow = pgTable("workflow", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  description: text("description"),
+  type: text("type").notNull().default("workflow"),
+  steps: jsonb("steps").notNull(),
+  appId: text("app_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().$onUpdate(() => new Date()).notNull(),
+});
+
+export const workflowRun = pgTable("workflow_run", {
+  id: text("id").primaryKey(),
+  workflowId: text("workflow_id").references(() => workflow.id, { onDelete: "set null" }),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  deviceId: text("device_id").notNull().references(() => device.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  type: text("type").notNull().default("workflow"),
+  status: text("status").notNull().default("running"),
+  currentStep: integer("current_step").default(0),
+  totalSteps: integer("total_steps").notNull(),
+  stepResults: jsonb("step_results"),
+  startedAt: timestamp("started_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+  qstashMessageId: text("qstash_message_id"),
+  scheduledFor: timestamp("scheduled_for"),
+});

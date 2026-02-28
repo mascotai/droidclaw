@@ -34,7 +34,7 @@ export interface PendingRequest {
   timer: ReturnType<typeof setTimeout>;
 }
 
-const DEFAULT_COMMAND_TIMEOUT = 30_000; // 30 seconds
+const DEFAULT_COMMAND_TIMEOUT = Number(process.env.COMMAND_TIMEOUT) || 90_000; // 90 seconds (configurable)
 
 class SessionManager {
   private devices = new Map<string, ConnectedDevice>();

@@ -14,6 +14,7 @@ import { health } from "./routes/health.js";
 import { license } from "./routes/license.js";
 import { pairing } from "./routes/pairing.js";
 import { investigate } from "./routes/investigate.js";
+import { workflows } from "./routes/workflows.js";
 
 const app = new Hono();
 
@@ -40,6 +41,7 @@ app.route("/health", health);
 app.route("/license", license);
 app.route("/pairing", pairing);
 app.route("/investigate", investigate);
+app.route("/workflows", workflows);
 
 // Start server with WebSocket support
 const server = Bun.serve<WebSocketData>({

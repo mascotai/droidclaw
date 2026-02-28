@@ -1,27 +1,36 @@
 import { env } from '$env/dynamic/private';
-import { UseSend } from 'usesend-js';
+import nodemailer from 'nodemailer';
 
-const EMAIL_FROM = 'DroidClaw <noreply@app.droidclaw.ai>';
+const EMAIL_FROM = env.SMTP_FROM || 'DroidClaw <noreply@example.com>';
 
-function getClient() {
-	if (!env.USESEND_API_KEY) throw new Error('USESEND_API_KEY is not set');
-	return new UseSend(env.USESEND_API_KEY, env.USESEND_BASE_URL);
+function getTransporter() {
+  return nodemailer.createTransport({
+    host: env.SMTP_HOST || 'smtp.gmail.com',
+    port: parseInt(env.SMTP_PORT || '587'),
+    secure: false,
+    auth: {
+      user: env.SMTP_USER,
+      pass: env.SMTP_PASS,
+    },
+  });
 }
 
 export async function sendEmail({
-	to,
-	subject,
-	text
+  to,
+  subject,
+  text,
 }: {
-	to: string;
-	subject: string;
-	text: string;
+  to: string;
+  subject: string;
+  text: string;
 }) {
-	console.log('[Email] API key prefix:', env.USESEND_API_KEY?.slice(0, 15) + '...');
-	return getClient().emails.send({
-		to,
-		from: EMAIL_FROM,
-		subject,
-		text
-	});
+  console.log('[Email] Sending to:', to, 'subject:', subject);
+  const result = await getTransporter().sendMail({
+    from: EMAIL_FROM,
+    to,
+    subject,
+    text,
+  });
+  console.log('[Email] Sent:', result.messageId);
+  return result;
 }

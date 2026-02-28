@@ -367,7 +367,7 @@ STUCK RECOVERY — your current approach is NOT working:
 // ─── Provider Implementation ────────────────────────────────────
 
 const BASE_URLS: Record<string, string> = {
-  openai: "https://api.openai.com/v1",
+  openai: process.env.LLM_BASE_URL || "https://api.openai.com/v1",
   groq: "https://api.groq.com/openai/v1",
   openrouter: "https://openrouter.ai/api/v1",
 };
