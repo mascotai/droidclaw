@@ -546,14 +546,9 @@ export async function runAgentLoop(
       actionHistory.push(historyParts.join(" "));
       if (actionHistory.length > 5) actionHistory.shift();
 
-      // ── 7. Log + Done check ────────────────────────────────
+      // ── 7. Log ────────────────────────────────────────────
       const reason = action.reason ?? "";
       console.log(`[Agent ${sessionId}] Step ${step + 1}: ${actionSig} — ${reason}`);
-
-      if (action.action === "done") {
-        success = true;
-        break;
-      }
 
       // ── 8. Notify dashboard ─────────────────────────────────
       const stepData: AgentStep = {
@@ -589,6 +584,12 @@ export async function runAgentLoop(
           .catch((err) =>
             console.error(`[Agent ${sessionId}] Failed to save step ${step + 1}: ${err}`)
           );
+      }
+
+      // ── 8c. Done check (after persist so the step is saved) ──
+      if (action.action === "done") {
+        success = true;
+        break;
       }
 
       // ── 9. Execute on device (skills intercepted server-side) ──
