@@ -236,6 +236,7 @@ Return: {"type":"intent","intentAction":"...","uri":"...","extras":{...},"packag
 Option B — UI: The goal requires screen interaction.
 Return: {"type":"ui","app":"com.package.name","subGoal":"simplified task description"}
 The app field is the package name to launch first. The subGoal is what the UI agent should do AFTER the app is open.
+IMPORTANT: If the goal mentions using the "download" action or downloading a file from a URL to device storage, do NOT route to a browser or download app. Instead, use Option B with app="" and pass through the goal as-is — the agent has a built-in download skill.
 
 Option C — DONE: The goal is nonsensical or impossible.
 Return: {"type":"done","reason":"..."}
