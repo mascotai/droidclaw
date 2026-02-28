@@ -1,0 +1,21 @@
+{
+  "name": "Instagram Login - Chrome TOTP 2FA",
+  "steps": [
+    {
+      "app": "com.instagram.android",
+      "goal": "Open Instagram. If already logged in, skip this workflow. Otherwise, tap 'Log in', enter username 'your_username' and password 'your_password', then tap 'Log In'. Wait for the 2FA screen to appear.",
+      "maxSteps": 10
+    },
+    {
+      "app": "com.android.chrome",
+      "goal": "Open Chrome. Navigate to https://totp.danhersam.com/?key=YOUR_TOTP_SECRET_KEY — Use copy_visible_text to copy the 6-digit code. Then switch to Instagram using switch_app with package com.instagram.android. Tap the security code input field. Use paste to paste the code. Use find_and_tap with query Continue to submit.",
+      "maxSteps": 15,
+      "retries": 4
+    },
+    {
+      "app": "com.instagram.android",
+      "goal": "If there are any onboarding screens (Save Login Info, Turn on Notifications, etc.), dismiss them by tapping 'Not Now' or 'Skip'. Navigate to the home feed. Confirm login was successful by checking for the home feed icons.",
+      "maxSteps": 25
+    }
+  ]
+}
