@@ -318,7 +318,10 @@ App Control:
 Multi-Step:
   {"action": "read_screen", "reason": "Scroll through page, collect all text to clipboard"}
   {"action": "find_and_tap", "query": "Settings", "reason": "Scroll to find a VISIBLE button/label and tap it (NOT for typing text!)"}
-  {"action": "copy_visible_text", "reason": "Copy all visible text to clipboard"}`;
+  {"action": "copy_visible_text", "reason": "Copy all visible text to clipboard"}
+
+Device:
+  {"action": "download", "url": "https://example.com/file.mp4", "text": "my_video.mp4", "reason": "Download file from URL to device storage (appears in gallery). 'text' is optional filename."}`;
 
   if (hasEditableFields) {
     actions += `
