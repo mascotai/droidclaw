@@ -25,6 +25,17 @@ class GestureExecutor(private val service: DroidClawAccessibilityService) {
 
     companion object {
         private const val TAG = "GestureExecutor"
+
+        data class DownloadPath(val directory: String, val subPath: String, val filename: String)
+
+        fun resolveDownloadPath(rawPath: String): DownloadPath {
+            val hasAlbum = rawPath.contains("/")
+            return if (hasAlbum) {
+                DownloadPath(Environment.DIRECTORY_PICTURES, rawPath, rawPath.substringAfterLast("/"))
+            } else {
+                DownloadPath(Environment.DIRECTORY_DOWNLOADS, rawPath, rawPath)
+            }
+        }
     }
 
     suspend fun execute(msg: ServerMessage): ActionResult {
@@ -328,20 +339,11 @@ class GestureExecutor(private val service: DroidClawAccessibilityService) {
 
         // Support album/filename format: "MyAlbum/video.mp4" downloads to Pictures/MyAlbum/video.mp4
         // Plain filename like "video.mp4" downloads to Downloads/video.mp4
+        val resolved = resolveDownloadPath(rawPath)
+        val directory = resolved.directory
+        val subPath = resolved.subPath
+        val filename = resolved.filename
         val hasAlbum = rawPath.contains("/")
-        val directory: String
-        val subPath: String
-        val filename: String
-
-        if (hasAlbum) {
-            directory = Environment.DIRECTORY_PICTURES
-            subPath = rawPath  // e.g. "MyAlbum/video.mp4"
-            filename = rawPath.substringAfterLast("/")
-        } else {
-            directory = Environment.DIRECTORY_DOWNLOADS
-            subPath = rawPath
-            filename = rawPath
-        }
 
         return try {
             // Ensure album directory exists if needed
