@@ -45,8 +45,14 @@
     },
     {
       "app": "com.instagram.android",
-      "goal": "You should now be on the caption/share screen for the Reel. Find the caption text field and type the following caption: '{{caption}}'. After entering the caption, tap 'Share' or 'Post' to publish the Reel. Wait for the upload to begin, then mark done.",
-      "maxSteps": 10,
+      "goal": "You may see an 'About Reels' or informational popup/dialog. If so, dismiss it by tapping outside the popup, tapping the 'X' close button, or tapping any dismiss/OK button. If there is no popup, proceed. You should now be on the caption/share screen. Look for the text field that says 'Write a caption...' or 'Write a caption and add hashtags...'. Tap on that text field to focus it, then type the following caption exactly: '{{caption}}'. Make sure the caption text appears in the field before marking done.",
+      "maxSteps": 8,
+      "retries": 2
+    },
+    {
+      "app": "com.instagram.android",
+      "goal": "The caption should now be filled in. Tap the 'Share' button (usually blue, at the bottom of the screen) to publish the Reel. Wait for the upload to begin — you may see a progress indicator or the app may navigate back to the feed. Once the upload has started, mark done.",
+      "maxSteps": 5,
       "retries": 1
     }
   ]
