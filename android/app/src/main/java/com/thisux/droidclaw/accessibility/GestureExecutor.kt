@@ -563,8 +563,12 @@ class GestureExecutor(private val service: DroidClawAccessibilityService) {
                 downloadTest.put("error", "DownloadManager not available")
                 downloadTest.put("durationMs", System.currentTimeMillis() - startMs)
             } else {
-                // Clean up any previous diagnostic test file
-                val destFile = java.io.File(service.cacheDir, "droidclaw_diagnose_test.ico")
+                // Clean up any previous diagnostic test file — use external files dir
+                // (DownloadManager cannot write to internal cacheDir)
+                val destFile = java.io.File(
+                    service.getExternalFilesDir(null) ?: service.cacheDir,
+                    "droidclaw_diagnose_test.ico"
+                )
                 if (destFile.exists()) destFile.delete()
 
                 val request = DownloadManager.Request(Uri.parse(testUrl)).apply {
@@ -711,11 +715,11 @@ class GestureExecutor(private val service: DroidClawAccessibilityService) {
             } else "NONE"
             network.put("proxy", proxyStr)
 
-            // DNS reachability (quick check)
+            // DNS reachability — getByName resolves via DNS; isReachable uses ICMP
+            // which is blocked on most Android devices, so we only rely on resolution
             val dnsReachable = try {
-                val addr = InetAddress.getByName("dns.google")
-                addr.isReachable(3000)
-                true // getByName succeeded = DNS works
+                InetAddress.getByName("dns.google")
+                true // DNS resolution succeeded
             } catch (_: Exception) { false }
             network.put("dnsReachable", dnsReachable)
         } catch (e: Exception) {
