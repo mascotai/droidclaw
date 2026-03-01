@@ -348,9 +348,18 @@ class GestureExecutor(private val service: DroidClawAccessibilityService) {
             if (hasAlbum) {
                 val albumDir = Environment.getExternalStoragePublicDirectory(directory)
                     .resolve(rawPath.substringBeforeLast("/"))
+                Log.d(TAG, "Album dir: $albumDir exists=${albumDir.exists()}")
                 if (!albumDir.exists()) {
-                    albumDir.mkdirs()
+                    val created = albumDir.mkdirs()
+                    Log.d(TAG, "Album dir created=$created")
                 }
+            }
+
+            // Check if DownloadManager is available
+            val dm = service.getSystemService(Context.DOWNLOAD_SERVICE) as? DownloadManager
+            if (dm == null) {
+                Log.e(TAG, "DownloadManager service is null!")
+                return ActionResult(false, "DownloadManager not available on this device")
             }
 
             val request = DownloadManager.Request(Uri.parse(url)).apply {
@@ -364,12 +373,12 @@ class GestureExecutor(private val service: DroidClawAccessibilityService) {
                 allowScanningByMediaScanner()
             }
 
-            val dm = service.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
             val downloadId = dm.enqueue(request)
             Log.d(TAG, "Download enqueued: id=$downloadId url=$url path=$directory/$subPath")
 
             // Poll DownloadManager status every 2 seconds (up to 120s)
             val maxPolls = 60
+            var lastStatus = -1
             for (i in 1..maxPolls) {
                 kotlinx.coroutines.delay(2000)
 
@@ -377,12 +386,32 @@ class GestureExecutor(private val service: DroidClawAccessibilityService) {
                 val cursor = dm.query(query)
                 if (cursor == null || !cursor.moveToFirst()) {
                     cursor?.close()
+                    Log.e(TAG, "Download $downloadId disappeared from queue at poll $i")
                     return ActionResult(false, "Download disappeared from queue")
                 }
 
                 val statusIdx = cursor.getColumnIndex(DownloadManager.COLUMN_STATUS)
+                val reasonIdx = cursor.getColumnIndex(DownloadManager.COLUMN_REASON)
+                val bytesIdx = cursor.getColumnIndex(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR)
+                val totalIdx = cursor.getColumnIndex(DownloadManager.COLUMN_TOTAL_SIZE_BYTES)
                 val status = cursor.getInt(statusIdx)
+                val reason = if (reasonIdx >= 0) cursor.getInt(reasonIdx) else -1
+                val bytesDownloaded = if (bytesIdx >= 0) cursor.getLong(bytesIdx) else -1
+                val totalBytes = if (totalIdx >= 0) cursor.getLong(totalIdx) else -1
                 cursor.close()
+
+                if (status != lastStatus || i % 5 == 0) {
+                    val statusName = when (status) {
+                        DownloadManager.STATUS_PENDING -> "PENDING"
+                        DownloadManager.STATUS_RUNNING -> "RUNNING"
+                        DownloadManager.STATUS_PAUSED -> "PAUSED"
+                        DownloadManager.STATUS_SUCCESSFUL -> "SUCCESSFUL"
+                        DownloadManager.STATUS_FAILED -> "FAILED"
+                        else -> "UNKNOWN($status)"
+                    }
+                    Log.d(TAG, "Download poll $i/$maxPolls: status=$statusName reason=$reason bytes=$bytesDownloaded/$totalBytes")
+                    lastStatus = status
+                }
 
                 when (status) {
                     DownloadManager.STATUS_SUCCESSFUL -> {
@@ -396,22 +425,54 @@ class GestureExecutor(private val service: DroidClawAccessibilityService) {
                         return ActionResult(true, data = filePath)
                     }
                     DownloadManager.STATUS_FAILED -> {
-                        return ActionResult(false, "Download failed")
+                        val reasonText = when (reason) {
+                            DownloadManager.ERROR_CANNOT_RESUME -> "cannot resume"
+                            DownloadManager.ERROR_DEVICE_NOT_FOUND -> "storage not found"
+                            DownloadManager.ERROR_FILE_ALREADY_EXISTS -> "file already exists"
+                            DownloadManager.ERROR_FILE_ERROR -> "file error"
+                            DownloadManager.ERROR_HTTP_DATA_ERROR -> "HTTP data error"
+                            DownloadManager.ERROR_INSUFFICIENT_SPACE -> "insufficient space"
+                            DownloadManager.ERROR_TOO_MANY_REDIRECTS -> "too many redirects"
+                            DownloadManager.ERROR_UNHANDLED_HTTP_CODE -> "unhandled HTTP code"
+                            DownloadManager.ERROR_UNKNOWN -> "unknown error"
+                            else -> "reason=$reason"
+                        }
+                        Log.e(TAG, "Download failed: $reasonText")
+                        return ActionResult(false, "Download failed: $reasonText")
+                    }
+                    DownloadManager.STATUS_PAUSED -> {
+                        val pauseReason = when (reason) {
+                            DownloadManager.PAUSED_QUEUED_FOR_WIFI -> "waiting for WiFi"
+                            DownloadManager.PAUSED_WAITING_FOR_NETWORK -> "waiting for network"
+                            DownloadManager.PAUSED_WAITING_TO_RETRY -> "waiting to retry"
+                            DownloadManager.PAUSED_UNKNOWN -> "paused (unknown)"
+                            else -> "paused reason=$reason"
+                        }
+                        Log.w(TAG, "Download paused: $pauseReason")
+                        // Return early if paused waiting for network — won't resolve by polling
+                        if (i > 10 && (reason == DownloadManager.PAUSED_WAITING_FOR_NETWORK || reason == DownloadManager.PAUSED_QUEUED_FOR_WIFI)) {
+                            dm.remove(downloadId)
+                            return ActionResult(false, "Download paused: $pauseReason. Check network connectivity.")
+                        }
                     }
                     else -> {
                         // STATUS_PENDING or STATUS_RUNNING — keep polling
-                        if (i % 10 == 0) {
-                            Log.d(TAG, "Download still in progress (poll $i/$maxPolls)")
-                        }
                     }
                 }
             }
 
+            Log.w(TAG, "Download timed out after 120s, last status=$lastStatus")
             dm.remove(downloadId)
-            ActionResult(false, "Download timed out after 120 seconds")
+            val statusName = when (lastStatus) {
+                DownloadManager.STATUS_PENDING -> "PENDING (never started)"
+                DownloadManager.STATUS_RUNNING -> "RUNNING (still downloading)"
+                DownloadManager.STATUS_PAUSED -> "PAUSED"
+                else -> "status=$lastStatus"
+            }
+            ActionResult(false, "Download timed out after 120s — stuck in $statusName")
         } catch (e: Exception) {
             Log.e(TAG, "Download failed", e)
-            ActionResult(false, "Download failed: ${e.message}")
+            ActionResult(false, "Download exception: ${e.message}")
         }
     }
 
