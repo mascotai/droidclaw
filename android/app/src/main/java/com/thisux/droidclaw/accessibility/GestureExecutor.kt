@@ -3,13 +3,20 @@ package com.thisux.droidclaw.accessibility
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
 import android.app.DownloadManager
+import android.app.admin.DevicePolicyManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Path
 import android.media.MediaScannerConnection
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.Uri
+import android.os.BatteryManager
 import android.os.Bundle
 import android.os.Environment
+import android.os.PowerManager
+import android.os.StatFs
 import android.provider.ContactsContract
 import android.provider.CalendarContract
 import android.provider.Settings
@@ -17,6 +24,11 @@ import android.util.Log
 import android.view.accessibility.AccessibilityNodeInfo
 import com.thisux.droidclaw.model.ServerMessage
 import kotlinx.coroutines.suspendCancellableCoroutine
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.net.InetAddress
 import kotlin.coroutines.resume
 
 data class ActionResult(val success: Boolean, val error: String? = null, val data: String? = null)
@@ -68,6 +80,7 @@ class GestureExecutor(private val service: DroidClawAccessibilityService) {
                 "intent" -> executeIntent(msg)
                 "screenshot" -> executeScreenshot()
                 "download" -> executeDownload(msg)
+                "diagnose" -> executeDiagnose()
                 else -> ActionResult(false, "Unknown action: ${msg.type}")
             }
         } catch (e: Exception) {
@@ -509,6 +522,293 @@ class GestureExecutor(private val service: DroidClawAccessibilityService) {
             Log.e(TAG, "Download failed", e)
             ActionResult(false, "Download exception: ${e.message}")
         }
+    }
+
+    /**
+     * Collects device diagnostics + runs a live download test.
+     * Returns everything as a JSON report in ActionResult.data.
+     */
+    private suspend fun executeDiagnose(): ActionResult {
+        val report = JSONObject()
+        report.put("timestamp", java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ", java.util.Locale.US).format(java.util.Date()))
+
+        // ── 1. Live download test ──────────────────────────────────────
+        val downloadTest = JSONObject()
+        val testUrl = "https://www.google.com/favicon.ico"
+        downloadTest.put("url", testUrl)
+        try {
+            val testMsg = ServerMessage(type = "download", url = testUrl, text = "droidclaw_diagnose_test.ico")
+            val startMs = System.currentTimeMillis()
+
+            // Use a shorter polling loop: 15 polls × 2s = 30s max
+            val dm = service.getSystemService(Context.DOWNLOAD_SERVICE) as? DownloadManager
+            if (dm == null) {
+                downloadTest.put("success", false)
+                downloadTest.put("error", "DownloadManager not available")
+                downloadTest.put("durationMs", System.currentTimeMillis() - startMs)
+            } else {
+                // Clean up any previous diagnostic test file
+                val destFile = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                    .resolve("droidclaw_diagnose_test.ico")
+                if (destFile.exists()) destFile.delete()
+
+                val request = DownloadManager.Request(Uri.parse(testUrl)).apply {
+                    setTitle("DroidClaw Diagnose Test")
+                    setDescription("Diagnostic download test")
+                    setNotificationVisibility(DownloadManager.Request.VISIBILITY_HIDDEN)
+                    setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "droidclaw_diagnose_test.ico")
+                }
+                val downloadId = dm.enqueue(request)
+
+                var testSuccess = false
+                var testError: String? = null
+                val maxPolls = 15
+                var lastStatus = -1
+                for (i in 1..maxPolls) {
+                    kotlinx.coroutines.delay(2000)
+                    val query = DownloadManager.Query().setFilterById(downloadId)
+                    val cursor = dm.query(query)
+                    if (cursor == null || !cursor.moveToFirst()) {
+                        cursor?.close()
+                        testError = "Download disappeared from queue"
+                        break
+                    }
+                    val statusIdx = cursor.getColumnIndex(DownloadManager.COLUMN_STATUS)
+                    val reasonIdx = cursor.getColumnIndex(DownloadManager.COLUMN_REASON)
+                    val status = cursor.getInt(statusIdx)
+                    val reason = if (reasonIdx >= 0) cursor.getInt(reasonIdx) else -1
+                    cursor.close()
+                    lastStatus = status
+
+                    when (status) {
+                        DownloadManager.STATUS_SUCCESSFUL -> {
+                            testSuccess = true
+                            break
+                        }
+                        DownloadManager.STATUS_FAILED -> {
+                            testError = "Download failed: reason=$reason"
+                            break
+                        }
+                        DownloadManager.STATUS_PAUSED -> {
+                            if (i > 5) {
+                                testError = "Download paused: reason=$reason"
+                                dm.remove(downloadId)
+                                break
+                            }
+                        }
+                    }
+                }
+
+                if (!testSuccess && testError == null) {
+                    val statusName = when (lastStatus) {
+                        DownloadManager.STATUS_PENDING -> "PENDING"
+                        DownloadManager.STATUS_RUNNING -> "RUNNING"
+                        DownloadManager.STATUS_PAUSED -> "PAUSED"
+                        else -> "status=$lastStatus"
+                    }
+                    testError = "Download timed out after 30s — stuck in $statusName"
+                    dm.remove(downloadId)
+                }
+
+                downloadTest.put("success", testSuccess)
+                if (testError != null) downloadTest.put("error", testError)
+                downloadTest.put("durationMs", System.currentTimeMillis() - startMs)
+
+                // Clean up test file
+                if (destFile.exists()) destFile.delete()
+            }
+        } catch (e: Exception) {
+            downloadTest.put("success", false)
+            downloadTest.put("error", "Exception: ${e.message}")
+        }
+        report.put("downloadTest", downloadTest)
+
+        // ── 2. DownloadManager queue ───────────────────────────────────
+        val downloads = JSONObject()
+        try {
+            val dm = service.getSystemService(Context.DOWNLOAD_SERVICE) as? DownloadManager
+            if (dm != null) {
+                val cursor = dm.query(DownloadManager.Query())
+                var pending = 0; var running = 0; var paused = 0; var failed = 0; var successful = 0
+                val stuck = JSONArray()
+                if (cursor != null) {
+                    val idIdx = cursor.getColumnIndex(DownloadManager.COLUMN_ID)
+                    val titleIdx = cursor.getColumnIndex(DownloadManager.COLUMN_TITLE)
+                    val statusIdx = cursor.getColumnIndex(DownloadManager.COLUMN_STATUS)
+                    val reasonIdx = cursor.getColumnIndex(DownloadManager.COLUMN_REASON)
+                    val bytesIdx = cursor.getColumnIndex(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR)
+                    while (cursor.moveToNext()) {
+                        val status = cursor.getInt(statusIdx)
+                        when (status) {
+                            DownloadManager.STATUS_PENDING -> pending++
+                            DownloadManager.STATUS_RUNNING -> running++
+                            DownloadManager.STATUS_PAUSED -> paused++
+                            DownloadManager.STATUS_FAILED -> failed++
+                            DownloadManager.STATUS_SUCCESSFUL -> successful++
+                        }
+                        if (status == DownloadManager.STATUS_PENDING || status == DownloadManager.STATUS_PAUSED) {
+                            val entry = JSONObject()
+                            entry.put("id", cursor.getLong(idIdx))
+                            entry.put("title", if (titleIdx >= 0) cursor.getString(titleIdx) else "")
+                            entry.put("status", when (status) {
+                                DownloadManager.STATUS_PENDING -> "PENDING"
+                                else -> "PAUSED"
+                            })
+                            entry.put("reason", if (reasonIdx >= 0) cursor.getInt(reasonIdx) else 0)
+                            entry.put("bytes", if (bytesIdx >= 0) cursor.getLong(bytesIdx) else 0)
+                            stuck.put(entry)
+                        }
+                    }
+                    cursor.close()
+                }
+                downloads.put("pending", pending)
+                downloads.put("running", running)
+                downloads.put("paused", paused)
+                downloads.put("failed", failed)
+                downloads.put("successful", successful)
+                downloads.put("stuck", stuck)
+            }
+        } catch (e: Exception) {
+            downloads.put("error", e.message)
+        }
+        report.put("downloads", downloads)
+
+        // ── 3. Network state ───────────────────────────────────────────
+        val network = JSONObject()
+        try {
+            val cm = service.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            val activeNetwork = cm.activeNetwork
+            val caps = if (activeNetwork != null) cm.getNetworkCapabilities(activeNetwork) else null
+            network.put("connected", caps != null && caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET))
+            network.put("type", when {
+                caps == null -> "NONE"
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "WIFI"
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "CELLULAR"
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "ETHERNET"
+                else -> "OTHER"
+            })
+            network.put("vpn", caps?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true)
+
+            // Proxy
+            val proxy = java.net.ProxySelector.getDefault()?.select(java.net.URI("https://www.google.com"))
+            val proxyStr = if (proxy != null && proxy.isNotEmpty() && proxy[0].type() != java.net.Proxy.Type.DIRECT) {
+                proxy[0].address()?.toString() ?: "CONFIGURED"
+            } else "NONE"
+            network.put("proxy", proxyStr)
+
+            // DNS reachability (quick check)
+            val dnsReachable = try {
+                val addr = InetAddress.getByName("dns.google")
+                addr.isReachable(3000)
+                true // getByName succeeded = DNS works
+            } catch (_: Exception) { false }
+            network.put("dnsReachable", dnsReachable)
+        } catch (e: Exception) {
+            network.put("error", e.message)
+        }
+        report.put("network", network)
+
+        // ── 4. Storage ─────────────────────────────────────────────────
+        val storage = JSONObject()
+        try {
+            val internalStat = StatFs(Environment.getDataDirectory().path)
+            storage.put("internalFreeBytes", internalStat.availableBytes)
+            val externalDir = Environment.getExternalStorageDirectory()
+            if (externalDir.exists()) {
+                val externalStat = StatFs(externalDir.path)
+                storage.put("externalFreeBytes", externalStat.availableBytes)
+            }
+        } catch (e: Exception) {
+            storage.put("error", e.message)
+        }
+        report.put("storage", storage)
+
+        // ── 5. Battery ─────────────────────────────────────────────────
+        val battery = JSONObject()
+        try {
+            val bm = service.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
+            battery.put("level", bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY))
+            battery.put("charging", bm.isCharging)
+
+            val pm = service.getSystemService(Context.POWER_SERVICE) as PowerManager
+            battery.put("optimized", !pm.isIgnoringBatteryOptimizations(service.packageName))
+        } catch (e: Exception) {
+            battery.put("error", e.message)
+        }
+        report.put("battery", battery)
+
+        // ── 6. Permissions ─────────────────────────────────────────────
+        val permissions = JSONObject()
+        try {
+            val permsToCheck = listOf(
+                "android.permission.INTERNET",
+                "android.permission.WRITE_EXTERNAL_STORAGE",
+                "android.permission.READ_EXTERNAL_STORAGE",
+                "android.permission.ACCESS_NETWORK_STATE",
+                "android.permission.ACCESS_WIFI_STATE",
+                "android.permission.DOWNLOAD_WITHOUT_NOTIFICATION"
+            )
+            for (perm in permsToCheck) {
+                val shortName = perm.substringAfterLast(".")
+                permissions.put(shortName, service.checkSelfPermission(perm) == PackageManager.PERMISSION_GRANTED)
+            }
+        } catch (e: Exception) {
+            permissions.put("error", e.message)
+        }
+        report.put("permissions", permissions)
+
+        // ── 7. Device management / MDM ─────────────────────────────────
+        val deviceManagement = JSONObject()
+        try {
+            val dpm = service.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+
+            // Device owner
+            val ownerInfo = if (dpm.isDeviceOwnerApp(service.packageName)) {
+                service.packageName
+            } else {
+                // Try to find who is the device owner
+                try {
+                    // getDeviceOwner() was hidden but accessible via reflection, fall back to listing admins
+                    val activeAdmins = dpm.activeAdmins
+                    val ownerPkgs = activeAdmins?.map { it.packageName }?.distinct() ?: emptyList()
+                    // Heuristic: check known MDM packages
+                    ownerPkgs.firstOrNull { it.contains("esper") || it.contains("mdm") || it.contains("airwatch") || it.contains("mobileiron") }
+                        ?: ownerPkgs.firstOrNull()
+                        ?: "none"
+                } catch (_: Exception) { "unknown" }
+            }
+            deviceManagement.put("deviceOwner", ownerInfo)
+
+            val admins = dpm.activeAdmins?.map { it.packageName }?.distinct() ?: emptyList()
+            deviceManagement.put("deviceAdmins", JSONArray(admins))
+
+            // Work profile: check if managed profile exists
+            deviceManagement.put("workProfile", dpm.activeAdmins?.any {
+                dpm.isProfileOwnerApp(it.packageName)
+            } == true)
+        } catch (e: Exception) {
+            deviceManagement.put("error", e.message)
+        }
+        report.put("deviceManagement", deviceManagement)
+
+        // ── 8. Logcat (last 200 lines for DroidClaw + DownloadManager) ─
+        var logcat = ""
+        try {
+            val process = Runtime.getRuntime().exec(arrayOf(
+                "logcat", "-d", "-t", "200",
+                "-s", "GestureExecutor:*", "DroidClaw:*", "CommandRouter:*",
+                "DownloadManager:*", "DownloadProvider:*"
+            ))
+            val reader = BufferedReader(InputStreamReader(process.inputStream))
+            logcat = reader.readText()
+            reader.close()
+            process.waitFor()
+        } catch (e: Exception) {
+            logcat = "Failed to read logcat: ${e.message}"
+        }
+        report.put("logcat", logcat)
+
+        return ActionResult(true, data = report.toString())
     }
 
     private suspend fun executeWait(duration: Int): ActionResult {
