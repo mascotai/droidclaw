@@ -104,7 +104,7 @@ class DownloadManagerTest {
         val request = DownloadManager.Request(Uri.parse(testUrl)).apply {
             setTitle(resolved.filename)
             setDescription("DownloadManagerTest")
-            setNotificationVisibility(DownloadManager.Request.VISIBILITY_HIDDEN)
+            setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE)
             setDestinationInExternalPublicDir(resolved.directory, resolved.subPath)
         }
 
@@ -130,7 +130,7 @@ class DownloadManagerTest {
         val request = DownloadManager.Request(Uri.parse(testUrl)).apply {
             setTitle(resolved.filename)
             setDescription("DownloadManagerTest – album")
-            setNotificationVisibility(DownloadManager.Request.VISIBILITY_HIDDEN)
+            setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE)
             setDestinationInExternalPublicDir(resolved.directory, resolved.subPath)
         }
 
@@ -154,7 +154,7 @@ class DownloadManagerTest {
         val request = DownloadManager.Request(Uri.parse("https://example.com/nonexistent.mp4")).apply {
             setTitle(resolved.filename)
             setDescription("DownloadManagerTest – invalid URL")
-            setNotificationVisibility(DownloadManager.Request.VISIBILITY_HIDDEN)
+            setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE)
             setDestinationInExternalPublicDir(resolved.directory, resolved.subPath)
         }
 
@@ -174,7 +174,7 @@ class DownloadManagerTest {
         val staleRequest = DownloadManager.Request(Uri.parse(testUrl)).apply {
             setTitle(resolved.filename)
             setDescription("DownloadManagerTest – stale")
-            setNotificationVisibility(DownloadManager.Request.VISIBILITY_HIDDEN)
+            setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE)
             setDestinationInExternalPublicDir(resolved.directory, resolved.subPath)
         }
         val staleId = downloadManager.enqueue(staleRequest)
@@ -187,7 +187,7 @@ class DownloadManagerTest {
         val retryRequest = DownloadManager.Request(Uri.parse(testUrl)).apply {
             setTitle(resolved.filename)
             setDescription("DownloadManagerTest – retry after stale")
-            setNotificationVisibility(DownloadManager.Request.VISIBILITY_HIDDEN)
+            setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE)
             setDestinationInExternalPublicDir(resolved.directory, resolved.subPath)
         }
         val retryId = downloadManager.enqueue(retryRequest)
