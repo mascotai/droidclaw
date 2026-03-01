@@ -46,6 +46,7 @@ app.route("/workflows", workflows);
 // Start server with WebSocket support
 const server = Bun.serve<WebSocketData>({
   port: env.PORT,
+  idleTimeout: 255, // seconds — allow long-running commands like diagnose (max 255)
   fetch(req, server) {
     const url = new URL(req.url);
 
