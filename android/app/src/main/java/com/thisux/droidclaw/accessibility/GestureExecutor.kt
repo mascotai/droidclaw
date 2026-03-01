@@ -23,7 +23,9 @@ import android.provider.Settings
 import android.util.Log
 import android.view.accessibility.AccessibilityNodeInfo
 import com.thisux.droidclaw.model.ServerMessage
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request as OkRequest
 import org.json.JSONArray
@@ -405,7 +407,9 @@ class GestureExecutor(private val service: DroidClawAccessibilityService) {
             // Download via OkHttp (bypasses DownloadManager MDM throttling)
             Log.d(TAG, "Starting OkHttp download: url=$url dest=$destFile")
             val request = OkRequest.Builder().url(url).build()
-            val response = httpClient.newCall(request).execute()
+            val response = withContext(Dispatchers.IO) {
+                httpClient.newCall(request).execute()
+            }
 
             if (!response.isSuccessful) {
                 val code = response.code
@@ -423,15 +427,17 @@ class GestureExecutor(private val service: DroidClawAccessibilityService) {
             // Stream to file
             val totalBytes = body.contentLength()
             var bytesWritten = 0L
-            body.byteStream().use { input ->
-                FileOutputStream(destFile).use { output ->
-                    val buffer = ByteArray(8192)
-                    var bytesRead: Int
-                    while (input.read(buffer).also { bytesRead = it } != -1) {
-                        output.write(buffer, 0, bytesRead)
-                        bytesWritten += bytesRead
-                        if (bytesWritten % (1024 * 1024) < 8192) {
-                            Log.d(TAG, "Download progress: $bytesWritten / $totalBytes bytes")
+            withContext(Dispatchers.IO) {
+                body.byteStream().use { input ->
+                    FileOutputStream(destFile).use { output ->
+                        val buffer = ByteArray(8192)
+                        var bytesRead: Int
+                        while (input.read(buffer).also { bytesRead = it } != -1) {
+                            output.write(buffer, 0, bytesRead)
+                            bytesWritten += bytesRead
+                            if (bytesWritten % (1024 * 1024) < 8192) {
+                                Log.d(TAG, "Download progress: $bytesWritten / $totalBytes bytes")
+                            }
                         }
                     }
                 }
@@ -481,7 +487,9 @@ class GestureExecutor(private val service: DroidClawAccessibilityService) {
             if (destFile.exists()) destFile.delete()
 
             val request = OkRequest.Builder().url(testUrl).build()
-            val response = httpClient.newCall(request).execute()
+            val response = withContext(Dispatchers.IO) {
+                httpClient.newCall(request).execute()
+            }
 
             var testSuccess = false
             var testError: String? = null
@@ -495,9 +503,11 @@ class GestureExecutor(private val service: DroidClawAccessibilityService) {
                     testError = "Empty response body"
                     response.close()
                 } else {
-                    body.byteStream().use { input ->
-                        FileOutputStream(destFile).use { output ->
-                            input.copyTo(output)
+                    withContext(Dispatchers.IO) {
+                        body.byteStream().use { input ->
+                            FileOutputStream(destFile).use { output ->
+                                input.copyTo(output)
+                            }
                         }
                     }
                     response.close()
