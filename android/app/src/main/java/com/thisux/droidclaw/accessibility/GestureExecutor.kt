@@ -362,6 +362,39 @@ class GestureExecutor(private val service: DroidClawAccessibilityService) {
                 return ActionResult(false, "DownloadManager not available on this device")
             }
 
+            // Clean up any stale pending/running downloads to unblock DownloadManager
+            try {
+                val staleQuery = DownloadManager.Query()
+                val staleCursor = dm.query(staleQuery)
+                if (staleCursor != null) {
+                    val idIdx = staleCursor.getColumnIndex(DownloadManager.COLUMN_ID)
+                    val statusIdx = staleCursor.getColumnIndex(DownloadManager.COLUMN_STATUS)
+                    var removed = 0
+                    while (staleCursor.moveToNext()) {
+                        val staleStatus = staleCursor.getInt(statusIdx)
+                        if (staleStatus == DownloadManager.STATUS_PENDING || staleStatus == DownloadManager.STATUS_PAUSED) {
+                            val staleId = staleCursor.getLong(idIdx)
+                            dm.remove(staleId)
+                            removed++
+                        }
+                    }
+                    staleCursor.close()
+                    if (removed > 0) {
+                        Log.d(TAG, "Cleaned up $removed stale pending/paused downloads")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to clean stale downloads: ${e.message}")
+            }
+
+            // Delete existing file at destination to avoid FILE_ALREADY_EXISTS
+            val destFile = Environment.getExternalStoragePublicDirectory(directory)
+                .resolve(subPath)
+            if (destFile.exists()) {
+                val deleted = destFile.delete()
+                Log.d(TAG, "Deleted existing file at $destFile: $deleted")
+            }
+
             val request = DownloadManager.Request(Uri.parse(url)).apply {
                 setTitle(filename)
                 setDescription("Downloaded by DroidClaw")

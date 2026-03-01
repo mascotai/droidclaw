@@ -21,8 +21,32 @@
     },
     {
       "app": "com.instagram.android",
-      "goal": "Post a Reel on Instagram. Tap the '+' (create/new post) button at the bottom center of the screen. Select 'Reel' from the creation options. On the media picker screen, do NOT scroll through recent items. Instead, tap the dropdown that says 'Recents' at the top to open the album/folder picker. Find and select the album named '{{albumName}}'. There should be exactly one video in this album — select it. On the trim/edit screen, tap 'Next' or the arrow to proceed. On the caption screen, type the caption: '{{caption}}'. Tap 'Share' or 'Post' to publish the Reel. Wait for the upload to begin, then mark done.",
-      "maxSteps": 30,
+      "goal": "Navigate to the Instagram Home feed. Tap the Home icon (house icon) at the bottom-left of the screen if you are not already on the home feed. Once on the home feed, look at the TOP-LEFT corner of the screen — there is a '+' icon next to the Instagram logo. Tap that '+' icon at the top-left to open the content creation screen.",
+      "maxSteps": 8,
+      "retries": 2
+    },
+    {
+      "app": "com.instagram.android",
+      "goal": "You should now be on the content creation screen with a media gallery and tabs at the bottom (POST, REEL, STORY). Tap the 'REEL' tab at the bottom to switch to Reel mode.",
+      "maxSteps": 5,
+      "retries": 2
+    },
+    {
+      "app": "com.instagram.android",
+      "goal": "You should now be in Reel mode on the content creation screen with a media gallery visible. At the top of the media gallery there is a dropdown button showing 'Recents' (or a similar label). Tap that dropdown to open the album/folder list. In the list that appears, look for an option like 'Other...' or 'All albums' or 'Browse folders' and tap it to see all available albums. Then scroll through and find the album named '{{albumName}}' and tap it to select it.",
+      "maxSteps": 12,
+      "retries": 2
+    },
+    {
+      "app": "com.instagram.android",
+      "goal": "You should now see the media from the '{{albumName}}' album. There should be one video — select it by tapping on it. After selecting, you may see a trim/edit screen. Tap 'Next' or the forward arrow to proceed to the next screen.",
+      "maxSteps": 8,
+      "retries": 1
+    },
+    {
+      "app": "com.instagram.android",
+      "goal": "You should now be on the caption/share screen for the Reel. Find the caption text field and type the following caption: '{{caption}}'. After entering the caption, tap 'Share' or 'Post' to publish the Reel. Wait for the upload to begin, then mark done.",
+      "maxSteps": 10,
       "retries": 1
     }
   ]
