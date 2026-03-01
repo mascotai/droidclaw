@@ -5,7 +5,7 @@
     "username": "The Instagram username that should be active",
     "videoUrl": "Direct URL to the video file to download",
     "caption": "Caption text for the Reel",
-    "albumName": "Unique album name for this download (e.g. 'reel_20260301_001')"
+    "albumName": "Short unique album name (e.g. 'r3a8f1' — 6-8 chars to avoid ellipsis truncation in Instagram UI)"
   },
   "steps": [
     {
@@ -21,20 +21,20 @@
     },
     {
       "app": "com.instagram.android",
-      "goal": "Navigate to the Instagram Home feed. Tap the Home icon (house icon) at the bottom-left of the screen if you are not already on the home feed. Once on the home feed, look at the TOP-LEFT corner of the screen — there is a '+' icon next to the Instagram logo. Tap that '+' icon at the top-left to open the content creation screen.",
+      "goal": "Open Instagram. Tap on the Home icon on the bottom left. Tap the '+' icon at the top left of the screen to open the new post/reel creation screen. If you see a media gallery with tabs at the bottom (POST, REEL, STORY), tap the 'REEL' tab to switch to Reel mode.",
       "maxSteps": 8,
-      "retries": 2
+      "retries": 1
     },
     {
       "app": "com.instagram.android",
-      "goal": "You should now be on the content creation screen with a media gallery and tabs at the bottom (POST, REEL, STORY). Tap the 'REEL' tab at the bottom to switch to Reel mode.",
+      "goal": "You are on the Reel creation screen and can see a media gallery. At the very top of the gallery area there is a small dropdown button — it likely says 'Recents' with a small downward arrow or chevron. Tap that 'Recents' dropdown button. Do NOT scroll through the media grid or the feed. Only tap the dropdown label at the top of the gallery.",
       "maxSteps": 5,
       "retries": 2
     },
     {
       "app": "com.instagram.android",
-      "goal": "You should now be in Reel mode on the content creation screen with a media gallery visible. At the top of the media gallery there is a button labeled 'Recents'. Tap 'Recents' — this will open a list of album options. In that list, find and tap 'All albums' (or 'Other...' or 'Browse folders'). This reveals all available albums on the device. Scroll through the albums and find the one named '{{albumName}}', then tap it to select it.",
-      "maxSteps": 12,
+      "goal": "A dropdown or bottom sheet with album options is now visible. Find and tap the option labeled 'All albums' (or 'Other...' or 'Browse folders'). This should reveal the complete list of all photo/video albums on the device. Scroll through the albums and find the one named '{{albumName}}', then tap it to select it.",
+      "maxSteps": 8,
       "retries": 2
     },
     {
