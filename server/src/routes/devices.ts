@@ -6,6 +6,36 @@ import { device, agentSession, agentStep } from "../schema.js";
 import { eq, desc, and } from "drizzle-orm";
 
 const devices = new Hono<AuthEnv>();
+
+/** Run device diagnostics including a live download test (no auth — debug tool) */
+devices.post("/:deviceId/diagnose", async (c) => {
+  const deviceId = c.req.param("deviceId");
+
+  try {
+    const result = (await sessions.sendCommand(
+      deviceId,
+      { type: "diagnose" },
+      120_000
+    )) as { success?: boolean; error?: string; data?: string };
+
+    if (!result.success) {
+      return c.json({ error: result.error ?? "Diagnose failed" }, 502);
+    }
+
+    // Parse the JSON report from the device and return it directly
+    try {
+      const report = JSON.parse(result.data ?? "{}");
+      return c.json(report);
+    } catch {
+      // If parsing fails, return the raw data
+      return c.json({ raw: result.data });
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return c.json({ error: `Diagnose command failed: ${message}` }, 504);
+  }
+});
+
 devices.use("*", sessionMiddleware);
 
 /** List all devices for the authenticated user (from DB, includes offline) */
@@ -75,35 +105,6 @@ devices.get("/:deviceId/sessions/:sessionId/steps", async (c) => {
     .orderBy(agentStep.stepNumber);
 
   return c.json(steps);
-});
-
-/** Run device diagnostics including a live download test */
-devices.post("/:deviceId/diagnose", async (c) => {
-  const deviceId = c.req.param("deviceId");
-
-  try {
-    const result = (await sessions.sendCommand(
-      deviceId,
-      { type: "diagnose" },
-      120_000
-    )) as { success?: boolean; error?: string; data?: string };
-
-    if (!result.success) {
-      return c.json({ error: result.error ?? "Diagnose failed" }, 502);
-    }
-
-    // Parse the JSON report from the device and return it directly
-    try {
-      const report = JSON.parse(result.data ?? "{}");
-      return c.json(report);
-    } catch {
-      // If parsing fails, return the raw data
-      return c.json({ raw: result.data });
-    }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return c.json({ error: `Diagnose command failed: ${message}` }, 504);
-  }
 });
 
 export { devices };
