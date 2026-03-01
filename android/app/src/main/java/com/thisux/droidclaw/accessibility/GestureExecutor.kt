@@ -323,27 +323,50 @@ class GestureExecutor(private val service: DroidClawAccessibilityService) {
 
     private suspend fun executeDownload(msg: ServerMessage): ActionResult {
         val url = msg.url ?: return ActionResult(false, "No URL provided")
-        val filename = msg.text ?: Uri.parse(url).lastPathSegment
+        val rawPath = msg.text ?: Uri.parse(url).lastPathSegment
             ?: "download_${System.currentTimeMillis()}.mp4"
 
+        // Support album/filename format: "MyAlbum/video.mp4" downloads to Pictures/MyAlbum/video.mp4
+        // Plain filename like "video.mp4" downloads to Downloads/video.mp4
+        val hasAlbum = rawPath.contains("/")
+        val directory: String
+        val subPath: String
+        val filename: String
+
+        if (hasAlbum) {
+            directory = Environment.DIRECTORY_PICTURES
+            subPath = rawPath  // e.g. "MyAlbum/video.mp4"
+            filename = rawPath.substringAfterLast("/")
+        } else {
+            directory = Environment.DIRECTORY_DOWNLOADS
+            subPath = rawPath
+            filename = rawPath
+        }
+
         return try {
+            // Ensure album directory exists if needed
+            if (hasAlbum) {
+                val albumDir = Environment.getExternalStoragePublicDirectory(directory)
+                    .resolve(rawPath.substringBeforeLast("/"))
+                if (!albumDir.exists()) {
+                    albumDir.mkdirs()
+                }
+            }
+
             val request = DownloadManager.Request(Uri.parse(url)).apply {
                 setTitle(filename)
                 setDescription("Downloaded by DroidClaw")
                 setNotificationVisibility(
                     DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED
                 )
-                setDestinationInExternalPublicDir(
-                    Environment.DIRECTORY_DOWNLOADS,
-                    filename
-                )
+                setDestinationInExternalPublicDir(directory, subPath)
                 @Suppress("DEPRECATION")
                 allowScanningByMediaScanner()
             }
 
             val dm = service.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
             val downloadId = dm.enqueue(request)
-            Log.d(TAG, "Download enqueued: id=$downloadId url=$url filename=$filename")
+            Log.d(TAG, "Download enqueued: id=$downloadId url=$url path=$directory/$subPath")
 
             // Poll DownloadManager status every 2 seconds (up to 120s)
             val maxPolls = 60
@@ -364,9 +387,8 @@ class GestureExecutor(private val service: DroidClawAccessibilityService) {
                 when (status) {
                     DownloadManager.STATUS_SUCCESSFUL -> {
                         val filePath = Environment
-                            .getExternalStoragePublicDirectory(
-                                Environment.DIRECTORY_DOWNLOADS
-                            ).absolutePath + "/$filename"
+                            .getExternalStoragePublicDirectory(directory)
+                            .absolutePath + "/$subPath"
                         MediaScannerConnection.scanFile(
                             service, arrayOf(filePath), null, null
                         )

@@ -483,7 +483,7 @@ async function downloadFile(
   if (!url) {
     return {
       success: false,
-      message: 'download requires url. Example: {"action": "download", "url": "https://example.com/video.mp4", "text": "my_video.mp4"}',
+      message: 'download requires url. Example: {"action": "download", "url": "https://example.com/video.mp4", "text": "my_video.mp4"} or {"action": "download", "url": "...", "text": "MyAlbum/video.mp4"} to create a gallery album.',
     };
   }
 

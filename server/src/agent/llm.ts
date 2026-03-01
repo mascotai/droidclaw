@@ -322,7 +322,8 @@ Multi-Step:
   {"action": "copy_visible_text", "reason": "Copy all visible text to clipboard"}
 
 Device:
-  {"action": "download", "url": "https://example.com/file.mp4", "text": "my_video.mp4", "reason": "Download file from URL to device storage (appears in gallery). 'text' is optional filename."}`;
+  {"action": "download", "url": "https://example.com/file.mp4", "text": "my_video.mp4", "reason": "Download file from URL to device Downloads folder. 'text' is optional filename."}
+  {"action": "download", "url": "https://example.com/file.mp4", "text": "MyAlbum/my_video.mp4", "reason": "Download file to a named album (Pictures/MyAlbum/). Use album format 'AlbumName/filename' to create a gallery album — useful for selecting files in apps like Instagram."}`;
 
   if (hasEditableFields) {
     actions += `

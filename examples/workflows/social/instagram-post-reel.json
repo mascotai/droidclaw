@@ -1,26 +1,27 @@
 {
   "name": "Instagram Post Reel from URL",
-  "description": "Verifies the correct Instagram account is active, downloads a video from a URL to device storage, then uploads it as a Reel with a caption.",
+  "description": "Verifies the correct Instagram account is active, downloads a video from a URL into a unique album, then uploads it as a Reel with a caption.",
   "params": {
     "username": "The Instagram username that should be active",
     "videoUrl": "Direct URL to the video file to download",
-    "caption": "Caption text for the Reel"
+    "caption": "Caption text for the Reel",
+    "albumName": "Unique album name for this download (e.g. 'reel_20260301_001')"
   },
   "steps": [
     {
       "app": "com.instagram.android",
-      "goal": "Open Instagram. Check which account is currently logged in by looking at the profile tab or the username displayed at the top. If the active account is 'your_username', proceed (mark done). If a different account is active, tap the username at the top to open the account switcher, then select 'your_username'. If 'your_username' is not listed, mark as failed.",
+      "goal": "Check which Instagram account is currently logged in by looking at the profile tab or the username displayed at the top. If the active account is '{{username}}', proceed (mark done). If a different account is active, tap the username at the top to open the account switcher, then select '{{username}}'. If '{{username}}' is not listed, mark as failed.",
       "maxSteps": 10,
       "retries": 1
     },
     {
-      "goal": "Use the 'download' action to download the video file from URL https://example.com/video.mp4 to the device. Use: {\"action\": \"download\", \"url\": \"https://example.com/video.mp4\", \"text\": \"reel_video.mp4\"}. After the download action completes successfully, mark as done. If it fails, mark as failed. Do NOT open a browser — use the download action directly.",
+      "goal": "Download a video file to the device into a specific album. Use the download action with url {{videoUrl}} and save it as {{albumName}}/reel_video.mp4. The album format (AlbumName/filename) will create a gallery album named '{{albumName}}' under Pictures. After the download completes, mark done.",
       "maxSteps": 3,
       "retries": 2
     },
     {
       "app": "com.instagram.android",
-      "goal": "Open Instagram. Tap the '+' (create/new post) button at the bottom center of the screen. Select 'Reel' from the options (not Story or Post). On the media picker screen, look for the recently downloaded video — it should be the most recent item in the gallery. If you don't see it, check the 'Downloads' folder or 'Recent' tab. Select the video. On the trim/edit screen, tap 'Next' or the arrow to proceed. On the caption screen, type the caption: 'Your caption here'. Tap 'Share' or 'Post' to publish the Reel. Wait for the upload to complete.",
+      "goal": "Post a Reel on Instagram. Tap the '+' (create/new post) button at the bottom center of the screen. Select 'Reel' from the creation options. On the media picker screen, do NOT scroll through recent items. Instead, tap the dropdown that says 'Recents' at the top to open the album/folder picker. Find and select the album named '{{albumName}}'. There should be exactly one video in this album — select it. On the trim/edit screen, tap 'Next' or the arrow to proceed. On the caption screen, type the caption: '{{caption}}'. Tap 'Share' or 'Post' to publish the Reel. Wait for the upload to begin, then mark done.",
       "maxSteps": 30,
       "retries": 1
     }
