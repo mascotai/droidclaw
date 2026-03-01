@@ -359,10 +359,19 @@ class GestureExecutor(private val service: DroidClawAccessibilityService) {
         val hasAlbum = rawPath.contains("/")
 
         return try {
+            // Check if we need to use app-specific storage (no external storage permission on older APIs)
+            val useAppStorage = service.checkSelfPermission("android.permission.WRITE_EXTERNAL_STORAGE") != PackageManager.PERMISSION_GRANTED
+                && android.os.Build.VERSION.SDK_INT < 29
+
             // Ensure album directory exists if needed
             if (hasAlbum) {
-                val albumDir = Environment.getExternalStoragePublicDirectory(directory)
-                    .resolve(rawPath.substringBeforeLast("/"))
+                val albumDir = if (useAppStorage) {
+                    val appDir = service.getExternalFilesDir(directory) ?: service.cacheDir
+                    java.io.File(appDir, rawPath.substringBeforeLast("/"))
+                } else {
+                    Environment.getExternalStoragePublicDirectory(directory)
+                        .resolve(rawPath.substringBeforeLast("/"))
+                }
                 Log.d(TAG, "Album dir: $albumDir exists=${albumDir.exists()}")
                 if (!albumDir.exists()) {
                     val created = albumDir.mkdirs()
@@ -403,12 +412,17 @@ class GestureExecutor(private val service: DroidClawAccessibilityService) {
             }
 
             // Delete existing file at destination to avoid FILE_ALREADY_EXISTS
-            val destFile = Environment.getExternalStoragePublicDirectory(directory)
-                .resolve(subPath)
+            val destFile = if (useAppStorage) {
+                val appDir = service.getExternalFilesDir(directory) ?: service.cacheDir
+                java.io.File(appDir, subPath)
+            } else {
+                Environment.getExternalStoragePublicDirectory(directory).resolve(subPath)
+            }
             if (destFile.exists()) {
                 val deleted = destFile.delete()
                 Log.d(TAG, "Deleted existing file at $destFile: $deleted")
             }
+            destFile.parentFile?.mkdirs()
 
             val request = DownloadManager.Request(Uri.parse(url)).apply {
                 setTitle(filename)
@@ -416,7 +430,11 @@ class GestureExecutor(private val service: DroidClawAccessibilityService) {
                 setNotificationVisibility(
                     DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED
                 )
-                setDestinationInExternalPublicDir(directory, subPath)
+                if (useAppStorage) {
+                    setDestinationUri(Uri.fromFile(destFile))
+                } else {
+                    setDestinationInExternalPublicDir(directory, subPath)
+                }
                 @Suppress("DEPRECATION")
                 allowScanningByMediaScanner()
             }
@@ -463,9 +481,7 @@ class GestureExecutor(private val service: DroidClawAccessibilityService) {
 
                 when (status) {
                     DownloadManager.STATUS_SUCCESSFUL -> {
-                        val filePath = Environment
-                            .getExternalStoragePublicDirectory(directory)
-                            .absolutePath + "/$subPath"
+                        val filePath = destFile.absolutePath
                         MediaScannerConnection.scanFile(
                             service, arrayOf(filePath), null, null
                         )
@@ -548,15 +564,14 @@ class GestureExecutor(private val service: DroidClawAccessibilityService) {
                 downloadTest.put("durationMs", System.currentTimeMillis() - startMs)
             } else {
                 // Clean up any previous diagnostic test file
-                val destFile = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-                    .resolve("droidclaw_diagnose_test.ico")
+                val destFile = java.io.File(service.cacheDir, "droidclaw_diagnose_test.ico")
                 if (destFile.exists()) destFile.delete()
 
                 val request = DownloadManager.Request(Uri.parse(testUrl)).apply {
                     setTitle("DroidClaw Diagnose Test")
                     setDescription("Diagnostic download test")
-                    setNotificationVisibility(DownloadManager.Request.VISIBILITY_HIDDEN)
-                    setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "droidclaw_diagnose_test.ico")
+                    setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE)
+                    setDestinationUri(Uri.fromFile(destFile))
                 }
                 val downloadId = dm.enqueue(request)
 
