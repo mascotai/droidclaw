@@ -24,16 +24,27 @@ import android.util.Log
 import android.view.accessibility.AccessibilityNodeInfo
 import com.thisux.droidclaw.model.ServerMessage
 import kotlinx.coroutines.suspendCancellableCoroutine
+import okhttp3.OkHttpClient
+import okhttp3.Request as OkRequest
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
+import java.io.FileOutputStream
 import java.io.InputStreamReader
 import java.net.InetAddress
+import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 
 data class ActionResult(val success: Boolean, val error: String? = null, val data: String? = null)
 
 class GestureExecutor(private val service: DroidClawAccessibilityService) {
+
+    private val httpClient by lazy {
+        OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(120, TimeUnit.SECONDS)
+            .build()
+    }
 
     companion object {
         private const val TAG = "GestureExecutor"
@@ -355,7 +366,6 @@ class GestureExecutor(private val service: DroidClawAccessibilityService) {
         val resolved = resolveDownloadPath(rawPath)
         val directory = resolved.directory
         val subPath = resolved.subPath
-        val filename = resolved.filename
         val hasAlbum = rawPath.contains("/")
 
         return try {
@@ -379,39 +389,7 @@ class GestureExecutor(private val service: DroidClawAccessibilityService) {
                 }
             }
 
-            // Check if DownloadManager is available
-            val dm = service.getSystemService(Context.DOWNLOAD_SERVICE) as? DownloadManager
-            if (dm == null) {
-                Log.e(TAG, "DownloadManager service is null!")
-                return ActionResult(false, "DownloadManager not available on this device")
-            }
-
-            // Clean up any stale pending/running downloads to unblock DownloadManager
-            try {
-                val staleQuery = DownloadManager.Query()
-                val staleCursor = dm.query(staleQuery)
-                if (staleCursor != null) {
-                    val idIdx = staleCursor.getColumnIndex(DownloadManager.COLUMN_ID)
-                    val statusIdx = staleCursor.getColumnIndex(DownloadManager.COLUMN_STATUS)
-                    var removed = 0
-                    while (staleCursor.moveToNext()) {
-                        val staleStatus = staleCursor.getInt(statusIdx)
-                        if (staleStatus == DownloadManager.STATUS_PENDING || staleStatus == DownloadManager.STATUS_PAUSED) {
-                            val staleId = staleCursor.getLong(idIdx)
-                            dm.remove(staleId)
-                            removed++
-                        }
-                    }
-                    staleCursor.close()
-                    if (removed > 0) {
-                        Log.d(TAG, "Cleaned up $removed stale pending/paused downloads")
-                    }
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to clean stale downloads: ${e.message}")
-            }
-
-            // Delete existing file at destination to avoid FILE_ALREADY_EXISTS
+            // Delete existing file at destination to avoid duplicates
             val destFile = if (useAppStorage) {
                 val appDir = service.getExternalFilesDir(directory) ?: service.cacheDir
                 java.io.File(appDir, subPath)
@@ -424,116 +402,57 @@ class GestureExecutor(private val service: DroidClawAccessibilityService) {
             }
             destFile.parentFile?.mkdirs()
 
-            val request = DownloadManager.Request(Uri.parse(url)).apply {
-                setTitle(filename)
-                setDescription("Downloaded by DroidClaw")
-                setNotificationVisibility(
-                    DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED
-                )
-                if (useAppStorage) {
-                    setDestinationUri(Uri.fromFile(destFile))
-                } else {
-                    setDestinationInExternalPublicDir(directory, subPath)
-                }
-                @Suppress("DEPRECATION")
-                allowScanningByMediaScanner()
+            // Download via OkHttp (bypasses DownloadManager MDM throttling)
+            Log.d(TAG, "Starting OkHttp download: url=$url dest=$destFile")
+            val request = OkRequest.Builder().url(url).build()
+            val response = httpClient.newCall(request).execute()
+
+            if (!response.isSuccessful) {
+                val code = response.code
+                response.close()
+                Log.e(TAG, "Download HTTP error: $code")
+                return ActionResult(false, "Download failed: HTTP $code")
             }
 
-            val downloadId = dm.enqueue(request)
-            Log.d(TAG, "Download enqueued: id=$downloadId url=$url path=$directory/$subPath")
+            val body = response.body
+            if (body == null) {
+                response.close()
+                return ActionResult(false, "Download failed: empty response body")
+            }
 
-            // Poll DownloadManager status every 2 seconds (up to 120s)
-            val maxPolls = 60
-            var lastStatus = -1
-            for (i in 1..maxPolls) {
-                kotlinx.coroutines.delay(2000)
-
-                val query = DownloadManager.Query().setFilterById(downloadId)
-                val cursor = dm.query(query)
-                if (cursor == null || !cursor.moveToFirst()) {
-                    cursor?.close()
-                    Log.e(TAG, "Download $downloadId disappeared from queue at poll $i")
-                    return ActionResult(false, "Download disappeared from queue")
-                }
-
-                val statusIdx = cursor.getColumnIndex(DownloadManager.COLUMN_STATUS)
-                val reasonIdx = cursor.getColumnIndex(DownloadManager.COLUMN_REASON)
-                val bytesIdx = cursor.getColumnIndex(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR)
-                val totalIdx = cursor.getColumnIndex(DownloadManager.COLUMN_TOTAL_SIZE_BYTES)
-                val status = cursor.getInt(statusIdx)
-                val reason = if (reasonIdx >= 0) cursor.getInt(reasonIdx) else -1
-                val bytesDownloaded = if (bytesIdx >= 0) cursor.getLong(bytesIdx) else -1
-                val totalBytes = if (totalIdx >= 0) cursor.getLong(totalIdx) else -1
-                cursor.close()
-
-                if (status != lastStatus || i % 5 == 0) {
-                    val statusName = when (status) {
-                        DownloadManager.STATUS_PENDING -> "PENDING"
-                        DownloadManager.STATUS_RUNNING -> "RUNNING"
-                        DownloadManager.STATUS_PAUSED -> "PAUSED"
-                        DownloadManager.STATUS_SUCCESSFUL -> "SUCCESSFUL"
-                        DownloadManager.STATUS_FAILED -> "FAILED"
-                        else -> "UNKNOWN($status)"
-                    }
-                    Log.d(TAG, "Download poll $i/$maxPolls: status=$statusName reason=$reason bytes=$bytesDownloaded/$totalBytes")
-                    lastStatus = status
-                }
-
-                when (status) {
-                    DownloadManager.STATUS_SUCCESSFUL -> {
-                        val filePath = destFile.absolutePath
-                        MediaScannerConnection.scanFile(
-                            service, arrayOf(filePath), null, null
-                        )
-                        Log.d(TAG, "Download complete: $filePath")
-                        return ActionResult(true, data = filePath)
-                    }
-                    DownloadManager.STATUS_FAILED -> {
-                        val reasonText = when (reason) {
-                            DownloadManager.ERROR_CANNOT_RESUME -> "cannot resume"
-                            DownloadManager.ERROR_DEVICE_NOT_FOUND -> "storage not found"
-                            DownloadManager.ERROR_FILE_ALREADY_EXISTS -> "file already exists"
-                            DownloadManager.ERROR_FILE_ERROR -> "file error"
-                            DownloadManager.ERROR_HTTP_DATA_ERROR -> "HTTP data error"
-                            DownloadManager.ERROR_INSUFFICIENT_SPACE -> "insufficient space"
-                            DownloadManager.ERROR_TOO_MANY_REDIRECTS -> "too many redirects"
-                            DownloadManager.ERROR_UNHANDLED_HTTP_CODE -> "unhandled HTTP code"
-                            DownloadManager.ERROR_UNKNOWN -> "unknown error"
-                            else -> "reason=$reason"
+            // Stream to file
+            val totalBytes = body.contentLength()
+            var bytesWritten = 0L
+            body.byteStream().use { input ->
+                FileOutputStream(destFile).use { output ->
+                    val buffer = ByteArray(8192)
+                    var bytesRead: Int
+                    while (input.read(buffer).also { bytesRead = it } != -1) {
+                        output.write(buffer, 0, bytesRead)
+                        bytesWritten += bytesRead
+                        if (bytesWritten % (1024 * 1024) < 8192) {
+                            Log.d(TAG, "Download progress: $bytesWritten / $totalBytes bytes")
                         }
-                        Log.e(TAG, "Download failed: $reasonText")
-                        return ActionResult(false, "Download failed: $reasonText")
-                    }
-                    DownloadManager.STATUS_PAUSED -> {
-                        val pauseReason = when (reason) {
-                            DownloadManager.PAUSED_QUEUED_FOR_WIFI -> "waiting for WiFi"
-                            DownloadManager.PAUSED_WAITING_FOR_NETWORK -> "waiting for network"
-                            DownloadManager.PAUSED_WAITING_TO_RETRY -> "waiting to retry"
-                            DownloadManager.PAUSED_UNKNOWN -> "paused (unknown)"
-                            else -> "paused reason=$reason"
-                        }
-                        Log.w(TAG, "Download paused: $pauseReason")
-                        // Return early if paused waiting for network — won't resolve by polling
-                        if (i > 10 && (reason == DownloadManager.PAUSED_WAITING_FOR_NETWORK || reason == DownloadManager.PAUSED_QUEUED_FOR_WIFI)) {
-                            dm.remove(downloadId)
-                            return ActionResult(false, "Download paused: $pauseReason. Check network connectivity.")
-                        }
-                    }
-                    else -> {
-                        // STATUS_PENDING or STATUS_RUNNING — keep polling
                     }
                 }
             }
+            response.close()
 
-            Log.w(TAG, "Download timed out after 120s, last status=$lastStatus")
-            dm.remove(downloadId)
-            val statusName = when (lastStatus) {
-                DownloadManager.STATUS_PENDING -> "PENDING (never started)"
-                DownloadManager.STATUS_RUNNING -> "RUNNING (still downloading)"
-                DownloadManager.STATUS_PAUSED -> "PAUSED"
-                else -> "status=$lastStatus"
-            }
-            ActionResult(false, "Download timed out after 120s — stuck in $statusName")
+            val filePath = destFile.absolutePath
+            Log.d(TAG, "Download complete: $filePath ($bytesWritten bytes)")
+
+            // Notify media scanner so file appears in Gallery
+            MediaScannerConnection.scanFile(
+                service, arrayOf(filePath), null, null
+            )
+
+            ActionResult(true, data = filePath)
+        } catch (e: java.net.SocketTimeoutException) {
+            Log.e(TAG, "Download timed out", e)
+            ActionResult(false, "Download timed out: ${e.message}")
+        } catch (e: java.io.IOException) {
+            Log.e(TAG, "Download I/O error", e)
+            ActionResult(false, "Download I/O error: ${e.message}")
         } catch (e: Exception) {
             Log.e(TAG, "Download failed", e)
             ActionResult(false, "Download exception: ${e.message}")
@@ -553,89 +472,46 @@ class GestureExecutor(private val service: DroidClawAccessibilityService) {
         val testUrl = "https://www.google.com/favicon.ico"
         downloadTest.put("url", testUrl)
         try {
-            val testMsg = ServerMessage(type = "download", url = testUrl, text = "droidclaw_diagnose_test.ico")
             val startMs = System.currentTimeMillis()
 
-            // Use a shorter polling loop: 15 polls × 2s = 30s max
-            val dm = service.getSystemService(Context.DOWNLOAD_SERVICE) as? DownloadManager
-            if (dm == null) {
-                downloadTest.put("success", false)
-                downloadTest.put("error", "DownloadManager not available")
-                downloadTest.put("durationMs", System.currentTimeMillis() - startMs)
+            val destFile = java.io.File(
+                service.getExternalFilesDir(null) ?: service.cacheDir,
+                "droidclaw_diagnose_test.ico"
+            )
+            if (destFile.exists()) destFile.delete()
+
+            val request = OkRequest.Builder().url(testUrl).build()
+            val response = httpClient.newCall(request).execute()
+
+            var testSuccess = false
+            var testError: String? = null
+
+            if (!response.isSuccessful) {
+                testError = "HTTP ${response.code}"
+                response.close()
             } else {
-                // Clean up any previous diagnostic test file — use external files dir
-                // (DownloadManager cannot write to internal cacheDir)
-                val destFile = java.io.File(
-                    service.getExternalFilesDir(null) ?: service.cacheDir,
-                    "droidclaw_diagnose_test.ico"
-                )
-                if (destFile.exists()) destFile.delete()
-
-                val request = DownloadManager.Request(Uri.parse(testUrl)).apply {
-                    setTitle("DroidClaw Diagnose Test")
-                    setDescription("Diagnostic download test")
-                    setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE)
-                    setDestinationUri(Uri.fromFile(destFile))
-                }
-                val downloadId = dm.enqueue(request)
-
-                var testSuccess = false
-                var testError: String? = null
-                val maxPolls = 15
-                var lastStatus = -1
-                for (i in 1..maxPolls) {
-                    kotlinx.coroutines.delay(2000)
-                    val query = DownloadManager.Query().setFilterById(downloadId)
-                    val cursor = dm.query(query)
-                    if (cursor == null || !cursor.moveToFirst()) {
-                        cursor?.close()
-                        testError = "Download disappeared from queue"
-                        break
-                    }
-                    val statusIdx = cursor.getColumnIndex(DownloadManager.COLUMN_STATUS)
-                    val reasonIdx = cursor.getColumnIndex(DownloadManager.COLUMN_REASON)
-                    val status = cursor.getInt(statusIdx)
-                    val reason = if (reasonIdx >= 0) cursor.getInt(reasonIdx) else -1
-                    cursor.close()
-                    lastStatus = status
-
-                    when (status) {
-                        DownloadManager.STATUS_SUCCESSFUL -> {
-                            testSuccess = true
-                            break
-                        }
-                        DownloadManager.STATUS_FAILED -> {
-                            testError = "Download failed: reason=$reason"
-                            break
-                        }
-                        DownloadManager.STATUS_PAUSED -> {
-                            if (i > 5) {
-                                testError = "Download paused: reason=$reason"
-                                dm.remove(downloadId)
-                                break
-                            }
+                val body = response.body
+                if (body == null) {
+                    testError = "Empty response body"
+                    response.close()
+                } else {
+                    body.byteStream().use { input ->
+                        FileOutputStream(destFile).use { output ->
+                            input.copyTo(output)
                         }
                     }
+                    response.close()
+                    testSuccess = destFile.exists() && destFile.length() > 0
+                    if (!testSuccess) testError = "File empty or missing after download"
                 }
-
-                if (!testSuccess && testError == null) {
-                    val statusName = when (lastStatus) {
-                        DownloadManager.STATUS_PENDING -> "PENDING"
-                        DownloadManager.STATUS_RUNNING -> "RUNNING"
-                        DownloadManager.STATUS_PAUSED -> "PAUSED"
-                        else -> "status=$lastStatus"
-                    }
-                    testError = "Download timed out after 30s — stuck in $statusName"
-                    dm.remove(downloadId)
-                }
-
-                downloadTest.put("success", testSuccess)
-                if (testError != null) downloadTest.put("error", testError)
-                downloadTest.put("durationMs", System.currentTimeMillis() - startMs)
-
-                // Clean up test file
-                if (destFile.exists()) destFile.delete()
             }
+
+            downloadTest.put("success", testSuccess)
+            if (testError != null) downloadTest.put("error", testError)
+            downloadTest.put("durationMs", System.currentTimeMillis() - startMs)
+
+            // Clean up test file
+            if (destFile.exists()) destFile.delete()
         } catch (e: Exception) {
             downloadTest.put("success", false)
             downloadTest.put("error", "Exception: ${e.message}")

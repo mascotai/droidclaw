@@ -33,7 +33,7 @@
     },
     {
       "app": "com.instagram.android",
-      "goal": "You should now be in Reel mode on the content creation screen with a media gallery visible. At the top of the media gallery there is a dropdown button showing 'Recents' (or a similar label). Tap that dropdown to open the album/folder list. In the list that appears, look for an option like 'Other...' or 'All albums' or 'Browse folders' and tap it to see all available albums. Then scroll through and find the album named '{{albumName}}' and tap it to select it.",
+      "goal": "You should now be in Reel mode on the content creation screen with a media gallery visible. At the top of the media gallery there is a button labeled 'Recents'. Tap 'Recents' — this will open a list of album options. In that list, find and tap 'All albums' (or 'Other...' or 'Browse folders'). This reveals all available albums on the device. Scroll through the albums and find the one named '{{albumName}}', then tap it to select it.",
       "maxSteps": 12,
       "retries": 2
     },
