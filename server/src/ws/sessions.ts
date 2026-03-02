@@ -19,6 +19,7 @@ export interface ConnectedDevice {
   ws: ServerWebSocket<WebSocketData>;
   deviceInfo?: DeviceInfo;
   connectedAt: Date;
+  lastPong: number; // Date.now() timestamp of last pong/message received
 }
 
 /** A dashboard client subscribed to real-time updates */
@@ -35,11 +36,18 @@ export interface PendingRequest {
 }
 
 const DEFAULT_COMMAND_TIMEOUT = Number(process.env.COMMAND_TIMEOUT) || 90_000; // 90 seconds (configurable)
+const STALE_DEVICE_TIMEOUT = 5 * 60 * 1000; // 5 minutes — prune devices with no pong
+const SWEEP_INTERVAL = 60 * 1000; // sweep every 60 seconds
 
 class SessionManager {
   private devices = new Map<string, ConnectedDevice>();
   private dashboardSubscribers = new Set<DashboardSubscriber>();
   private pendingRequests = new Map<string, PendingRequest>();
+
+  constructor() {
+    // Periodically sweep stale device connections
+    setInterval(() => this.sweepStaleDevices(), SWEEP_INTERVAL);
+  }
 
   // ── Device management ──────────────────────────────────
 
@@ -63,6 +71,31 @@ class SessionManager {
     this.devices.delete(deviceId);
     // Note: pending requests for this device will time out naturally
     // since we can't map requestId → deviceId without extra bookkeeping.
+  }
+
+  /** Update lastPong timestamp — call on any message received from device */
+  touchDevice(deviceId: string): void {
+    const device = this.devices.get(deviceId);
+    if (device) {
+      device.lastPong = Date.now();
+    }
+  }
+
+  /** Remove devices that haven't sent any message in STALE_DEVICE_TIMEOUT */
+  private sweepStaleDevices(): void {
+    const now = Date.now();
+    let swept = 0;
+    for (const [key, device] of this.devices) {
+      if (now - device.lastPong > STALE_DEVICE_TIMEOUT) {
+        console.log(`[Sessions] Sweeping stale device ${key} (persistent: ${device.persistentDeviceId ?? "none"}, last pong ${Math.round((now - device.lastPong) / 1000)}s ago)`);
+        try { device.ws.close(1000, "stale connection"); } catch { /* already closed */ }
+        this.devices.delete(key);
+        swept++;
+      }
+    }
+    if (swept > 0) {
+      console.log(`[Sessions] Swept ${swept} stale device(s), ${this.devices.size} remaining`);
+    }
   }
 
   getDevice(deviceId: string): ConnectedDevice | undefined {

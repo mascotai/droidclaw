@@ -158,6 +158,7 @@ export async function handleDeviceMessage(
         ws,
         deviceInfo: msg.deviceInfo,
         connectedAt: new Date(),
+        lastPong: Date.now(),
       });
 
       // Confirm auth to the device
@@ -190,6 +191,11 @@ export async function handleDeviceMessage(
       JSON.stringify({ type: "error", message: "Not authenticated" })
     );
     return;
+  }
+
+  // Mark device as alive on every message
+  if (ws.data.deviceId) {
+    sessions.touchDevice(ws.data.deviceId);
   }
 
   switch (msg.type) {
