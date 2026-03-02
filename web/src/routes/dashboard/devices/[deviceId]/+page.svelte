@@ -97,6 +97,17 @@
 		maxSteps?: number;
 		retries?: number;
 	}
+	interface StepResult {
+		goal?: string;
+		command?: string;
+		success: boolean;
+		stepsUsed?: number;
+		sessionId?: string;
+		resolvedBy?: string;
+		message?: string;
+		error?: string;
+		observations?: Array<{ elements: unknown[]; packageName?: string }>;
+	}
 	interface WorkflowRun {
 		id: string;
 		name: string;
@@ -105,23 +116,18 @@
 		totalSteps: number;
 		currentStep: number | null;
 		steps: Array<WorkflowStepConfig | string | Record<string, unknown>>;
-		stepResults: Array<{
-			goal?: string;
-			command?: string;
-			success: boolean;
-			stepsUsed?: number;
-			message?: string;
-			error?: string;
-			observations?: Array<{ elements: unknown[]; packageName?: string }>;
-		}> | null;
+		stepResults: StepResult[] | null;
 		startedAt: Date;
 		completedAt: Date | null;
 	}
 	let workflowRuns = $state<WorkflowRun[]>([]);
 	let expandedWorkflow = $state<string | null>(null);
-	let expandedWorkflowStep = $state<string | null>(null); // "runId-stepIndex" for observations
-	let expandedStepDetail = $state<string | null>(null); // "runId-stepIndex" for full goal
 	let workflowsLoaded = $state(false);
+
+	// Modal state for step deep-dive
+	let modalStep = $state<{ run: WorkflowRun; stepIdx: number; stepResult: StepResult; config: WorkflowStepConfig | null } | null>(null);
+	let modalSteps = $state<Step[]>([]);
+	let modalStepsLoading = $state(false);
 
 	async function loadWorkflowRuns() {
 		const runs = await listWorkflowRuns(deviceId);
@@ -132,22 +138,10 @@
 	function toggleWorkflow(runId: string) {
 		if (expandedWorkflow === runId) {
 			expandedWorkflow = null;
-			expandedWorkflowStep = null;
 		} else {
 			expandedWorkflow = runId;
-			expandedWorkflowStep = null;
 			track(DEVICE_WORKFLOW_EXPAND);
 		}
-	}
-
-	function toggleWorkflowStepObs(runId: string, stepIndex: number) {
-		const key = `${runId}-${stepIndex}`;
-		expandedWorkflowStep = expandedWorkflowStep === key ? null : key;
-	}
-
-	function toggleStepDetail(runId: string, stepIndex: number) {
-		const key = `${runId}-${stepIndex}`;
-		expandedStepDetail = expandedStepDetail === key ? null : key;
 	}
 
 	function getStepConfig(run: WorkflowRun, stepIdx: number): WorkflowStepConfig | null {
@@ -155,9 +149,34 @@
 		if (!step) return null;
 		if (typeof step === 'string') return { goal: step };
 		if (typeof step === 'object' && 'goal' in step) return step as WorkflowStepConfig;
-		// Flow steps (command objects) — derive a label
 		const [cmd, val] = Object.entries(step)[0] ?? [];
 		return cmd ? { goal: `${cmd}: ${val}` } : null;
+	}
+
+	async function openStepModal(run: WorkflowRun, stepIdx: number) {
+		const stepResult = run.stepResults?.[stepIdx];
+		if (!stepResult) return;
+		const config = getStepConfig(run, stepIdx);
+		modalStep = { run, stepIdx, stepResult, config };
+		modalSteps = [];
+		modalStepsLoading = false;
+
+		// Load agent steps if we have a sessionId
+		if (stepResult.sessionId) {
+			modalStepsLoading = true;
+			try {
+				const loaded = await listSessionSteps({ deviceId, sessionId: stepResult.sessionId });
+				modalSteps = loaded as Step[];
+			} catch {
+				// ignore
+			}
+			modalStepsLoading = false;
+		}
+	}
+
+	function closeStepModal() {
+		modalStep = null;
+		modalSteps = [];
 	}
 
 	function formatDuration(startedAt: Date | string, completedAt: Date | string | null): string {
@@ -168,10 +187,6 @@
 		const mins = Math.floor(secs / 60);
 		const remSecs = secs % 60;
 		return `${mins}m${remSecs > 0 ? `${remSecs}s` : ''}`;
-	}
-
-	function truncateGoal(text: string, maxLen = 50): string {
-		return text.length > maxLen ? text.slice(0, maxLen) + '...' : text;
 	}
 
 	async function handleInvestigate(sessionId: string) {
@@ -814,144 +829,49 @@
 						<div class="border-t border-stone-100 px-4 md:px-6 py-4">
 							<div class="space-y-2">
 								{#each run.stepResults as stepResult, stepIdx}
-									{@const stepConfig = getStepConfig(run, stepIdx)}
-									{@const stepKey = `${run.id}-${stepIdx}`}
-									<div class="rounded-xl bg-stone-50">
-										<!-- Step header row -->
-										<button
-											onclick={() => toggleStepDetail(run.id, stepIdx)}
-											class="flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-stone-100 rounded-xl"
+									<button
+										onclick={() => openStepModal(run, stepIdx)}
+										class="flex w-full items-start gap-2.5 rounded-xl bg-stone-50 px-3 py-3 text-left transition-colors hover:bg-stone-100"
+									>
+										<!-- Step number badge -->
+										<span
+											class="mt-0.5 shrink-0 rounded-full px-2 py-0.5 font-mono text-[10px]
+												{stepResult.success ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}"
 										>
-											<!-- Tree connector -->
-											<span class="flex items-center text-stone-300">
-												{#if stepIdx === run.stepResults.length - 1}
-													<span class="font-mono text-xs">&#x2514;</span>
-												{:else}
-													<span class="font-mono text-xs">&#x251C;</span>
-												{/if}
-											</span>
-											<!-- Step badge -->
-											<span
-												class="shrink-0 rounded-full px-2 py-0.5 font-mono text-[10px]
-													{stepResult.success ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}"
-											>
-												{stepIdx + 1}
-											</span>
-											<!-- Goal/command text (truncated in header) -->
-											<div class="min-w-0 flex-1">
-												<span class="text-xs font-medium text-stone-800">
-													{truncateGoal(stepResult.goal ?? stepResult.command ?? stepConfig?.goal ?? `Step ${stepIdx + 1}`, 60)}
-												</span>
-											</div>
-											<!-- Success/fail badge -->
-											<span class="flex shrink-0 items-center gap-1 text-xs font-medium {stepResult.success ? 'text-emerald-600' : 'text-red-600'}">
+											{stepIdx + 1}
+										</span>
+										<!-- Full goal text -->
+										<div class="min-w-0 flex-1">
+											<p class="text-xs leading-relaxed text-stone-800">
+												{stepResult.goal ?? stepResult.command ?? `Step ${stepIdx + 1}`}
+											</p>
+											{#if stepResult.error || (stepResult.message && !stepResult.success)}
+												<p class="mt-1 text-[11px] text-red-500">
+													{stepResult.error ?? stepResult.message}
+												</p>
+											{/if}
+										</div>
+										<!-- Right side: status + meta -->
+										<div class="flex shrink-0 flex-col items-end gap-1">
+											<span class="flex items-center gap-1 text-xs font-medium {stepResult.success ? 'text-emerald-600' : 'text-red-600'}">
 												<Icon
 													icon={stepResult.success ? 'solar:check-circle-bold-duotone' : 'solar:close-circle-bold-duotone'}
 													class="h-3.5 w-3.5"
 												/>
 												{stepResult.success ? 'OK' : 'Failed'}
 											</span>
-											<!-- Steps used -->
 											{#if stepResult.stepsUsed !== undefined}
-												<span class="shrink-0 text-[10px] text-stone-400">
+												<span class="text-[10px] text-stone-400">
 													{stepResult.stepsUsed} step{stepResult.stepsUsed !== 1 ? 's' : ''}
 												</span>
 											{/if}
-											<!-- Expand arrow -->
-											<Icon
-												icon={expandedStepDetail === stepKey ? 'solar:alt-arrow-up-linear' : 'solar:alt-arrow-down-linear'}
-												class="h-3.5 w-3.5 shrink-0 text-stone-400"
-											/>
-										</button>
-
-										<!-- Expanded step detail -->
-										{#if expandedStepDetail === stepKey}
-											<div class="border-t border-stone-200 px-3 pb-3 pt-2.5">
-												<!-- Full goal text -->
-												<div class="mb-2">
-													<p class="mb-1 text-[10px] font-semibold uppercase tracking-wider text-stone-400">Goal</p>
-													<p class="whitespace-pre-wrap text-xs leading-relaxed text-stone-700">
-														{stepResult.goal ?? stepConfig?.goal ?? stepResult.command ?? 'N/A'}
-													</p>
-												</div>
-
-												<!-- Step config metadata -->
-												{#if stepConfig}
-													<div class="mb-2 flex flex-wrap items-center gap-1.5">
-														{#if stepConfig.app}
-															<span class="rounded bg-blue-50 px-1.5 py-0.5 font-mono text-[9px] text-blue-600">{stepConfig.app}</span>
-														{/if}
-														{#if stepConfig.maxSteps}
-															<span class="rounded bg-stone-200 px-1.5 py-0.5 text-[9px] text-stone-600">max {stepConfig.maxSteps} steps</span>
-														{/if}
-														{#if stepConfig.retries}
-															<span class="rounded bg-stone-200 px-1.5 py-0.5 text-[9px] text-stone-600">{stepConfig.retries} retries</span>
-														{/if}
-													</div>
-												{/if}
-
-												<!-- Error message -->
-												{#if stepResult.error}
-													<div class="mb-2 flex items-start gap-1.5 rounded-lg bg-red-50 px-2.5 py-2">
-														<Icon icon="solar:danger-triangle-bold-duotone" class="mt-0.5 h-3 w-3 shrink-0 text-red-500" />
-														<p class="text-xs text-red-600">{stepResult.error}</p>
-													</div>
-												{/if}
-												{#if stepResult.message && !stepResult.success}
-													<div class="mb-2 flex items-start gap-1.5 rounded-lg bg-red-50 px-2.5 py-2">
-														<Icon icon="solar:danger-triangle-bold-duotone" class="mt-0.5 h-3 w-3 shrink-0 text-red-500" />
-														<p class="text-xs text-red-600">{stepResult.message}</p>
-													</div>
-												{/if}
-
-												<!-- Screen observations -->
-												{#if stepResult.observations && stepResult.observations.length > 0}
-													<button
-														onclick={() => toggleWorkflowStepObs(run.id, stepIdx)}
-														class="flex items-center gap-1 text-[10px] font-medium text-violet-600 transition-colors hover:text-violet-500"
-													>
-														<Icon
-															icon={expandedWorkflowStep === stepKey ? 'solar:alt-arrow-up-linear' : 'solar:alt-arrow-down-linear'}
-															class="h-3 w-3"
-														/>
-														Screen data ({stepResult.observations.length} observation{stepResult.observations.length !== 1 ? 's' : ''})
-													</button>
-													{#if expandedWorkflowStep === stepKey}
-														<div class="mt-2 max-h-60 overflow-y-auto rounded-lg bg-white px-2.5 py-2">
-															{#each stepResult.observations as obs, obsIdx}
-																<div class="mb-2 last:mb-0">
-																	<div class="flex items-center gap-1.5 text-[10px] text-stone-500">
-																		<Icon icon="solar:monitor-smartphone-bold-duotone" class="h-3 w-3" />
-																		<span>Step {obsIdx + 1}</span>
-																		{#if obs.packageName}
-																			<span class="rounded bg-stone-100 px-1.5 py-0.5 font-mono text-[9px] text-stone-500">{obs.packageName}</span>
-																		{/if}
-																		<span>{obs.elements.length} element{obs.elements.length !== 1 ? 's' : ''}</span>
-																	</div>
-																	{#if obs.elements.length > 0}
-																		<div class="mt-1 space-y-0.5">
-																			{#each obs.elements.slice(0, 15) as el}
-																				{@const elem = el as Record<string, unknown>}
-																				{#if elem.text || elem.hint}
-																					<p class="truncate font-mono text-[9px] text-stone-600">
-																						{#if elem.text}<span>{elem.text}</span>{/if}
-																						{#if elem.hint}<span class="text-stone-400"> ({elem.hint})</span>{/if}
-																					</p>
-																				{/if}
-																			{/each}
-																			{#if obs.elements.length > 15}
-																				<p class="text-[9px] text-stone-400">... and {obs.elements.length - 15} more</p>
-																			{/if}
-																		</div>
-																	{/if}
-																</div>
-															{/each}
-														</div>
-													{/if}
-												{/if}
-											</div>
-										{/if}
-									</div>
+											{#if stepResult.resolvedBy}
+												<span class="rounded bg-stone-200 px-1.5 py-0.5 text-[9px] text-stone-500">{stepResult.resolvedBy}</span>
+											{/if}
+										</div>
+										<!-- Open indicator -->
+										<Icon icon="solar:alt-arrow-right-linear" class="mt-0.5 h-4 w-4 shrink-0 text-stone-300" />
+									</button>
 								{/each}
 							</div>
 						</div>
@@ -960,6 +880,166 @@
 			{/each}
 		</div>
 	{/if}
+
+<!-- Step Detail Modal -->
+{#if modalStep}
+	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onclick={closeStepModal}>
+		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+		<div
+			class="relative max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-xl"
+			onclick={(e) => e.stopPropagation()}
+		>
+			<!-- Modal header -->
+			<div class="sticky top-0 z-10 flex items-center justify-between rounded-t-2xl border-b border-stone-100 bg-white px-6 py-4">
+				<div class="flex items-center gap-3">
+					<span
+						class="rounded-full px-2.5 py-0.5 font-mono text-xs
+							{modalStep.stepResult.success ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}"
+					>
+						Step {modalStep.stepIdx + 1}
+					</span>
+					<span class="flex items-center gap-1 text-sm font-medium {modalStep.stepResult.success ? 'text-emerald-700' : 'text-red-700'}">
+						<Icon
+							icon={modalStep.stepResult.success ? 'solar:check-circle-bold-duotone' : 'solar:close-circle-bold-duotone'}
+							class="h-4 w-4"
+						/>
+						{modalStep.stepResult.success ? 'Succeeded' : 'Failed'}
+					</span>
+				</div>
+				<button onclick={closeStepModal} class="rounded-full p-1.5 text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-600">
+					<Icon icon="solar:close-circle-bold-duotone" class="h-5 w-5" />
+				</button>
+			</div>
+
+			<div class="space-y-5 px-6 py-5">
+				<!-- Goal -->
+				<div>
+					<p class="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-stone-400">Goal</p>
+					<p class="whitespace-pre-wrap text-sm leading-relaxed text-stone-800">
+						{modalStep.stepResult.goal ?? modalStep.config?.goal ?? modalStep.stepResult.command ?? 'N/A'}
+					</p>
+				</div>
+
+				<!-- Step Config -->
+				{#if modalStep.config}
+					<div>
+						<p class="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-stone-400">Configuration</p>
+						<div class="flex flex-wrap gap-2">
+							{#if modalStep.config.app}
+								<span class="flex items-center gap-1 rounded-lg bg-blue-50 px-2.5 py-1 text-xs text-blue-700">
+									<Icon icon="solar:box-bold-duotone" class="h-3.5 w-3.5" />
+									{modalStep.config.app}
+								</span>
+							{/if}
+							{#if modalStep.config.maxSteps}
+								<span class="rounded-lg bg-stone-100 px-2.5 py-1 text-xs text-stone-600">Max {modalStep.config.maxSteps} steps</span>
+							{/if}
+							{#if modalStep.config.retries}
+								<span class="rounded-lg bg-stone-100 px-2.5 py-1 text-xs text-stone-600">{modalStep.config.retries} retries</span>
+							{/if}
+							{#if modalStep.stepResult.resolvedBy}
+								<span class="rounded-lg bg-violet-50 px-2.5 py-1 text-xs text-violet-700">Resolved by: {modalStep.stepResult.resolvedBy}</span>
+							{/if}
+							{#if modalStep.stepResult.stepsUsed !== undefined}
+								<span class="rounded-lg bg-stone-100 px-2.5 py-1 text-xs text-stone-600">Used {modalStep.stepResult.stepsUsed} steps</span>
+							{/if}
+						</div>
+					</div>
+				{/if}
+
+				<!-- Error -->
+				{#if modalStep.stepResult.error || (modalStep.stepResult.message && !modalStep.stepResult.success)}
+					<div>
+						<p class="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-red-400">Error</p>
+						<div class="rounded-lg bg-red-50 px-3 py-2.5">
+							<p class="text-xs text-red-700">{modalStep.stepResult.error ?? modalStep.stepResult.message}</p>
+						</div>
+					</div>
+				{/if}
+
+				<!-- Agent Journey (steps from agentStep table) -->
+				<div>
+					<p class="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-stone-400">Agent Journey</p>
+					{#if modalStepsLoading}
+						<div class="flex items-center gap-2 py-3 text-xs text-stone-400">
+							<Icon icon="solar:refresh-circle-bold-duotone" class="h-4 w-4 animate-spin" />
+							Loading steps...
+						</div>
+					{:else if modalSteps.length > 0}
+						<div class="space-y-1.5">
+							{#each modalSteps as s (s.id)}
+								<div class="rounded-lg bg-stone-50 px-3 py-2">
+									<div class="flex items-baseline gap-2">
+										<span class="shrink-0 rounded-full bg-stone-200 px-2 py-0.5 font-mono text-[10px] text-stone-500">
+											{s.stepNumber}
+										</span>
+										<span class="font-mono text-xs font-medium text-stone-800">
+											{typeof s.action === 'object' ? JSON.stringify(s.action) : s.action}
+										</span>
+									</div>
+									{#if s.reasoning}
+										<p class="mt-0.5 pl-8 text-xs text-stone-500">{s.reasoning}</p>
+									{/if}
+								</div>
+							{/each}
+						</div>
+					{:else if !modalStep.stepResult.sessionId}
+						<p class="text-xs text-stone-400">No session linked — resolved by {modalStep.stepResult.resolvedBy ?? 'parser/classifier'} without UI agent.</p>
+					{:else}
+						<p class="text-xs text-stone-400">No step data available.</p>
+					{/if}
+				</div>
+
+				<!-- Screen Observations -->
+				{#if modalStep.stepResult.observations && modalStep.stepResult.observations.length > 0}
+					<div>
+						<p class="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-stone-400">
+							Screen Observations ({modalStep.stepResult.observations.length})
+						</p>
+						<div class="space-y-2">
+							{#each modalStep.stepResult.observations as obs, obsIdx}
+								<div class="rounded-lg bg-stone-50 px-3 py-2.5">
+									<div class="mb-1.5 flex items-center gap-1.5 text-[10px] text-stone-500">
+										<Icon icon="solar:monitor-smartphone-bold-duotone" class="h-3.5 w-3.5" />
+										<span class="font-medium">Observation {obsIdx + 1}</span>
+										{#if obs.packageName}
+											<span class="rounded bg-blue-50 px-1.5 py-0.5 font-mono text-[9px] text-blue-600">{obs.packageName}</span>
+										{/if}
+										<span class="text-stone-400">{obs.elements.length} element{obs.elements.length !== 1 ? 's' : ''}</span>
+									</div>
+									{#if obs.elements.length > 0}
+										<div class="max-h-40 space-y-0.5 overflow-y-auto">
+											{#each obs.elements as el}
+												{@const elem = el as Record<string, unknown>}
+												{#if elem.text || elem.hint || elem.id}
+													<p class="truncate font-mono text-[10px] text-stone-600">
+														{#if elem.text}<span>{elem.text}</span>{/if}
+														{#if elem.hint}<span class="text-stone-400"> ({elem.hint})</span>{/if}
+														{#if elem.id}<span class="text-stone-300"> [{elem.id}]</span>{/if}
+													</p>
+												{/if}
+											{/each}
+										</div>
+									{/if}
+								</div>
+							{/each}
+						</div>
+					</div>
+				{/if}
+
+				<!-- Session ID for debugging -->
+				{#if modalStep.stepResult.sessionId}
+					<div class="border-t border-stone-100 pt-3">
+						<p class="text-[10px] text-stone-400">
+							Session ID: <span class="font-mono">{modalStep.stepResult.sessionId}</span>
+						</p>
+					</div>
+				{/if}
+			</div>
+		</div>
+	</div>
+{/if}
 
 <!-- Run Tab -->
 {:else if activeTab === 'run'}
