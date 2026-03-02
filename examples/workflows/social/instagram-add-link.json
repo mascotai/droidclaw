@@ -1,0 +1,28 @@
+{
+  "name": "Instagram Add Link",
+  "description": "Opens Instagram, navigates to Edit Profile, and adds an external link with a title.",
+  "params": {
+    "url": "The URL to add (e.g. 'google.com')",
+    "title": "The display title for the link"
+  },
+  "steps": [
+    {
+      "app": "com.instagram.android",
+      "goal": "Open Instagram. Tap the profile tab (bottom-right icon). Then tap 'Edit profile' button. Wait for the Edit Profile screen to load.",
+      "maxSteps": 6,
+      "retries": 1
+    },
+    {
+      "app": "com.instagram.android",
+      "goal": "You are on the Edit Profile screen. Find and tap 'Add link' (or 'Links' if a link section is visible). Then tap 'Add external link'. You should see fields for URL and Title.",
+      "maxSteps": 6,
+      "retries": 2
+    },
+    {
+      "app": "com.instagram.android",
+      "goal": "You should see the 'Add external link' form with URL and Title fields. Tap the URL field and type: '{{url}}'. Then tap the Title field and type: '{{title}}'. Verify both fields are filled correctly. Then tap the checkmark or 'Done' button (top-right) to save the link. Wait for confirmation, then mark done.",
+      "maxSteps": 8,
+      "retries": 1
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "name": "Instagram Edit Username",
+  "description": "Opens Instagram, navigates to Edit Profile, and changes the username.",
+  "params": {
+    "username": "The new username to set"
+  },
+  "steps": [
+    {
+      "app": "com.instagram.android",
+      "goal": "Open Instagram. Tap the profile tab (bottom-right icon). Then tap 'Edit profile' button. Wait for the Edit Profile screen to load.",
+      "maxSteps": 6,
+      "retries": 1
+    },
+    {
+      "app": "com.instagram.android",
+      "goal": "You are on the Edit Profile screen. Find the Username field — it is the second text field (below the Name field), showing the current username. Tap on the Username field to open it. Select all existing text and delete it (clear the field completely). Then type the following username exactly: '{{username}}'. Verify the text appears in the field.",
+      "maxSteps": 8,
+      "retries": 2
+    },
+    {
+      "app": "com.instagram.android",
+      "goal": "The Username field should now contain the new username. Tap the checkmark or 'Done' button (top-right corner) to save the changes. Wait for the profile to update, then mark done.",
+      "maxSteps": 5,
+      "retries": 1
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "name": "Instagram Edit Display Name",
+  "description": "Opens Instagram, navigates to Edit Profile, and changes the display name (Name field).",
+  "params": {
+    "name": "The new display name to set"
+  },
+  "steps": [
+    {
+      "app": "com.instagram.android",
+      "goal": "Open Instagram. Tap the profile tab (bottom-right icon). Then tap 'Edit profile' button. Wait for the Edit Profile screen to load.",
+      "maxSteps": 6,
+      "retries": 1
+    },
+    {
+      "app": "com.instagram.android",
+      "goal": "You are on the Edit Profile screen. Find the Name field — it is the first text field, usually showing the current display name. Tap on the Name field to open it. Select all existing text and delete it (clear the field completely). Then type the following name exactly: '{{name}}'. Verify the text appears in the field.",
+      "maxSteps": 8,
+      "retries": 2
+    },
+    {
+      "app": "com.instagram.android",
+      "goal": "The Name field should now contain the new name. Tap the checkmark or 'Done' button (top-right corner) to save. If Instagram shows a 'Change name' confirmation dialog, tap the confirm button. Wait for the profile to update, then mark done.",
+      "maxSteps": 5,
+      "retries": 1
+    }
+  ]
+}

@@ -149,6 +149,17 @@ workflows.get("/runs/:deviceId", sessionMiddleware, async (c) => {
   return c.json(rows);
 });
 
+// ── Get a single run by ID ──
+workflows.get("/runs/:deviceId/:runId", sessionMiddleware, async (c) => {
+  const user = c.get("user");
+  const runId = c.req.param("runId");
+  const rows = await db.select().from(workflowRun)
+    .where(and(eq(workflowRun.id, runId), eq(workflowRun.userId, user.id)))
+    .limit(1);
+  if (rows.length === 0) return c.json({ error: "Run not found" }, 404);
+  return c.json(rows[0]);
+});
+
 // ── Schedule a workflow/flow (send full JSON) ──
 workflows.post("/schedule", sessionMiddleware, async (c) => {
   const user = c.get("user");

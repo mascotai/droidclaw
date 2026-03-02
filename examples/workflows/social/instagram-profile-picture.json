@@ -1,0 +1,33 @@
+{
+  "name": "Instagram Profile Picture",
+  "description": "Downloads an image from a URL, then sets it as the Instagram profile picture via Edit Profile.",
+  "params": {
+    "imageUrl": "Direct URL to the image file to use as profile picture",
+    "albumName": "Short unique album name (e.g. 'pfp1a2b3' — 6-8 chars)"
+  },
+  "steps": [
+    {
+      "goal": "Download an image file to the device. Use the download action with url {{imageUrl}} and save it as {{albumName}}/profile_pic.jpg. After the download completes, mark done.",
+      "maxSteps": 3,
+      "retries": 2
+    },
+    {
+      "app": "com.instagram.android",
+      "goal": "Open Instagram. If you see a 'Not now' button or any popup, dismiss it. Tap the profile tab (bottom-right icon). Then tap 'Edit profile'. Wait for the Edit Profile screen to load.",
+      "maxSteps": 8,
+      "retries": 1
+    },
+    {
+      "app": "com.instagram.android",
+      "goal": "You are on the Edit Profile screen. Tap on the profile picture (the circular avatar image near the top). A menu should appear with options like 'Choose from library', 'Take photo', etc. Tap 'Choose from library' (or 'New profile picture' then 'Choose from library').",
+      "maxSteps": 6,
+      "retries": 2
+    },
+    {
+      "app": "com.instagram.android",
+      "goal": "A photo picker or gallery is now open. Find and select the image from the '{{albumName}}' album — you may need to tap a dropdown (e.g. 'Recents') and browse albums to find '{{albumName}}'. Tap the image to select it. Then tap 'Done', 'Next', or the checkmark to confirm the selection. Wait for the profile picture to update.",
+      "maxSteps": 10,
+      "retries": 2
+    }
+  ]
+}
