@@ -106,7 +106,7 @@
 		resolvedBy?: string;
 		message?: string;
 		error?: string;
-		observations?: Array<{ elements: unknown[]; packageName?: string }>;
+		observations?: Array<{ stepNumber?: number; elements: unknown[]; packageName?: string }>;
 	}
 	interface WorkflowRun {
 		id: string;
@@ -675,18 +675,42 @@
 							{:else if sessionSteps.has(sess.id)}
 								<div class="space-y-2.5">
 									{#each sessionSteps.get(sess.id) ?? [] as s (s.id)}
-										<div class="flex items-baseline gap-2.5">
+										{@const action = typeof s.action === 'object' && s.action !== null ? (s.action as Record<string, unknown>) : null}
+										{@const actionType = action?.action as string ?? (typeof s.action === 'string' ? s.action : 'unknown')}
+										{@const coords = action?.coordinates as number[] | undefined}
+										{@const text = action?.text as string | undefined}
+										{@const direction = action?.direction as string | undefined}
+										<div class="flex items-start gap-2.5">
 											<span
-												class="shrink-0 rounded-full bg-stone-200 px-2 py-0.5 font-mono text-[10px] text-stone-500"
+												class="mt-0.5 shrink-0 rounded-full bg-stone-200 px-2 py-0.5 font-mono text-[10px] text-stone-500"
 											>
 												{s.stepNumber}
 											</span>
-											<div class="min-w-0">
-												<span class="font-mono text-xs font-medium text-stone-800"
-													>{JSON.stringify(s.action)}</span
-												>
+											<div class="min-w-0 flex-1">
+												<div class="flex flex-wrap items-center gap-1.5">
+													<span class="shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide
+														{actionType === 'tap' ? 'bg-blue-100 text-blue-700'
+														: actionType === 'type' ? 'bg-violet-100 text-violet-700'
+														: actionType === 'swipe' || actionType === 'scroll' ? 'bg-amber-100 text-amber-700'
+														: actionType === 'back' || actionType === 'home' ? 'bg-stone-200 text-stone-600'
+														: actionType === 'done' ? 'bg-emerald-100 text-emerald-700'
+														: actionType === 'wait' ? 'bg-cyan-100 text-cyan-700'
+														: actionType === 'long_press' ? 'bg-pink-100 text-pink-700'
+														: 'bg-stone-100 text-stone-600'}">
+														{actionType}
+													</span>
+													{#if coords && coords.length >= 2}
+														<span class="font-mono text-[11px] text-stone-400">({coords[0]}, {coords[1]})</span>
+													{/if}
+													{#if text}
+														<span class="rounded bg-white px-1.5 py-0.5 text-[11px] text-stone-700">"{text}"</span>
+													{/if}
+													{#if direction}
+														<span class="text-[11px] text-stone-400">{direction}</span>
+													{/if}
+												</div>
 												{#if s.reasoning}
-													<p class="truncate text-xs text-stone-400">
+													<p class="mt-0.5 truncate text-xs text-stone-400">
 														{s.reasoning}
 													</p>
 												{/if}
@@ -793,7 +817,7 @@
 								<Icon icon="solar:clock-circle-bold-duotone" class="h-3.5 w-3.5" />
 								{formatTime(run.startedAt)}
 								<span class="text-stone-300">&middot;</span>
-								{run.totalSteps} step{run.totalSteps !== 1 ? 's' : ''}
+								{run.totalSteps} goal{run.totalSteps !== 1 ? 's' : ''}
 								<span class="text-stone-300">&middot;</span>
 								{formatDuration(run.startedAt, run.completedAt)}
 							</p>
@@ -824,7 +848,7 @@
 						</div>
 					</button>
 
-					<!-- Expanded step results -->
+					<!-- Expanded goal results -->
 					{#if expandedWorkflow === run.id && run.stepResults}
 						<div class="border-t border-stone-100 px-4 md:px-6 py-4">
 							<div class="space-y-2">
@@ -833,7 +857,7 @@
 										onclick={() => openStepModal(run, stepIdx)}
 										class="flex w-full items-start gap-2.5 rounded-xl bg-stone-50 px-3 py-3 text-left transition-colors hover:bg-stone-100"
 									>
-										<!-- Step number badge -->
+										<!-- Goal number badge -->
 										<span
 											class="mt-0.5 shrink-0 rounded-full px-2 py-0.5 font-mono text-[10px]
 												{stepResult.success ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}"
@@ -843,7 +867,7 @@
 										<!-- Full goal text -->
 										<div class="min-w-0 flex-1">
 											<p class="text-xs leading-relaxed text-stone-800">
-												{stepResult.goal ?? stepResult.command ?? `Step ${stepIdx + 1}`}
+												{stepResult.goal ?? stepResult.command ?? `Goal ${stepIdx + 1}`}
 											</p>
 											{#if stepResult.error || (stepResult.message && !stepResult.success)}
 												<p class="mt-1 text-[11px] text-red-500">
@@ -897,7 +921,7 @@
 						class="rounded-full px-2.5 py-0.5 font-mono text-xs
 							{modalStep.stepResult.success ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}"
 					>
-						Step {modalStep.stepIdx + 1}
+						Goal {modalStep.stepIdx + 1}
 					</span>
 					<span class="flex items-center gap-1 text-sm font-medium {modalStep.stepResult.success ? 'text-emerald-700' : 'text-red-700'}">
 						<Icon
@@ -969,17 +993,77 @@
 					{:else if modalSteps.length > 0}
 						<div class="space-y-1.5">
 							{#each modalSteps as s (s.id)}
-								<div class="rounded-lg bg-stone-50 px-3 py-2">
-									<div class="flex items-baseline gap-2">
+								{@const action = typeof s.action === 'object' && s.action !== null ? (s.action as Record<string, unknown>) : null}
+								{@const actionType = action?.action as string ?? (typeof s.action === 'string' ? s.action : 'unknown')}
+								{@const coords = action?.coordinates as number[] | undefined}
+								{@const text = action?.text as string | undefined}
+								{@const direction = action?.direction as string | undefined}
+								{@const scrollAmount = action?.scrollAmount as number | undefined}
+								{@const matchingObs = modalStep?.stepResult.observations?.filter(o => o.stepNumber === s.stepNumber) ?? []}
+								<div class="rounded-lg bg-stone-50 px-3 py-2.5">
+									<div class="flex items-center gap-2">
 										<span class="shrink-0 rounded-full bg-stone-200 px-2 py-0.5 font-mono text-[10px] text-stone-500">
 											{s.stepNumber}
 										</span>
-										<span class="font-mono text-xs font-medium text-stone-800">
-											{typeof s.action === 'object' ? JSON.stringify(s.action) : s.action}
+										<!-- Action type badge -->
+										<span class="shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide
+											{actionType === 'tap' ? 'bg-blue-100 text-blue-700'
+											: actionType === 'type' ? 'bg-violet-100 text-violet-700'
+											: actionType === 'swipe' || actionType === 'scroll' ? 'bg-amber-100 text-amber-700'
+											: actionType === 'back' || actionType === 'home' ? 'bg-stone-200 text-stone-600'
+											: actionType === 'done' ? 'bg-emerald-100 text-emerald-700'
+											: actionType === 'wait' ? 'bg-cyan-100 text-cyan-700'
+											: actionType === 'long_press' ? 'bg-pink-100 text-pink-700'
+											: 'bg-stone-100 text-stone-600'}">
+											{actionType}
 										</span>
+										<!-- Action parameters inline -->
+										<div class="flex flex-wrap items-center gap-1.5 text-[11px] text-stone-600">
+											{#if coords && coords.length >= 2}
+												<span class="font-mono text-stone-400">({coords[0]}, {coords[1]})</span>
+											{/if}
+											{#if text}
+												<span class="rounded bg-white px-1.5 py-0.5 text-stone-700">"{text}"</span>
+											{/if}
+											{#if direction}
+												<span class="text-stone-400">{direction}{scrollAmount ? ` ×${scrollAmount}` : ''}</span>
+											{/if}
+										</div>
 									</div>
 									{#if s.reasoning}
-										<p class="mt-0.5 pl-8 text-xs text-stone-500">{s.reasoning}</p>
+										<p class="mt-1 pl-8 text-xs leading-relaxed text-stone-500">{s.reasoning}</p>
+									{/if}
+									<!-- Inline screen observation for this step -->
+									{#if matchingObs.length > 0}
+										{#each matchingObs as obs}
+											<div class="mt-2 ml-8 rounded-md border border-stone-200 bg-white px-2.5 py-2">
+												<div class="flex items-center gap-1.5 text-[10px]">
+													<Icon icon="solar:monitor-smartphone-bold-duotone" class="h-3 w-3 text-blue-500" />
+													{#if obs.packageName}
+														<span class="font-medium text-blue-700">{obs.packageName}</span>
+														<span class="text-stone-300">·</span>
+													{/if}
+													<span class="text-stone-400">{obs.elements.length} element{obs.elements.length !== 1 ? 's' : ''} on screen</span>
+												</div>
+												{#if obs.elements.length > 0}
+													<div class="mt-1 max-h-24 space-y-0.5 overflow-y-auto">
+														{#each obs.elements.slice(0, 15) as el}
+															{@const elem = el as Record<string, unknown>}
+															{#if elem.text || elem.hint || elem.id}
+																<p class="truncate font-mono text-[10px] text-stone-500">
+																	{#if elem.className}<span class="text-stone-300">[{(elem.className as string).split('.').pop()}]</span>{/if}
+																	{#if elem.text}<span class="text-stone-700"> {elem.text}</span>{/if}
+																	{#if elem.hint}<span class="text-stone-400 italic"> {elem.hint}</span>{/if}
+																</p>
+															{/if}
+														{/each}
+														{#if obs.elements.length > 15}
+															<p class="text-[10px] text-stone-400 italic">... +{obs.elements.length - 15} more elements</p>
+														{/if}
+													</div>
+												{/if}
+											</div>
+										{/each}
 									{/if}
 								</div>
 							{/each}
@@ -991,41 +1075,52 @@
 					{/if}
 				</div>
 
-				<!-- Screen Observations -->
+				<!-- Unmatched Screen Observations (observations without a corresponding agent step) -->
 				{#if modalStep.stepResult.observations && modalStep.stepResult.observations.length > 0}
-					<div>
-						<p class="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-stone-400">
-							Screen Observations ({modalStep.stepResult.observations.length})
-						</p>
-						<div class="space-y-2">
-							{#each modalStep.stepResult.observations as obs, obsIdx}
-								<div class="rounded-lg bg-stone-50 px-3 py-2.5">
-									<div class="mb-1.5 flex items-center gap-1.5 text-[10px] text-stone-500">
-										<Icon icon="solar:monitor-smartphone-bold-duotone" class="h-3.5 w-3.5" />
-										<span class="font-medium">Observation {obsIdx + 1}</span>
-										{#if obs.packageName}
-											<span class="rounded bg-blue-50 px-1.5 py-0.5 font-mono text-[9px] text-blue-600">{obs.packageName}</span>
-										{/if}
-										<span class="text-stone-400">{obs.elements.length} element{obs.elements.length !== 1 ? 's' : ''}</span>
-									</div>
-									{#if obs.elements.length > 0}
-										<div class="max-h-40 space-y-0.5 overflow-y-auto">
-											{#each obs.elements as el}
-												{@const elem = el as Record<string, unknown>}
-												{#if elem.text || elem.hint || elem.id}
-													<p class="truncate font-mono text-[10px] text-stone-600">
-														{#if elem.text}<span>{elem.text}</span>{/if}
-														{#if elem.hint}<span class="text-stone-400"> ({elem.hint})</span>{/if}
-														{#if elem.id}<span class="text-stone-300"> [{elem.id}]</span>{/if}
-													</p>
-												{/if}
-											{/each}
+					{@const unmatchedObs = modalSteps.length > 0
+						? modalStep.stepResult.observations.filter(o => !o.stepNumber || !modalSteps.some(s => s.stepNumber === o.stepNumber))
+						: modalStep.stepResult.observations}
+					{#if unmatchedObs.length > 0}
+						<div>
+							<p class="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-stone-400">
+								{modalSteps.length > 0 ? 'Additional ' : ''}Screen Observations ({unmatchedObs.length})
+							</p>
+							<div class="space-y-2">
+								{#each unmatchedObs as obs, obsIdx}
+									<div class="rounded-lg bg-stone-50 px-3 py-2.5">
+										<div class="mb-1.5 flex items-center gap-1.5 text-[10px]">
+											<Icon icon="solar:monitor-smartphone-bold-duotone" class="h-3.5 w-3.5 text-blue-500" />
+											{#if obs.stepNumber}
+												<span class="rounded bg-stone-200 px-1.5 py-0.5 font-mono text-stone-500">Step {obs.stepNumber}</span>
+											{/if}
+											{#if obs.packageName}
+												<span class="font-medium text-blue-700">{obs.packageName}</span>
+												<span class="text-stone-300">·</span>
+											{/if}
+											<span class="text-stone-400">{obs.elements.length} element{obs.elements.length !== 1 ? 's' : ''}</span>
 										</div>
-									{/if}
-								</div>
-							{/each}
+										{#if obs.elements.length > 0}
+											<div class="max-h-32 space-y-0.5 overflow-y-auto">
+												{#each obs.elements.slice(0, 20) as el}
+													{@const elem = el as Record<string, unknown>}
+													{#if elem.text || elem.hint || elem.id}
+														<p class="truncate font-mono text-[10px] text-stone-500">
+															{#if elem.className}<span class="text-stone-300">[{(elem.className as string).split('.').pop()}]</span>{/if}
+															{#if elem.text}<span class="text-stone-700"> {elem.text}</span>{/if}
+															{#if elem.hint}<span class="text-stone-400 italic"> {elem.hint}</span>{/if}
+														</p>
+													{/if}
+												{/each}
+												{#if obs.elements.length > 20}
+													<p class="text-[10px] text-stone-400 italic">... +{obs.elements.length - 20} more elements</p>
+												{/if}
+											</div>
+										{/if}
+									</div>
+								{/each}
+							</div>
 						</div>
-					</div>
+					{/if}
 				{/if}
 
 				<!-- Session ID for debugging -->
