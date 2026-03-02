@@ -10,7 +10,7 @@
   "steps": [
     {
       "app": "com.instagram.android",
-      "goal": "Check which Instagram account is currently logged in by looking at the profile tab or the username displayed at the top. If the active account is '{{username}}', proceed (mark done). If a different account is active, tap the username at the top to open the account switcher, then select '{{username}}'. If '{{username}}' is not listed, mark as failed.",
+      "goal": "Open Instagram. If you see any popup or dialog (like 'Not now', 'Skip', or a Google sign-in prompt), dismiss it. Check which Instagram account is currently logged in by looking at the profile tab or the username displayed at the top. If the active account is '{{username}}', proceed (mark done). If a different account is active, tap the username at the top to open the account switcher, then select '{{username}}'. If '{{username}}' is not listed, mark as failed.",
       "maxSteps": 10,
       "retries": 1
     },
@@ -21,26 +21,26 @@
     },
     {
       "app": "com.instagram.android",
-      "goal": "Open Instagram. Tap the Home icon (bottom-left). Then tap the '+' icon (top-left) to open content creation. At the bottom tabs you will see POST, REEL, STORY — tap 'REEL'. Then at the very top of the media gallery, tap the dropdown that says 'Recents' (small text with a downward chevron). Do NOT scroll the media grid. Only tap the 'Recents' label.",
-      "maxSteps": 8,
+      "goal": "Open Instagram. If you see any popup or dialog, dismiss it. Tap the Home icon (bottom-left). Then tap the '+' icon (top-right or top-left, it may vary) to open content creation. At the bottom tabs you will see POST, REEL, STORY — tap 'REEL'. Then at the very top of the media gallery, tap the dropdown that says 'Recents' (small text with a downward chevron). Do NOT scroll the media grid. Only tap the 'Recents' label.",
+      "maxSteps": 10,
       "retries": 1
     },
     {
       "app": "com.instagram.android",
-      "goal": "A dropdown or list of album folders is now visible. Tap 'All albums' (or 'Other...'). This reveals the full album list. Scroll down and tap the album named '{{albumName}}'. Then tap the single video thumbnail in that album to select it. You should see a blue checkmark or highlight on the video. Tap 'Next' (arrow at bottom-right) to proceed.",
-      "maxSteps": 8,
+      "goal": "A dropdown or list of album folders is now visible. Look for 'All albums' or 'Other...' and tap it. This reveals the full album list. Scroll through and find the album named '{{albumName}}'. Tap it. Then tap the single video thumbnail in that album to select it. You should see a blue checkmark or highlight on the video. Tap 'Next' (arrow at bottom-right) to proceed to the edit screen.",
+      "maxSteps": 10,
       "retries": 2
     },
     {
       "app": "com.instagram.android",
-      "goal": "You are on the video edit/trim screen. Do NOT edit anything. Tap 'Next' (arrow or text at the top-right corner of the screen) to proceed to the share screen. If you see another edit screen (filters, audio, effects), tap 'Next' again at the top-right. Keep tapping 'Next' at the top-right until you reach the caption/share screen where you see 'Write a caption...' text field.",
-      "maxSteps": 5,
+      "goal": "You are on the video edit/trim screen. Do NOT edit anything. Tap 'Next' (arrow or text at the top-right corner of the screen) to proceed. If you see another edit screen (filters, audio, effects), tap 'Next' again at the top-right. Keep tapping 'Next' at the top-right until you reach the caption/share screen where you see 'Write a caption...' text field.",
+      "maxSteps": 6,
       "retries": 1
     },
     {
       "app": "com.instagram.android",
-      "goal": "If you see an 'About Reels' popup or any informational dialog, dismiss it by tapping outside it or tapping 'X' or 'OK'. Now tap the text field that says 'Write a caption...' or 'Write a caption and add hashtags...'. Type this caption exactly: '{{caption}}'. Verify the caption text is visible in the field, then tap the blue 'Share' button at the bottom to publish. Wait for the upload to start (progress bar or feed navigation), then mark done.",
-      "maxSteps": 8,
+      "goal": "If you see an 'About Reels' popup or any informational dialog, dismiss it by tapping outside it or tapping 'X' or 'OK'. Now tap the text field that says 'Write a caption...' or 'Write a caption and add hashtags...'. Type this caption exactly: '{{caption}}'. Verify the caption text is visible in the field, then tap the blue 'Share' button at the bottom to publish. Wait for the upload to start (you may see a progress bar, or Instagram may navigate to the feed). Once you see evidence the upload started, mark done.",
+      "maxSteps": 10,
       "retries": 2
     }
   ]

@@ -10,6 +10,7 @@ import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityManager
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityWindowInfo
 import com.thisux.droidclaw.model.UIElement
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -139,19 +140,20 @@ class DroidClawAccessibilityService : AccessibilityService() {
         // can take 500ms+ to render after a cold launch
         val delays = longArrayOf(50, 100, 200, 300, 500)
         for (delayMs in delays) {
+            val elements = captureAllWindows()
+            if (elements.isNotEmpty()) {
+                lastScreenTree.value = elements
+                return elements
+            }
+            // Fallback: try rootInActiveWindow (in case windows API fails)
             val root = rootInActiveWindow
             if (root != null) {
                 try {
-                    val elements = ScreenTreeBuilder.capture(root)
-                    // If we got a root but zero elements, the app may still be loading.
-                    // Retry unless this is the last attempt.
-                    if (elements.isEmpty() && delayMs < delays.last()) {
-                        root.recycle()
-                        runBlocking { delay(delayMs) }
-                        continue
+                    val fallback = ScreenTreeBuilder.capture(root)
+                    if (fallback.isNotEmpty()) {
+                        lastScreenTree.value = fallback
+                        return fallback
                     }
-                    lastScreenTree.value = elements
-                    return elements
                 } finally {
                     root.recycle()
                 }
@@ -160,6 +162,33 @@ class DroidClawAccessibilityService : AccessibilityService() {
         }
         Log.w(TAG, "rootInActiveWindow null or empty after retries")
         return emptyList()
+    }
+
+    /**
+     * Walk ALL accessible windows (application, system, input method, etc.)
+     * and merge their element trees. This captures bottom nav bars, dialogs,
+     * and other UI layers that rootInActiveWindow alone would miss.
+     */
+    private fun captureAllWindows(): List<UIElement> {
+        val allElements = mutableListOf<UIElement>()
+        try {
+            val allWindows = windows ?: return emptyList()
+            for (window in allWindows) {
+                // Capture application windows and system windows (nav bars)
+                // Skip input method windows (keyboard) to reduce noise
+                if (window.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD) continue
+                val root = window.root ?: continue
+                try {
+                    val windowElements = ScreenTreeBuilder.capture(root)
+                    allElements.addAll(windowElements)
+                } finally {
+                    root.recycle()
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "captureAllWindows failed: ${e.message}")
+        }
+        return allElements
     }
 
     fun findNodeAt(x: Int, y: Int): AccessibilityNodeInfo? {

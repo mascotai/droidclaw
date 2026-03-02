@@ -7,21 +7,21 @@
   "steps": [
     {
       "app": "com.instagram.android",
-      "goal": "Open Instagram. Tap the profile tab (bottom-right icon). Then tap 'Edit profile' button. Wait for the Edit Profile screen to load.",
-      "maxSteps": 6,
-      "retries": 1
+      "goal": "Open Instagram. If you see any popup or dialog (like 'Not now', 'Skip', account suggestions, or a Google sign-in prompt), dismiss it by tapping 'Not now', 'Skip', 'X', or pressing Back. If you see someone else's profile or a post, press Back until you see the home feed. To navigate to your own profile, look for a small profile picture or avatar icon in the bottom-right corner of the screen and tap it. If you can't find the profile icon in the element list, tap at the bottom-right area of the screen (coordinates approximately [990, 2170] on a 1080-wide screen). Once on your profile page (you should see 'Edit profile' button, your posts count, followers count), tap 'Edit profile'. Wait for the Edit Profile screen to load — you should see fields like Name, Username, Bio.",
+      "maxSteps": 12,
+      "retries": 2
     },
     {
       "app": "com.instagram.android",
-      "goal": "You are on the Edit Profile screen. Find the Name field — it is the first text field, usually showing the current display name. Tap on the Name field to open it. Select all existing text and delete it (clear the field completely). Then type the following name exactly: '{{name}}'. Verify the text appears in the field.",
+      "goal": "You are on the Edit Profile screen. Find the Name field — it is the first text field, usually showing the current display name. Tap on the Name field to open the name editor. Select all existing text and delete it (clear the field completely). Then type the following name exactly: '{{name}}'. Verify the text appears in the field. Do NOT tap Done yet.",
       "maxSteps": 8,
       "retries": 2
     },
     {
       "app": "com.instagram.android",
-      "goal": "The Name field should now contain the new name. Tap the checkmark or 'Done' button (top-right corner) to save. If Instagram shows a 'Change name' confirmation dialog, tap the confirm button. Wait for the profile to update, then mark done.",
-      "maxSteps": 5,
-      "retries": 1
+      "goal": "The Name field should now contain '{{name}}'. Tap the checkmark or 'Done' button (top-right corner) to save. If Instagram shows a 'Change name?' confirmation dialog, tap the confirm button. If Instagram shows any other dialog or popup (like 'Link accounts', Google sign-in, or 'Not now'), dismiss it by tapping 'Not now', 'Skip', 'X', or pressing Back. If you end up on the Instagram feed or profile page, the save was successful — mark done.",
+      "maxSteps": 8,
+      "retries": 2
     }
   ]
 }

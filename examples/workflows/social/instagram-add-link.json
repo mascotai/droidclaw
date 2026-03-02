@@ -8,21 +8,21 @@
   "steps": [
     {
       "app": "com.instagram.android",
-      "goal": "Open Instagram. Tap the profile tab (bottom-right icon). Then tap 'Edit profile' button. Wait for the Edit Profile screen to load.",
-      "maxSteps": 6,
-      "retries": 1
-    },
-    {
-      "app": "com.instagram.android",
-      "goal": "You are on the Edit Profile screen. Find and tap 'Add link' (or 'Links' if a link section is visible). Then tap 'Add external link'. You should see fields for URL and Title.",
-      "maxSteps": 6,
+      "goal": "Open Instagram. If you see any popup or dialog (like 'Not now', 'Skip', account suggestions, or a Google sign-in prompt), dismiss it by tapping 'Not now', 'Skip', 'X', or pressing Back. If you see someone else's profile or a post, press Back until you see the home feed. To navigate to your own profile, look for a small profile picture or avatar icon in the bottom-right corner of the screen and tap it. If you can't find the profile icon in the element list, tap at the bottom-right area of the screen (coordinates approximately [990, 2170] on a 1080-wide screen). Once on your profile page (you should see 'Edit profile' button, your posts count, followers count), tap 'Edit profile'. Wait for the Edit Profile screen to load — you should see fields like Name, Username, Bio.",
+      "maxSteps": 12,
       "retries": 2
     },
     {
       "app": "com.instagram.android",
-      "goal": "You should see the 'Add external link' form with URL and Title fields. Tap the URL field and type: '{{url}}'. Then tap the Title field and type: '{{title}}'. Verify both fields are filled correctly. Then tap the checkmark or 'Done' button (top-right) to save the link. Wait for confirmation, then mark done.",
+      "goal": "You are on the Edit Profile screen. Find and tap 'Add link' (or 'Links' if a link section is visible). Then tap 'Add external link'. You should see fields for URL and Title.",
       "maxSteps": 8,
-      "retries": 1
+      "retries": 2
+    },
+    {
+      "app": "com.instagram.android",
+      "goal": "You should see the 'Add external link' form with URL and Title fields. Tap the URL field and type: '{{url}}'. Then tap the Title field and type: '{{title}}'. Verify both fields are filled correctly. Then tap the checkmark or 'Done' button (top-right) to save the link. If Instagram shows any dialog or popup after saving, dismiss it. If you return to the Edit Profile or profile page, the save was successful — mark done.",
+      "maxSteps": 10,
+      "retries": 2
     }
   ]
 }

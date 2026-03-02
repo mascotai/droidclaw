@@ -24,6 +24,8 @@ const APP_HINTS: Record<string, string[]> = {
     "Media: tap the + or paperclip icon to attach files/images.",
   ],
   "com.instagram.android": [
+    "BOTTOM NAV BAR: Instagram's bottom navigation icons (Home, Search, Reels, Shop, Profile) may NOT appear in SCREEN_CONTEXT. If you cannot find them, press 'back' repeatedly until you reach the home feed, then tap the bottom-right area of the screen to open your profile. Alternatively, look for your profile picture or avatar at the bottom-right corner.",
+    "PROFILE TAB: To navigate to your own profile, look for your profile picture thumbnail at the bottom-right. If no profile element is visible, press 'back' to return to a screen where the bottom tabs are visible.",
     "Search: tap magnifying glass in bottom nav bar.",
     "DMs: tap messenger icon (top-right on home screen).",
     "New post: tap + icon in bottom nav.",
