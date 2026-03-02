@@ -122,6 +122,7 @@
 	}
 	let workflowRuns = $state<WorkflowRun[]>([]);
 	let expandedWorkflow = $state<string | null>(null);
+	let expandedElementSets = $state<Set<string>>(new Set());
 	let workflowsLoaded = $state(false);
 
 	// Modal state for step deep-dive
@@ -1054,8 +1055,10 @@
 													<span class="text-stone-400">{obs.elements.length} element{obs.elements.length !== 1 ? 's' : ''}</span>
 												</div>
 												{#if obs.elements.length > 0}
-													<div class="mt-1 max-h-24 space-y-0.5 overflow-y-auto">
-														{#each obs.elements.slice(0, 15) as el}
+													{@const elemKey = `inline-${stepIdx}-${matchingObs.indexOf(obs)}`}
+													{@const isExpanded = expandedElementSets.has(elemKey)}
+													<div class="mt-1 space-y-0.5" class:max-h-24={!isExpanded} class:overflow-y-auto={!isExpanded}>
+														{#each isExpanded ? obs.elements : obs.elements.slice(0, 15) as el}
 															{@const elem = el as Record<string, unknown>}
 															{#if elem.text || elem.hint || elem.id}
 																<p class="truncate font-mono text-[10px] text-stone-500">
@@ -1066,7 +1069,16 @@
 															{/if}
 														{/each}
 														{#if obs.elements.length > 15}
-															<p class="text-[10px] text-stone-400 italic">... +{obs.elements.length - 15} more elements</p>
+															<button
+																class="mt-0.5 text-[10px] text-blue-500 hover:text-blue-700 italic cursor-pointer"
+																onclick={() => {
+																	const next = new Set(expandedElementSets);
+																	if (next.has(elemKey)) next.delete(elemKey); else next.add(elemKey);
+																	expandedElementSets = next;
+																}}
+															>
+																{isExpanded ? '▲ Show fewer elements' : `... +${obs.elements.length - 15} more elements`}
+															</button>
 														{/if}
 													</div>
 												{/if}
@@ -1116,8 +1128,10 @@
 											<span class="text-stone-400">{obs.elements.length} element{obs.elements.length !== 1 ? 's' : ''}</span>
 										</div>
 										{#if obs.elements.length > 0}
-											<div class="max-h-32 space-y-0.5 overflow-y-auto">
-												{#each obs.elements.slice(0, 20) as el}
+											{@const elemKey = `unmatched-${obsIdx}`}
+											{@const isExpanded = expandedElementSets.has(elemKey)}
+											<div class="space-y-0.5" class:max-h-32={!isExpanded} class:overflow-y-auto={!isExpanded}>
+												{#each isExpanded ? obs.elements : obs.elements.slice(0, 20) as el}
 													{@const elem = el as Record<string, unknown>}
 													{#if elem.text || elem.hint || elem.id}
 														<p class="truncate font-mono text-[10px] text-stone-500">
@@ -1128,7 +1142,16 @@
 													{/if}
 												{/each}
 												{#if obs.elements.length > 20}
-													<p class="text-[10px] text-stone-400 italic">... +{obs.elements.length - 20} more elements</p>
+													<button
+														class="mt-0.5 text-[10px] text-blue-500 hover:text-blue-700 italic cursor-pointer"
+														onclick={() => {
+															const next = new Set(expandedElementSets);
+															if (next.has(elemKey)) next.delete(elemKey); else next.add(elemKey);
+															expandedElementSets = next;
+														}}
+													>
+														{isExpanded ? '▲ Show fewer elements' : `... +${obs.elements.length - 20} more elements`}
+													</button>
 												{/if}
 											</div>
 										{/if}
