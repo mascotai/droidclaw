@@ -20,7 +20,7 @@ import {
 import { eq } from "drizzle-orm";
 import { parseGoal, buildCapabilities } from "./parser.js";
 import { classifyGoal } from "./classifier.js";
-import { runAgentLoop, type AgentLoopOptions, type AgentResult } from "./loop.js";
+import { runAgentLoop, type AgentLoopOptions, type AgentResult, type ScreenObservation } from "./loop.js";
 import type { LLMConfig } from "./llm.js";
 
 // ─── Types ───────────────────────────────────────────────────
@@ -42,6 +42,7 @@ export interface PipelineResultFinal {
   stepsUsed: number;
   sessionId: string;
   resolvedBy: "parser" | "classifier" | "ui_agent";
+  observations: ScreenObservation[];
 }
 
 // ─── Helpers ─────────────────────────────────────────────────
@@ -172,8 +173,8 @@ export async function runPipeline(
       const sessionId = persistentDeviceId
         ? await persistQuickSession(userId, persistentDeviceId, goal, "parser", { done: true, reason: parseResult.reason })
         : crypto.randomUUID();
-      onComplete?.({ success: true, stepsUsed: 0, sessionId });
-      return { success: true, stepsUsed: 0, sessionId, resolvedBy: "parser" };
+      onComplete?.({ success: true, stepsUsed: 0, sessionId, observations: [] });
+      return { success: true, stepsUsed: 0, sessionId, resolvedBy: "parser", observations: [] };
     }
 
     const execResult = await executeResult(deviceId, parseResult);
@@ -198,9 +199,9 @@ export async function runPipeline(
         stepsUsed: 1,
       });
 
-      onComplete?.({ success: true, stepsUsed: 1, sessionId });
+      onComplete?.({ success: true, stepsUsed: 1, sessionId, observations: [] });
       console.log(`[Pipeline] Goal resolved by parser: ${goal}`);
-      return { success: true, stepsUsed: 1, sessionId, resolvedBy: "parser" };
+      return { success: true, stepsUsed: 1, sessionId, resolvedBy: "parser", observations: [] };
     }
 
     console.warn(`[Pipeline] Parser action failed: ${execResult.error}. Falling through to classifier.`);
@@ -234,7 +235,7 @@ export async function runPipeline(
         onStep,
         onComplete,
       });
-      return { ...loopResult, resolvedBy: "ui_agent" };
+      return { ...loopResult, resolvedBy: "ui_agent" as const };
     } else {
       // Persist the scheduled session in DB
       const sessionId = crypto.randomUUID();
@@ -299,7 +300,7 @@ export async function runPipeline(
       // NOTE: Do NOT call onComplete here — that sends goal_completed to the device,
       // which would make the app show "completed" before execution actually happens.
       console.log(`[Pipeline] Goal scheduled via QStash: "${classResult.goal}" in ${classResult.delay}s`);
-      return { success: true, stepsUsed: 0, sessionId, resolvedBy: "classifier" };
+      return { success: true, stepsUsed: 0, sessionId, resolvedBy: "classifier", observations: [] };
     }
   }
 
@@ -307,8 +308,8 @@ export async function runPipeline(
     const sessionId = persistentDeviceId
       ? await persistQuickSession(userId, persistentDeviceId, goal, "classifier", { done: true, reason: classResult.reason })
       : crypto.randomUUID();
-    onComplete?.({ success: true, stepsUsed: 1, sessionId });
-    return { success: true, stepsUsed: 1, sessionId, resolvedBy: "classifier" };
+    onComplete?.({ success: true, stepsUsed: 1, sessionId, observations: [] });
+    return { success: true, stepsUsed: 1, sessionId, resolvedBy: "classifier", observations: [] };
   }
 
   if (classResult.type === "intent") {
@@ -334,9 +335,9 @@ export async function runPipeline(
         stepsUsed: 1,
       });
 
-      onComplete?.({ success: true, stepsUsed: 1, sessionId });
+      onComplete?.({ success: true, stepsUsed: 1, sessionId, observations: [] });
       console.log(`[Pipeline] Goal resolved by classifier (intent): ${goal}`);
-      return { success: true, stepsUsed: 1, sessionId, resolvedBy: "classifier" };
+      return { success: true, stepsUsed: 1, sessionId, resolvedBy: "classifier", observations: [] };
     }
 
     console.warn(`[Pipeline] Classifier intent failed: ${execResult.error}. Falling through to UI agent.`);
@@ -382,6 +383,6 @@ export async function runPipeline(
 
   return {
     ...loopResult,
-    resolvedBy: "ui_agent",
+    resolvedBy: "ui_agent" as const,
   };
 }

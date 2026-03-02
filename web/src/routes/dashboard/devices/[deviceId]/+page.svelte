@@ -5,6 +5,7 @@
 		listDeviceSessions,
 		listSessionSteps,
 		getDeviceStats,
+		listWorkflowRuns,
 		submitGoal as submitGoalCmd,
 		stopGoal as stopGoalCmd,
 		investigateSession as investigateSessionCmd,
@@ -20,17 +21,19 @@
 		DEVICE_GOAL_SUBMIT,
 		DEVICE_GOAL_STOP,
 		DEVICE_GOAL_COMPLETE,
-		DEVICE_SESSION_EXPAND
+		DEVICE_SESSION_EXPAND,
+		DEVICE_WORKFLOW_EXPAND
 	} from '$lib/analytics/events';
 
 	const deviceId = page.params.deviceId!;
 
 	// Tabs
-	let activeTab = $state<'overview' | 'sessions' | 'run'>('overview');
+	let activeTab = $state<'overview' | 'sessions' | 'workflows' | 'run'>('overview');
 
 	const tabs = [
 		{ id: 'overview' as const, label: 'Overview', icon: 'solar:info-circle-bold-duotone' },
 		{ id: 'sessions' as const, label: 'Sessions', icon: 'solar:history-bold-duotone' },
+		{ id: 'workflows' as const, label: 'Workflows', icon: 'solar:layers-bold-duotone' },
 		{ id: 'run' as const, label: 'Run', icon: 'solar:play-bold-duotone' }
 	];
 
@@ -86,6 +89,67 @@
 		Map<string, { packageName: string; hints: { id: string; hint: string }[]; analysis: string }>
 	>(new Map());
 	let investigateError = $state<string | null>(null);
+
+	// Workflow runs state
+	interface WorkflowRun {
+		id: string;
+		name: string;
+		type: string;
+		status: string;
+		totalSteps: number;
+		currentStep: number | null;
+		stepResults: Array<{
+			goal?: string;
+			command?: string;
+			success: boolean;
+			stepsUsed?: number;
+			message?: string;
+			error?: string;
+			observations?: Array<{ elements: unknown[]; packageName?: string }>;
+		}> | null;
+		startedAt: Date;
+		completedAt: Date | null;
+	}
+	let workflowRuns = $state<WorkflowRun[]>([]);
+	let expandedWorkflow = $state<string | null>(null);
+	let expandedWorkflowStep = $state<string | null>(null); // "runId-stepIndex" for observations
+	let workflowsLoaded = $state(false);
+
+	async function loadWorkflowRuns() {
+		const runs = await listWorkflowRuns(deviceId);
+		workflowRuns = runs as WorkflowRun[];
+		workflowsLoaded = true;
+	}
+
+	function toggleWorkflow(runId: string) {
+		if (expandedWorkflow === runId) {
+			expandedWorkflow = null;
+			expandedWorkflowStep = null;
+		} else {
+			expandedWorkflow = runId;
+			expandedWorkflowStep = null;
+			track(DEVICE_WORKFLOW_EXPAND);
+		}
+	}
+
+	function toggleWorkflowStepObs(runId: string, stepIndex: number) {
+		const key = `${runId}-${stepIndex}`;
+		expandedWorkflowStep = expandedWorkflowStep === key ? null : key;
+	}
+
+	function formatDuration(startedAt: Date | string, completedAt: Date | string | null): string {
+		if (!completedAt) return 'running...';
+		const ms = new Date(completedAt).getTime() - new Date(startedAt).getTime();
+		const secs = Math.floor(ms / 1000);
+		if (secs < 60) return `${secs}s`;
+		const mins = Math.floor(secs / 60);
+		const remSecs = secs % 60;
+		return `${mins}m${remSecs > 0 ? `${remSecs}s` : ''}`;
+	}
+
+	function truncateGoal(text: string, maxLen = 50): string {
+		return text.length > maxLen ? text.slice(0, maxLen) + '...' : text;
+	}
 
 	async function handleInvestigate(sessionId: string) {
 		investigating = sessionId;
@@ -235,6 +299,41 @@
 					});
 					break;
 				}
+				case 'workflow_started': {
+					if (workflowsLoaded) {
+						loadWorkflowRuns();
+					}
+					break;
+				}
+				case 'workflow_step_done': {
+					const runId = msg.runId as string;
+					const stepIdx = msg.stepIndex as number;
+					const stepSuccess = msg.success as boolean;
+					// Update in-memory workflow run
+					const run = workflowRuns.find((r) => r.id === runId);
+					if (run) {
+						run.currentStep = stepIdx + 1;
+						if (run.stepResults) {
+							// Ensure we have enough entries
+							while (run.stepResults.length <= stepIdx) {
+								run.stepResults.push({ success: false });
+							}
+							run.stepResults[stepIdx] = {
+								...run.stepResults[stepIdx],
+								success: stepSuccess,
+								stepsUsed: (msg.stepsUsed as number) ?? 0
+							};
+						}
+						workflowRuns = [...workflowRuns];
+					}
+					break;
+				}
+				case 'workflow_completed': {
+					if (workflowsLoaded) {
+						loadWorkflowRuns();
+					}
+					break;
+				}
 			}
 		});
 		return unsub;
@@ -310,6 +409,9 @@
 			onclick={() => {
 				activeTab = tab.id;
 				track(DEVICE_TAB_CHANGE, { tab: tab.id });
+				if (tab.id === 'workflows' && !workflowsLoaded) {
+					loadWorkflowRuns();
+				}
 			}}
 			class="flex flex-1 items-center justify-center gap-2 rounded-full px-3 py-2 text-sm font-medium transition-colors
 				{activeTab === tab.id
@@ -610,6 +712,178 @@
 							{:else}
 								<p class="text-xs text-stone-400">Loading steps...</p>
 							{/if}
+						</div>
+					{/if}
+				</div>
+			{/each}
+		</div>
+	{/if}
+
+<!-- Workflows Tab -->
+{:else if activeTab === 'workflows'}
+	{#if !workflowsLoaded}
+		<div class="rounded-2xl bg-white p-10 text-center">
+			<Icon icon="solar:refresh-circle-bold-duotone" class="mx-auto mb-3 h-6 w-6 animate-spin text-stone-400" />
+			<p class="text-sm text-stone-500">Loading workflows...</p>
+		</div>
+	{:else if workflowRuns.length === 0}
+		<div class="rounded-2xl bg-white p-10 text-center">
+			<div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-stone-100">
+				<Icon icon="solar:layers-bold-duotone" class="h-6 w-6 text-stone-400" />
+			</div>
+			<p class="text-sm text-stone-500">No workflow runs yet. Trigger a workflow via the API.</p>
+		</div>
+	{:else}
+		<p class="mb-3 text-sm font-medium text-stone-500">Workflow runs</p>
+		<div class="space-y-3">
+			{#each workflowRuns as run (run.id)}
+				<div class="rounded-2xl bg-white">
+					<!-- Workflow header -->
+					<button
+						onclick={() => toggleWorkflow(run.id)}
+						class="flex w-full items-center justify-between rounded-2xl px-4 md:px-6 py-4 text-left transition-colors hover:bg-stone-50"
+					>
+						<div class="min-w-0 flex-1">
+							<div class="flex items-center gap-2">
+								<Icon
+									icon={run.type === 'flow' ? 'solar:programming-bold-duotone' : 'solar:layers-bold-duotone'}
+									class="h-4 w-4 shrink-0 {run.status === 'completed' ? 'text-emerald-500' : run.status === 'running' ? 'text-amber-500' : 'text-red-500'}"
+								/>
+								<p class="truncate text-sm font-medium text-stone-900">{run.name}</p>
+							</div>
+							<p class="mt-0.5 flex items-center gap-1.5 pl-6 text-xs text-stone-400">
+								<Icon icon="solar:clock-circle-bold-duotone" class="h-3.5 w-3.5" />
+								{formatTime(run.startedAt)}
+								<span class="text-stone-300">&middot;</span>
+								{run.totalSteps} step{run.totalSteps !== 1 ? 's' : ''}
+								<span class="text-stone-300">&middot;</span>
+								{formatDuration(run.startedAt, run.completedAt)}
+							</p>
+						</div>
+						<div class="ml-3 flex shrink-0 items-center gap-2">
+							<span
+								class="flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium
+									{run.status === 'completed' ? 'bg-emerald-50 text-emerald-700'
+									: run.status === 'running' ? 'bg-amber-50 text-amber-700'
+									: run.status === 'stopped' ? 'bg-stone-100 text-stone-500'
+									: 'bg-red-50 text-red-700'}"
+							>
+								<Icon
+									icon={run.status === 'completed' ? 'solar:check-circle-bold-duotone'
+										: run.status === 'running' ? 'solar:refresh-circle-bold-duotone'
+										: 'solar:close-circle-bold-duotone'}
+									class="h-3.5 w-3.5 {run.status === 'running' ? 'animate-spin' : ''}"
+								/>
+								{run.status === 'completed' ? 'Completed'
+									: run.status === 'running' ? 'Running'
+									: run.status === 'stopped' ? 'Stopped'
+									: 'Failed'}
+							</span>
+							<Icon
+								icon={expandedWorkflow === run.id ? 'solar:alt-arrow-up-linear' : 'solar:alt-arrow-down-linear'}
+								class="h-4 w-4 text-stone-400"
+							/>
+						</div>
+					</button>
+
+					<!-- Expanded step results -->
+					{#if expandedWorkflow === run.id && run.stepResults}
+						<div class="border-t border-stone-100 px-4 md:px-6 py-4">
+							<div class="space-y-2">
+								{#each run.stepResults as stepResult, stepIdx}
+									<div class="rounded-xl bg-stone-50 px-3 py-2.5">
+										<div class="flex items-center gap-2.5">
+											<!-- Tree connector -->
+											<span class="flex items-center text-stone-300">
+												{#if stepIdx === run.stepResults.length - 1}
+													<span class="font-mono text-xs">&#x2514;</span>
+												{:else}
+													<span class="font-mono text-xs">&#x251C;</span>
+												{/if}
+											</span>
+											<!-- Step badge -->
+											<span
+												class="shrink-0 rounded-full px-2 py-0.5 font-mono text-[10px]
+													{stepResult.success ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}"
+											>
+												{stepIdx + 1}
+											</span>
+											<!-- Goal/command text -->
+											<div class="min-w-0 flex-1">
+												<span class="text-xs font-medium text-stone-800">
+													{truncateGoal(stepResult.goal ?? stepResult.command ?? `Step ${stepIdx + 1}`)}
+												</span>
+											</div>
+											<!-- Success/fail badge -->
+											<span class="flex shrink-0 items-center gap-1 text-xs font-medium {stepResult.success ? 'text-emerald-600' : 'text-red-600'}">
+												<Icon
+													icon={stepResult.success ? 'solar:check-circle-bold-duotone' : 'solar:close-circle-bold-duotone'}
+													class="h-3.5 w-3.5"
+												/>
+												{stepResult.success ? 'OK' : 'Failed'}
+											</span>
+											<!-- Steps used -->
+											{#if stepResult.stepsUsed !== undefined}
+												<span class="shrink-0 text-[10px] text-stone-400">
+													{stepResult.stepsUsed} step{stepResult.stepsUsed !== 1 ? 's' : ''}
+												</span>
+											{/if}
+										</div>
+										<!-- Error message -->
+										{#if stepResult.error}
+											<p class="mt-1.5 pl-8 text-xs text-red-500">{stepResult.error}</p>
+										{/if}
+										{#if stepResult.message && !stepResult.success}
+											<p class="mt-1.5 pl-8 text-xs text-red-500">{stepResult.message}</p>
+										{/if}
+										<!-- Screen observations toggle -->
+										{#if stepResult.observations && stepResult.observations.length > 0}
+											<button
+												onclick={() => toggleWorkflowStepObs(run.id, stepIdx)}
+												class="mt-1.5 flex items-center gap-1 pl-8 text-[10px] font-medium text-violet-600 transition-colors hover:text-violet-500"
+											>
+												<Icon
+													icon={expandedWorkflowStep === `${run.id}-${stepIdx}` ? 'solar:alt-arrow-up-linear' : 'solar:alt-arrow-down-linear'}
+													class="h-3 w-3"
+												/>
+												Screen data ({stepResult.observations.length} observation{stepResult.observations.length !== 1 ? 's' : ''})
+											</button>
+											{#if expandedWorkflowStep === `${run.id}-${stepIdx}`}
+												<div class="mt-2 max-h-60 overflow-y-auto rounded-lg bg-white pl-8 pr-2 py-2">
+													{#each stepResult.observations as obs, obsIdx}
+														<div class="mb-2 last:mb-0">
+															<div class="flex items-center gap-1.5 text-[10px] text-stone-500">
+																<Icon icon="solar:monitor-smartphone-bold-duotone" class="h-3 w-3" />
+																<span>Step {obsIdx + 1}</span>
+																{#if obs.packageName}
+																	<span class="rounded bg-stone-100 px-1.5 py-0.5 font-mono text-[9px] text-stone-500">{obs.packageName}</span>
+																{/if}
+																<span>{obs.elements.length} element{obs.elements.length !== 1 ? 's' : ''}</span>
+															</div>
+															{#if obs.elements.length > 0}
+																<div class="mt-1 space-y-0.5">
+																	{#each obs.elements.slice(0, 15) as el}
+																		{@const elem = el as Record<string, unknown>}
+																		{#if elem.text || elem.hint}
+																			<p class="truncate font-mono text-[9px] text-stone-600">
+																				{#if elem.text}<span>{elem.text}</span>{/if}
+																				{#if elem.hint}<span class="text-stone-400"> ({elem.hint})</span>{/if}
+																			</p>
+																		{/if}
+																	{/each}
+																	{#if obs.elements.length > 15}
+																		<p class="text-[9px] text-stone-400">... and {obs.elements.length - 15} more</p>
+																	{/if}
+																</div>
+															{/if}
+														</div>
+													{/each}
+												</div>
+											{/if}
+										{/if}
+									</div>
+								{/each}
+							</div>
 						</div>
 					{/if}
 				</div>

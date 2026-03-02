@@ -2,7 +2,7 @@ import * as v from 'valibot';
 import { query, command, getRequestEvent } from '$app/server';
 import { env } from '$env/dynamic/private';
 import { db } from '$lib/server/db';
-import { device, agentSession, agentStep, appHint } from '$lib/server/db/schema';
+import { device, agentSession, agentStep, appHint, workflowRun } from '$lib/server/db/schema';
 import { eq, desc, and, count, avg, sql, inArray } from 'drizzle-orm';
 
 export const listDevices = query(async () => {
@@ -157,6 +157,20 @@ export const listSessionSteps = query(
 		return steps;
 	}
 );
+
+export const listWorkflowRuns = query(v.string(), async (deviceId) => {
+	const { locals } = getRequestEvent();
+	if (!locals.user) return [];
+
+	const runs = await db
+		.select()
+		.from(workflowRun)
+		.where(and(eq(workflowRun.deviceId, deviceId), eq(workflowRun.userId, locals.user.id)))
+		.orderBy(desc(workflowRun.startedAt))
+		.limit(50);
+
+	return runs;
+});
 
 // ─── Commands (write operations) ─────────────────────────────
 

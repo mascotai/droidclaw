@@ -60,10 +60,16 @@ export interface AgentStep {
   screenHash: string;
 }
 
+export interface ScreenObservation {
+  elements: UIElement[];
+  packageName?: string;
+}
+
 export interface AgentResult {
   success: boolean;
   stepsUsed: number;
   sessionId: string;
+  observations: ScreenObservation[];
 }
 
 // ─── Screen Hash ────────────────────────────────────────────────
@@ -274,6 +280,7 @@ export async function runAgentLoop(
   const recentActions: string[] = [];
   let lastActionFeedback = "";
   const actionHistory: string[] = []; // Human-readable log of recent actions
+  const observations: ScreenObservation[] = []; // Collect screen state at each step
 
   // Fetch installed apps from device metadata for LLM context
   let installedAppsContext = "";
@@ -358,6 +365,9 @@ export async function runAgentLoop(
       const screenshot = screenResponse.screenshot;
       const packageName = screenResponse.packageName;
       const screenHash = computeScreenHash(elements);
+
+      // Collect screen observation for this step
+      observations.push({ elements, packageName: packageName ?? undefined });
 
       // ── 2. Screen diff: detect stuck loops ──────────────────
       let diffContext = "";
@@ -646,7 +656,7 @@ export async function runAgentLoop(
     console.error(`[Agent ${sessionId}] Loop error: ${error}`);
   }
 
-  const result: AgentResult = { success, stepsUsed, sessionId };
+  const result: AgentResult = { success, stepsUsed, sessionId, observations };
 
   // Update session in DB
   if (persistentDeviceId) {

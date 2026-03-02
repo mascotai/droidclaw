@@ -4,6 +4,7 @@ import { workflowRun } from "../schema.js";
 import { eq } from "drizzle-orm";
 import { runPipeline } from "./pipeline.js";
 import type { LLMConfig } from "./llm.js";
+import type { ScreenObservation } from "./loop.js";
 
 export interface WorkflowStep {
   goal: string;
@@ -37,7 +38,7 @@ function buildGoal(step: WorkflowStep): string {
 
 export async function runWorkflowServer(options: RunWorkflowOptions): Promise<void> {
   const { runId, deviceId, persistentDeviceId, userId, name, steps, llmConfig, signal } = options;
-  const stepResults: Array<{ goal: string; success: boolean; stepsUsed: number; error?: string }> = [];
+  const stepResults: Array<{ goal: string; success: boolean; stepsUsed: number; error?: string; observations?: ScreenObservation[] }> = [];
 
   sessions.notifyDashboard(userId, {
     type: "workflow_started",
@@ -92,7 +93,7 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
         });
 
         if (result.success) {
-          stepResults.push({ goal: step.goal, success: true, stepsUsed: result.stepsUsed });
+          stepResults.push({ goal: step.goal, success: true, stepsUsed: result.stepsUsed, observations: result.observations });
           stepSuccess = true;
           break; // Success — move to next step
         }
@@ -109,7 +110,7 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
           } as any);
         } else {
           // All retries exhausted
-          stepResults.push({ goal: step.goal, success: false, stepsUsed: result.stepsUsed });
+          stepResults.push({ goal: step.goal, success: false, stepsUsed: result.stepsUsed, observations: result.observations });
         }
       } catch (err) {
         if (attempt < maxRetries) {

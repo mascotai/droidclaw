@@ -27,6 +27,34 @@ export interface GoalCompletedEvent {
 	stepsUsed: number;
 }
 
+export interface WorkflowStartedEvent {
+	runId: string;
+	name: string;
+	wfType: string;
+	totalSteps: number;
+}
+
+export interface WorkflowStepDoneEvent {
+	runId: string;
+	stepIndex: number;
+	success: boolean;
+	stepsUsed?: number;
+}
+
+export interface WorkflowCompletedEvent {
+	runId: string;
+	success: boolean;
+	stepResults: Array<{
+		goal?: string;
+		command?: string;
+		success: boolean;
+		stepsUsed?: number;
+		message?: string;
+		error?: string;
+		observations?: Array<{ elements: unknown[]; packageName?: string }>;
+	}>;
+}
+
 type MessageHandler = (msg: Record<string, unknown>) => void;
 
 class DashboardWebSocket {
