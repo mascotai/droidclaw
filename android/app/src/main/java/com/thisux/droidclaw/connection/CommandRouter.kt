@@ -101,6 +101,9 @@ class CommandRouter(
         val packageName = try {
             svc?.rootInActiveWindow?.packageName?.toString()
         } catch (_: Exception) { null }
+        val activityName = try {
+            svc?.rootInActiveWindow?.className?.toString()
+        } catch (_: Exception) { null }
 
         var screenshot: String? = null
         if (elements.isEmpty()) {
@@ -123,7 +126,8 @@ class CommandRouter(
             elements = elements,
             screenHash = screenHash,
             screenshot = screenshot,
-            packageName = packageName
+            packageName = packageName,
+            activityName = activityName
         )
         webSocket.sendTyped(response)
     }

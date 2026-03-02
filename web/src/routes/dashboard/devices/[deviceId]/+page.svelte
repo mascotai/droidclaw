@@ -106,7 +106,7 @@
 		resolvedBy?: string;
 		message?: string;
 		error?: string;
-		observations?: Array<{ stepNumber?: number; elements: unknown[]; packageName?: string }>;
+		observations?: Array<{ stepNumber?: number; elements: unknown[]; packageName?: string; activityName?: string }>;
 	}
 	interface WorkflowRun {
 		id: string;
@@ -1041,13 +1041,17 @@
 									{#if matchingObs.length > 0}
 										{#each matchingObs as obs}
 											<div class="mt-2 ml-8 rounded-md border border-stone-200 bg-white px-2.5 py-2">
-												<div class="flex items-center gap-1.5 text-[10px]">
+												<div class="flex flex-wrap items-center gap-1.5 text-[10px]">
 													<Icon icon="solar:monitor-smartphone-bold-duotone" class="h-3 w-3 text-blue-500" />
 													{#if obs.packageName}
 														<span class="font-medium text-blue-700">{obs.packageName}</span>
-														<span class="text-stone-300">·</span>
 													{/if}
-													<span class="text-stone-400">{obs.elements.length} element{obs.elements.length !== 1 ? 's' : ''} on screen</span>
+													{#if obs.activityName}
+														<span class="text-stone-300">&rsaquo;</span>
+														<span class="font-medium text-violet-600">{obs.activityName.split('.').pop()}</span>
+													{/if}
+													<span class="text-stone-300">·</span>
+													<span class="text-stone-400">{obs.elements.length} element{obs.elements.length !== 1 ? 's' : ''}</span>
 												</div>
 												{#if obs.elements.length > 0}
 													<div class="mt-1 max-h-24 space-y-0.5 overflow-y-auto">
@@ -1096,15 +1100,19 @@
 							<div class="space-y-2">
 								{#each unmatchedObs as obs, obsIdx}
 									<div class="rounded-lg bg-stone-50 px-3 py-2.5">
-										<div class="mb-1.5 flex items-center gap-1.5 text-[10px]">
+										<div class="mb-1.5 flex flex-wrap items-center gap-1.5 text-[10px]">
 											<Icon icon="solar:monitor-smartphone-bold-duotone" class="h-3.5 w-3.5 text-blue-500" />
 											{#if obs.stepNumber}
 												<span class="rounded bg-stone-200 px-1.5 py-0.5 font-mono text-stone-500">Step {obs.stepNumber}</span>
 											{/if}
 											{#if obs.packageName}
 												<span class="font-medium text-blue-700">{obs.packageName}</span>
-												<span class="text-stone-300">·</span>
 											{/if}
+											{#if obs.activityName}
+												<span class="text-stone-300">&rsaquo;</span>
+												<span class="font-medium text-violet-600">{obs.activityName.split('.').pop()}</span>
+											{/if}
+											<span class="text-stone-300">·</span>
 											<span class="text-stone-400">{obs.elements.length} element{obs.elements.length !== 1 ? 's' : ''}</span>
 										</div>
 										{#if obs.elements.length > 0}

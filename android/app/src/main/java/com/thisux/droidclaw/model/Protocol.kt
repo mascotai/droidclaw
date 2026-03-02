@@ -28,7 +28,8 @@ data class ScreenResponse(
     val elements: List<UIElement>,
     val screenHash: String? = null,
     val screenshot: String? = null,
-    val packageName: String? = null
+    val packageName: String? = null,
+    val activityName: String? = null
 )
 
 @Serializable

@@ -64,6 +64,7 @@ export interface ScreenObservation {
   stepNumber: number;
   elements: UIElement[];
   packageName?: string;
+  activityName?: string;
 }
 
 export interface AgentResult {
@@ -360,15 +361,17 @@ export async function runAgentLoop(
         elements?: UIElement[];
         screenshot?: string;
         packageName?: string;
+        activityName?: string;
       };
 
       const elements = screenResponse.elements ?? [];
       const screenshot = screenResponse.screenshot;
       const packageName = screenResponse.packageName;
+      const activityName = screenResponse.activityName;
       const screenHash = computeScreenHash(elements);
 
       // Collect screen observation for this step
-      observations.push({ stepNumber: step + 1, elements, packageName: packageName ?? undefined });
+      observations.push({ stepNumber: step + 1, elements, packageName: packageName ?? undefined, activityName: activityName ?? undefined });
 
       // ── 2. Screen diff: detect stuck loops ──────────────────
       let diffContext = "";
