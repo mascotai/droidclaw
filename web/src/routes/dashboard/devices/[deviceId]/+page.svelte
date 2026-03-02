@@ -1055,7 +1055,7 @@
 													<span class="text-stone-400">{obs.elements.length} element{obs.elements.length !== 1 ? 's' : ''}</span>
 												</div>
 												{#if obs.elements.length > 0}
-													{@const elemKey = `inline-${stepIdx}-${matchingObs.indexOf(obs)}`}
+													{@const elemKey = `inline-${sIdx}-${matchingObs.indexOf(obs)}`}
 													{@const isExpanded = expandedElementSets.has(elemKey)}
 													<div class="mt-1 space-y-0.5" class:max-h-24={!isExpanded} class:overflow-y-auto={!isExpanded}>
 														{#each isExpanded ? obs.elements : obs.elements.slice(0, 15) as el}
