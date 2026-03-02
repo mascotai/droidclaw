@@ -1,8 +1,11 @@
 package com.thisux.droidclaw.accessibility
 
 import android.accessibilityservice.AccessibilityService
+import android.app.usage.UsageEvents
+import android.app.usage.UsageStatsManager
 import android.content.ComponentName
 import android.content.Context
+import android.os.Build
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityManager
@@ -20,9 +23,8 @@ class DroidClawAccessibilityService : AccessibilityService() {
         val lastScreenTree = MutableStateFlow<List<UIElement>>(emptyList())
         var instance: DroidClawAccessibilityService? = null
 
-        /** The last known Activity class name (from TYPE_WINDOW_STATE_CHANGED) */
+        /** The last known Activity class name (from TYPE_WINDOW_STATE_CHANGED or UsageStats) */
         var currentActivityName: String? = null
-            private set
 
         fun isEnabledOnDevice(context: Context): Boolean {
             val am = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
@@ -50,9 +52,75 @@ class DroidClawAccessibilityService : AccessibilityService() {
             // This filters out things like "android.widget.PopupWindow" from dialogs
             if (className != null && className.contains('.') && !className.startsWith("android.widget.") && !className.startsWith("android.view.")) {
                 currentActivityName = className
-                Log.i(TAG, "Activity updated: $currentActivityName")
+                Log.i(TAG, "Activity updated (event): $currentActivityName")
             }
         }
+    }
+
+    /**
+     * Query UsageStatsManager to find the most recent Activity class name.
+     * Requires PACKAGE_USAGE_STATS permission (App usage access in Settings).
+     * Falls back gracefully if not granted.
+     */
+    fun queryCurrentActivityFromUsageStats(): String? {
+        try {
+            val usm = getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager ?: return null
+            val now = System.currentTimeMillis()
+            // Query events in the last 5 seconds
+            val events = usm.queryEvents(now - 5_000, now)
+            val event = UsageEvents.Event()
+            var lastActivity: String? = null
+            while (events.hasNextEvent()) {
+                events.getNextEvent(event)
+                if (event.eventType == UsageEvents.Event.ACTIVITY_RESUMED) {
+                    lastActivity = event.className
+                }
+            }
+            if (lastActivity != null) {
+                Log.d(TAG, "UsageStats activity: $lastActivity")
+            }
+            return lastActivity
+        } catch (e: Exception) {
+            Log.w(TAG, "UsageStats query failed: ${e.message}")
+            return null
+        }
+    }
+
+    /**
+     * Get current activity name. Tries:
+     * 1. The cached value from accessibility events
+     * 2. UsageStatsManager (if permission granted)
+     * 3. Active window title from accessibility windows API
+     */
+    fun getCurrentActivity(): String? {
+        // First try: cached from accessibility events (fastest, most reliable)
+        currentActivityName?.let { return it }
+
+        // Second try: UsageStats (requires special permission, but very accurate)
+        queryCurrentActivityFromUsageStats()?.let {
+            currentActivityName = it
+            return it
+        }
+
+        // Third try: Extract from windows API
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                val activeWindows = windows
+                for (window in activeWindows) {
+                    if (window.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION) {
+                        val title = window.title?.toString()
+                        if (title != null) {
+                            Log.d(TAG, "Window title: $title")
+                            return title
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Windows API failed: ${e.message}")
+        }
+
+        return null
     }
 
     override fun onInterrupt() {
