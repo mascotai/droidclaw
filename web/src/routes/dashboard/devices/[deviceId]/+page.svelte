@@ -1060,13 +1060,13 @@
 													<div class="mt-1 space-y-0.5" class:max-h-24={!isExpanded} class:overflow-y-auto={!isExpanded}>
 														{#each isExpanded ? obs.elements : obs.elements.slice(0, 15) as el}
 															{@const elem = el as Record<string, unknown>}
-															{#if elem.text || elem.hint || elem.id}
-																<p class="truncate font-mono text-[10px] text-stone-500">
-																	{#if elem.className}<span class="text-stone-300">[{(elem.className as string).split('.').pop()}]</span>{/if}
-																	{#if elem.text}<span class="text-stone-700"> {elem.text}</span>{/if}
-																	{#if elem.hint}<span class="text-stone-400 italic"> {elem.hint}</span>{/if}
-																</p>
-															{/if}
+															<p class="truncate font-mono text-[10px] text-stone-500">
+																{#if elem.type}<span class="text-stone-300">[{(elem.type as string).split('.').pop()}]</span>{/if}
+																{#if elem.action}<span class="text-amber-500/70"> {elem.action}</span>{/if}
+																{#if elem.text}<span class="text-stone-700"> {elem.text}</span>{/if}
+																{#if elem.hint}<span class="text-stone-400 italic"> {elem.hint}</span>{/if}
+																{#if elem.id}<span class="text-blue-400"> #{(elem.id as string).split('/').pop()}</span>{/if}
+															</p>
 														{/each}
 														{#if obs.elements.length > 15}
 															<button
@@ -1133,13 +1133,13 @@
 											<div class="space-y-0.5" class:max-h-32={!isExpanded} class:overflow-y-auto={!isExpanded}>
 												{#each isExpanded ? obs.elements : obs.elements.slice(0, 20) as el}
 													{@const elem = el as Record<string, unknown>}
-													{#if elem.text || elem.hint || elem.id}
-														<p class="truncate font-mono text-[10px] text-stone-500">
-															{#if elem.className}<span class="text-stone-300">[{(elem.className as string).split('.').pop()}]</span>{/if}
-															{#if elem.text}<span class="text-stone-700"> {elem.text}</span>{/if}
-															{#if elem.hint}<span class="text-stone-400 italic"> {elem.hint}</span>{/if}
-														</p>
-													{/if}
+													<p class="truncate font-mono text-[10px] text-stone-500">
+														{#if elem.type}<span class="text-stone-300">[{(elem.type as string).split('.').pop()}]</span>{/if}
+														{#if elem.action}<span class="text-amber-500/70"> {elem.action}</span>{/if}
+														{#if elem.text}<span class="text-stone-700"> {elem.text}</span>{/if}
+														{#if elem.hint}<span class="text-stone-400 italic"> {elem.hint}</span>{/if}
+														{#if elem.id}<span class="text-blue-400"> #{(elem.id as string).split('/').pop()}</span>{/if}
+													</p>
 												{/each}
 												{#if obs.elements.length > 20}
 													<button
