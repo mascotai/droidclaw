@@ -992,14 +992,18 @@
 						</div>
 					{:else if modalSteps.length > 0}
 						<div class="space-y-1.5">
-							{#each modalSteps as s (s.id)}
+							{#each modalSteps as s, sIdx (s.id)}
 								{@const action = typeof s.action === 'object' && s.action !== null ? (s.action as Record<string, unknown>) : null}
 								{@const actionType = action?.action as string ?? (typeof s.action === 'string' ? s.action : 'unknown')}
 								{@const coords = action?.coordinates as number[] | undefined}
 								{@const text = action?.text as string | undefined}
 								{@const direction = action?.direction as string | undefined}
 								{@const scrollAmount = action?.scrollAmount as number | undefined}
-								{@const matchingObs = modalStep?.stepResult.observations?.filter(o => o.stepNumber === s.stepNumber) ?? []}
+								{@const allObs = modalStep?.stepResult.observations ?? []}
+								{@const hasStepNumbers = allObs.some(o => o.stepNumber != null)}
+								{@const matchingObs = hasStepNumbers
+									? allObs.filter(o => o.stepNumber === s.stepNumber)
+									: (sIdx < allObs.length ? [allObs[sIdx]] : [])}
 								<div class="rounded-lg bg-stone-50 px-3 py-2.5">
 									<div class="flex items-center gap-2">
 										<span class="shrink-0 rounded-full bg-stone-200 px-2 py-0.5 font-mono text-[10px] text-stone-500">
@@ -1077,9 +1081,13 @@
 
 				<!-- Unmatched Screen Observations (observations without a corresponding agent step) -->
 				{#if modalStep.stepResult.observations && modalStep.stepResult.observations.length > 0}
+					{@const allObs = modalStep.stepResult.observations}
+					{@const hasStepNumbers = allObs.some(o => o.stepNumber != null)}
 					{@const unmatchedObs = modalSteps.length > 0
-						? modalStep.stepResult.observations.filter(o => !o.stepNumber || !modalSteps.some(s => s.stepNumber === o.stepNumber))
-						: modalStep.stepResult.observations}
+						? (hasStepNumbers
+							? allObs.filter(o => !o.stepNumber || !modalSteps.some(s => s.stepNumber === o.stepNumber))
+							: allObs.slice(modalSteps.length))
+						: allObs}
 					{#if unmatchedObs.length > 0}
 						<div>
 							<p class="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-stone-400">
