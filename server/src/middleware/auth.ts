@@ -1,6 +1,6 @@
 import type { Context, Next } from "hono";
 import { db } from "../db.js";
-import { session as sessionTable, user as userTable } from "../schema.js";
+import { session as sessionTable, user as userTable, apikey } from "../schema.js";
 import { eq } from "drizzle-orm";
 import { getCookie } from "hono/cookie";
 import { env } from "../env.js";
@@ -12,6 +12,19 @@ export type AuthEnv = {
     session: { id: string; userId: string; [key: string]: unknown };
   };
 };
+
+/**
+ * Hash an API key the same way better-auth does:
+ * SHA-256 → base64url (no padding).
+ */
+async function hashApiKey(key: string): Promise<string> {
+  const data = new TextEncoder().encode(key);
+  const hash = await crypto.subtle.digest("SHA-256", data);
+  return btoa(String.fromCharCode(...new Uint8Array(hash)))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
 
 export async function sessionMiddleware(c: Context, next: Next) {
   // ── Internal server-to-server auth (web app → server) ──
@@ -31,6 +44,47 @@ export async function sessionMiddleware(c: Context, next: Next) {
 
     c.set("user", users[0]);
     c.set("session", { id: "internal", userId: internalUserId });
+    await next();
+    return;
+  }
+
+  // ── Bearer token auth (external API consumers) ──
+  const authHeader = c.req.header("Authorization");
+  if (authHeader?.startsWith("Bearer ")) {
+    const token = authHeader.slice(7);
+    const hashedKey = await hashApiKey(token);
+
+    const rows = await db
+      .select({ id: apikey.id, userId: apikey.userId, enabled: apikey.enabled, expiresAt: apikey.expiresAt })
+      .from(apikey)
+      .where(eq(apikey.key, hashedKey))
+      .limit(1);
+
+    if (rows.length === 0) {
+      return c.json({ error: "Invalid API key" }, 401);
+    }
+
+    const keyRow = rows[0];
+
+    if (!keyRow.enabled) {
+      return c.json({ error: "API key disabled" }, 401);
+    }
+    if (keyRow.expiresAt && keyRow.expiresAt < new Date()) {
+      return c.json({ error: "API key expired" }, 401);
+    }
+
+    const users = await db
+      .select({ id: userTable.id, name: userTable.name, email: userTable.email })
+      .from(userTable)
+      .where(eq(userTable.id, keyRow.userId))
+      .limit(1);
+
+    if (users.length === 0) {
+      return c.json({ error: "unauthorized" }, 401);
+    }
+
+    c.set("user", users[0]);
+    c.set("session", { id: `apikey:${keyRow.id}`, userId: keyRow.userId });
     await next();
     return;
   }
