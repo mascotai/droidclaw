@@ -12,6 +12,11 @@
       "retries": 2
     },
     {
+      "goal": "Press the Home button to go to the Android home screen.",
+      "maxSteps": 2,
+      "retries": 1
+    },
+    {
       "app": "com.instagram.android",
       "goal": "Open Instagram and navigate to the Edit Profile screen. Dismiss any popups. Go to your profile tab (bottom-right icon), then tap 'Edit profile'. You should see fields like Name, Username, Bio.",
       "maxSteps": 12,
@@ -19,7 +24,7 @@
     },
     {
       "app": "com.instagram.android",
-      "goal": "Tap the 'Edit picture or avatar' button below the profile picture. A bottom sheet will appear with 'Choose from library', 'Take photo', etc. Tap 'Choose from library'. A gallery or file picker will open (it may be Samsung Gallery or another app).",
+      "goal": "If you see 'Choose from library' on screen, tap it immediately. Otherwise, tap the 'Edit picture or avatar' button, then tap 'Choose from library' from the bottom sheet that appears. A gallery or file picker will open.",
       "maxSteps": 6,
       "retries": 2
     },
