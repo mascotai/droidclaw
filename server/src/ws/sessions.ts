@@ -60,6 +60,8 @@ class SessionManager {
           existing.persistentDeviceId === device.persistentDeviceId &&
           key !== device.deviceId
         ) {
+          console.log(`[Sessions] Evicting stale connection ${key} for device ${device.persistentDeviceId} (replaced by ${device.deviceId})`);
+          try { existing.ws.close(1000, "replaced by new connection"); } catch { /* already closed */ }
           this.devices.delete(key);
         }
       }
