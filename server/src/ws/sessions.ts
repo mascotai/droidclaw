@@ -44,6 +44,18 @@ class SessionManager {
   // ── Device management ──────────────────────────────────
 
   addDevice(device: ConnectedDevice): void {
+    // Evict any stale entry for the same physical device (same persistentDeviceId).
+    // This handles reconnects where the old WebSocket closed without proper cleanup.
+    if (device.persistentDeviceId) {
+      for (const [key, existing] of this.devices) {
+        if (
+          existing.persistentDeviceId === device.persistentDeviceId &&
+          key !== device.deviceId
+        ) {
+          this.devices.delete(key);
+        }
+      }
+    }
     this.devices.set(device.deviceId, device);
   }
 
@@ -165,8 +177,13 @@ class SessionManager {
 
   /** Get counts for monitoring */
   getStats() {
+    // Count unique physical devices (by persistentDeviceId) rather than ephemeral connections
+    const uniqueDevices = new Set<string>();
+    for (const d of this.devices.values()) {
+      uniqueDevices.add(d.persistentDeviceId ?? d.deviceId);
+    }
     return {
-      devices: this.devices.size,
+      devices: uniqueDevices.size,
       dashboardSubscribers: this.dashboardSubscribers.size,
       pendingRequests: this.pendingRequests.size,
     };

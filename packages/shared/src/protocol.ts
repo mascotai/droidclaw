@@ -2,7 +2,7 @@ import type { UIElement, DeviceInfo, InstalledApp } from "./types.js";
 
 export type DeviceMessage =
   | { type: "auth"; apiKey: string; deviceInfo?: DeviceInfo }
-  | { type: "screen"; requestId: string; elements: UIElement[]; screenshot?: string; packageName?: string }
+  | { type: "screen"; requestId: string; elements: UIElement[]; screenshot?: string; packageName?: string; activityName?: string }
   | { type: "result"; requestId: string; success: boolean; error?: string; data?: string }
   | { type: "goal"; text: string }
   | { type: "pong" }

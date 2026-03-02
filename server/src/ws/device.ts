@@ -199,6 +199,7 @@ export async function handleDeviceMessage(
         elements: msg.elements,
         screenshot: msg.screenshot,
         packageName: msg.packageName,
+        activityName: msg.activityName,
       });
       break;
     }
