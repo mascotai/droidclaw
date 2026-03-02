@@ -45,8 +45,8 @@ object ScreenTreeBuilder {
                 val action = when {
                     node.isEditable -> "type"
                     node.isScrollable -> "scroll"
-                    node.isLongClickable -> "longpress"
                     node.isClickable -> "tap"
+                    node.isLongClickable -> "longpress"
                     else -> "read"
                 }
 
