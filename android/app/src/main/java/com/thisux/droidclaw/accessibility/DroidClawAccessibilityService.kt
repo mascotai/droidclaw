@@ -20,6 +20,10 @@ class DroidClawAccessibilityService : AccessibilityService() {
         val lastScreenTree = MutableStateFlow<List<UIElement>>(emptyList())
         var instance: DroidClawAccessibilityService? = null
 
+        /** The last known Activity class name (from TYPE_WINDOW_STATE_CHANGED) */
+        var currentActivityName: String? = null
+            private set
+
         fun isEnabledOnDevice(context: Context): Boolean {
             val am = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
             val ourComponent = ComponentName(context, DroidClawAccessibilityService::class.java)
@@ -38,7 +42,15 @@ class DroidClawAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // We capture on-demand via getScreenTree(), not on every event
+        // Track the current Activity name from window state changes
+        if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            val className = event.className?.toString()
+            // Only update if it looks like an Activity (contains a dot — package-qualified class name)
+            // This filters out things like "android.widget.PopupWindow" from dialogs
+            if (className != null && className.contains('.') && !className.startsWith("android.widget.") && !className.startsWith("android.view.")) {
+                currentActivityName = className
+            }
+        }
     }
 
     override fun onInterrupt() {

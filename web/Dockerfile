@@ -1,8 +1,8 @@
 FROM oven/bun:1 AS builder
 
 WORKDIR /app
-COPY package.json bun.lock ./
-RUN bun install --frozen-lockfile && bun add nodemailer
+COPY package.json ./
+RUN bun install && bun add nodemailer
 
 COPY . .
 ENV DATABASE_URL="postgresql://placeholder:placeholder@localhost:5432/placeholder"
