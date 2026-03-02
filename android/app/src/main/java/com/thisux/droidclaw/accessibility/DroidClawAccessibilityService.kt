@@ -45,10 +45,12 @@ class DroidClawAccessibilityService : AccessibilityService() {
         // Track the current Activity name from window state changes
         if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             val className = event.className?.toString()
+            Log.d(TAG, "TYPE_WINDOW_STATE_CHANGED: className=$className pkg=${event.packageName}")
             // Only update if it looks like an Activity (contains a dot — package-qualified class name)
             // This filters out things like "android.widget.PopupWindow" from dialogs
             if (className != null && className.contains('.') && !className.startsWith("android.widget.") && !className.startsWith("android.view.")) {
                 currentActivityName = className
+                Log.i(TAG, "Activity updated: $currentActivityName")
             }
         }
     }

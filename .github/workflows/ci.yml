@@ -47,6 +47,7 @@ jobs:
 
   trigger-deploy:
     needs: build
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:
       - name: Trigger infra deploy

@@ -200,6 +200,9 @@ export async function handleDeviceMessage(
 
   switch (msg.type) {
     case "screen": {
+      if (msg.activityName) {
+        console.log(`[Device] Screen response includes activityName: ${msg.activityName}`);
+      }
       sessions.resolveRequest(msg.requestId, {
         type: "screen",
         elements: msg.elements,

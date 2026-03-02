@@ -102,6 +102,7 @@ class CommandRouter(
             svc?.rootInActiveWindow?.packageName?.toString()
         } catch (_: Exception) { null }
         val activityName = DroidClawAccessibilityService.currentActivityName
+        Log.d(TAG, "get_screen: packageName=$packageName, activityName=$activityName, elements=${elements.size}")
 
         var screenshot: String? = null
         if (elements.isEmpty()) {
