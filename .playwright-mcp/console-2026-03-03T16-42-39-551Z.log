@@ -1,0 +1,29 @@
+[    1368ms] [ERROR] ChatBotErr: EsperChatAI is not loaded @ https://wgpvfz.esper.cloud/static/js/vendor.sentry~153c8f2c.03ae3b77.js:2
+[    2153ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://secure.gravatar.com/avatar/edfff1ec84c28e19b3b52981657d60db?d=404&s=64:0
+[    2424ms] [ERROR] The script has an unsupported MIME type ('text/html'). @ :0
+[    5372ms] [ERROR] Failed to load resource: the server responded with a status of 429 () @ https://o4507505357029376.ingest.us.sentry.io/api/4507507802767360/envelope/?sentry_key=05954bea17fd9faef4d4df2977ac0500&sentry_version=7&sentry_client=sentry.javascript.react%2F8.25.0:0
+[   25823ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://secure.gravatar.com/avatar/edfff1ec84c28e19b3b52981657d60db?d=404&s=48:0
+[   25824ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://secure.gravatar.com/avatar/5c1b1b49294898d89821e4743387a23f?d=404&s=48:0
+[   26213ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://secure.gravatar.com/avatar/5c1b1b49294898d89821e4743387a23f?d=404&s=48:0
+[   26297ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://secure.gravatar.com/avatar/edfff1ec84c28e19b3b52981657d60db?d=404&s=48:0
+[   26888ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://secure.gravatar.com/avatar/edfff1ec84c28e19b3b52981657d60db?d=404&s=48:0
+[   27487ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://secure.gravatar.com/avatar/edfff1ec84c28e19b3b52981657d60db?d=404&s=48:0
+[   28055ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://secure.gravatar.com/avatar/edfff1ec84c28e19b3b52981657d60db?d=404&s=48:0
+[   28679ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://secure.gravatar.com/avatar/edfff1ec84c28e19b3b52981657d60db?d=404&s=48:0
+[   29237ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://secure.gravatar.com/avatar/edfff1ec84c28e19b3b52981657d60db?d=404&s=48:0
+[   29879ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://secure.gravatar.com/avatar/edfff1ec84c28e19b3b52981657d60db?d=404&s=48:0
+[   31503ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://secure.gravatar.com/avatar/edfff1ec84c28e19b3b52981657d60db?d=404&s=48:0
+[   32088ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://secure.gravatar.com/avatar/edfff1ec84c28e19b3b52981657d60db?d=404&s=48:0
+[   32637ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://secure.gravatar.com/avatar/edfff1ec84c28e19b3b52981657d60db?d=404&s=48:0
+[   33187ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://secure.gravatar.com/avatar/edfff1ec84c28e19b3b52981657d60db?d=404&s=48:0
+[   33761ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://secure.gravatar.com/avatar/edfff1ec84c28e19b3b52981657d60db?d=404&s=48:0
+[   34294ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://secure.gravatar.com/avatar/edfff1ec84c28e19b3b52981657d60db?d=404&s=48:0
+[   34872ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://secure.gravatar.com/avatar/edfff1ec84c28e19b3b52981657d60db?d=404&s=48:0
+[   35473ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://secure.gravatar.com/avatar/edfff1ec84c28e19b3b52981657d60db?d=404&s=48:0
+[   35993ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://secure.gravatar.com/avatar/edfff1ec84c28e19b3b52981657d60db?d=404&s=48:0
+[   36570ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://secure.gravatar.com/avatar/edfff1ec84c28e19b3b52981657d60db?d=404&s=48:0
+[   37214ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://secure.gravatar.com/avatar/edfff1ec84c28e19b3b52981657d60db?d=404&s=48:0
+[   37743ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://secure.gravatar.com/avatar/edfff1ec84c28e19b3b52981657d60db?d=404&s=48:0
+[   38465ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://secure.gravatar.com/avatar/edfff1ec84c28e19b3b52981657d60db?d=404&s=48:0
+[   39054ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://secure.gravatar.com/avatar/edfff1ec84c28e19b3b52981657d60db?d=404&s=48:0
+[   39654ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://secure.gravatar.com/avatar/edfff1ec84c28e19b3b52981657d60db?d=404&s=48:0

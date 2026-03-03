@@ -1,0 +1,2 @@
+[ 1092569ms] [ERROR] WebSocket connection to 'wss://droidclaw.stack.mascott.ai/ws/dashboard' failed: Error during WebSocket handshake: Unexpected response code: 404 @ https://droidclaw-app.stack.mascott.ai/_app/immutable/chunks/BAGgWGD0.js:0
+[ 1439855ms] [ERROR] WebSocket connection to 'wss://droidclaw.stack.mascott.ai/ws/dashboard' failed: Error during WebSocket handshake: Unexpected response code: 404 @ https://droidclaw-app.stack.mascott.ai/_app/immutable/chunks/BAGgWGD0.js:0

@@ -214,8 +214,13 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
       for (let attempt = 0; attempt <= maxRetries; attempt++) {
         signal = getCurrentSignal(trackingKey, options.signal);
 
+        wfLog(`[Workflow ${runId}] Step ${i} attempt ${attempt}: pre-check signal.aborted=${signal.aborted}, isUserStop=${isUserStop(trackingKey)}`);
+
         // Check for user-initiated stop
-        if (signal.aborted && isUserStop(trackingKey)) break;
+        if (signal.aborted && isUserStop(trackingKey)) {
+          wfLog(`[Workflow ${runId}] Step ${i} attempt ${attempt}: breaking due to user stop`);
+          break;
+        }
 
         // If signal aborted by disconnect, wait for reconnect before this attempt
         if (signal.aborted) {
@@ -243,6 +248,7 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
         }
 
         try {
+          wfLog(`[Workflow ${runId}] Step ${i} attempt ${attempt}: calling runPipeline...`);
           const result = await runPipeline({
             deviceId,
             persistentDeviceId,
@@ -252,6 +258,8 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
             maxSteps: step.maxSteps,
             signal,
           });
+
+          wfLog(`[Workflow ${runId}] Step ${i} attempt ${attempt}: pipeline returned success=${result.success}, stepsUsed=${result.stepsUsed}, resolvedBy=${result.resolvedBy}`);
 
           const isSuccess = result.success ||
             (step.exhaustIsSuccess && result.stepsUsed >= (step.maxSteps ?? 30));
@@ -276,6 +284,7 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
             stepResults.push({ goal: step.goal, success: false, stepsUsed: result.stepsUsed, sessionId: result.sessionId, resolvedBy: result.resolvedBy, observations: result.observations });
           }
         } catch (err) {
+          wfLog(`[Workflow ${runId}] Step ${i} attempt ${attempt}: pipeline THREW: ${err}`);
           if (attempt < maxRetries) {
             console.log(`[Workflow] Step ${i} attempt ${attempt + 1}/${maxRetries + 1} threw error, retrying... Error: ${err}`);
             sessions.notifyDashboard(userId, {
@@ -294,6 +303,7 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
       // Safety: ensure a stepResult was always pushed for this step
       if (stepResults.length <= i) {
         signal = getCurrentSignal(trackingKey, options.signal);
+        wfLog(`[Workflow ${runId}] Step ${i}: SAFETY CHECK - no result pushed. signal.aborted=${signal.aborted}, isUserStop=${isUserStop(trackingKey)}, activeSession=${!!activeSessions.get(trackingKey)}`);
         if (signal.aborted && isUserStop(trackingKey)) {
           // User stopped — don't push a fake result, just mark as stopped
           await db.update(workflowRun).set({ status: "stopped", stepResults, completedAt: new Date() }).where(eq(workflowRun.id, runId));
