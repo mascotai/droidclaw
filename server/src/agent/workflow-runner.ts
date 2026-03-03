@@ -12,6 +12,7 @@ export interface WorkflowStep {
   maxSteps?: number;
   formData?: Record<string, string>;
   retries?: number; // max retry attempts on failure (default: 0 = no retry)
+  exhaustIsSuccess?: boolean; // treat maxSteps exhaustion as success (for open-ended browsing)
 }
 
 export interface RunWorkflowOptions {
@@ -92,7 +93,9 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
           signal,
         });
 
-        if (result.success) {
+        const isSuccess = result.success ||
+          (step.exhaustIsSuccess && result.stepsUsed >= (step.maxSteps ?? 30));
+        if (isSuccess) {
           stepResults.push({ goal: step.goal, success: true, stepsUsed: result.stepsUsed, sessionId: result.sessionId, resolvedBy: result.resolvedBy, observations: result.observations });
           stepSuccess = true;
           break; // Success — move to next step

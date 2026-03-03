@@ -1,0 +1,62 @@
+{
+  "name": "Instagram Warm-up",
+  "description": "Simulates natural Instagram browsing with randomized engagement targets per run.",
+  "params": {
+    "nicheKeywords": "Search terms for the Explore tab",
+    "commentPrompt": "Instruction for generating comments"
+  },
+  "variables": {
+    "watchReels": { "min": 8, "max": 15 },
+    "likeReels": { "min": 1, "max": 3 },
+    "likeStories": { "min": 0, "max": 2 },
+    "likePosts": { "min": 0, "max": 2 },
+    "scrollPosts": { "min": 4, "max": 8 }
+  },
+  "steps": [
+    {
+      "app": "com.instagram.android",
+      "goal": "Open Instagram. Dismiss popups. Once on Home feed, you are done.",
+      "maxSteps": 8,
+      "retries": 2
+    },
+    {
+      "app": "com.instagram.android",
+      "goal": "Search for: {{nicheKeywords}}. Scroll results, tap something, press Back. Return Home. Done.",
+      "maxSteps": 15,
+      "retries": 2
+    },
+    {
+      "app": "com.instagram.android",
+      "goal": "Watch stories, like {{likeStories}}. If no stories, you are done.",
+      "maxSteps": 15,
+      "exhaustIsSuccess": true,
+      "retries": 1
+    },
+    {
+      "app": "com.instagram.android",
+      "goal": "Scroll feed. Like {{likePosts}} posts. After {{scrollPosts}} posts, done.",
+      "maxSteps": 20,
+      "exhaustIsSuccess": true,
+      "retries": 1
+    },
+    {
+      "app": "com.instagram.android",
+      "goal": "Watch reels, linger on some (use wait). Like {{likeReels}}. After {{watchReels}} reels, done.",
+      "maxSteps": 50,
+      "exhaustIsSuccess": true,
+      "retries": 1
+    },
+    {
+      "app": "com.instagram.android",
+      "goal": "Comment on current reel: {{commentPrompt}}. Post it. Done.",
+      "maxSteps": 15,
+      "retries": 2
+    },
+    {
+      "app": "com.instagram.android",
+      "goal": "Go to profile. Done.",
+      "maxSteps": 5,
+      "retries": 1
+    }
+  ]
+}

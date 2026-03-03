@@ -13,6 +13,24 @@ import type { LLMConfig } from "../agent/llm.js";
 
 const workflows = new Hono<AuthEnv>();
 
+// ── Helper: resolve workflow variables ──
+function resolveVariables(
+  steps: any[],
+  variables?: Record<string, { min: number; max: number }>
+): any[] {
+  if (!variables) return steps;
+  const resolved: Record<string, number> = {};
+  for (const [key, range] of Object.entries(variables)) {
+    resolved[key] = Math.floor(Math.random() * (range.max - range.min + 1)) + range.min;
+  }
+  return steps.map(step => ({
+    ...step,
+    goal: step.goal.replace(/\{\{(\w+)\}\}/g, (_: string, key: string) =>
+      resolved[key] !== undefined ? String(resolved[key]) : `{{${key}}}`
+    ),
+  }));
+}
+
 // ── Helper: resolve LLM config ──
 async function resolveLLMConfig(userId: string, body?: { llmApiKey?: string; llmProvider?: string; llmModel?: string }): Promise<LLMConfig | null> {
   if (body?.llmApiKey) {
@@ -49,6 +67,7 @@ workflows.post("/run", sessionMiddleware, async (c) => {
     name?: string;
     type?: "workflow" | "flow";
     steps: unknown[];
+    variables?: Record<string, { min: number; max: number }>;
     appId?: string;
     llmApiKey?: string;
     llmProvider?: string;
@@ -58,6 +77,8 @@ workflows.post("/run", sessionMiddleware, async (c) => {
   if (!body.deviceId || !body.steps || !Array.isArray(body.steps) || body.steps.length === 0) {
     return c.json({ error: "deviceId and non-empty steps array are required" }, 400);
   }
+
+  const resolvedSteps = resolveVariables(body.steps, body.variables);
 
   const result = resolveDevice(body.deviceId, user.id);
   if ("error" in result) return c.json({ error: result.error }, result.status);
@@ -79,9 +100,9 @@ workflows.post("/run", sessionMiddleware, async (c) => {
     deviceId: device.persistentDeviceId ?? device.deviceId,
     name: wfName,
     type: wfType,
-    steps: body.steps,
+    steps: resolvedSteps,
     status: "running",
-    totalSteps: body.steps.length,
+    totalSteps: resolvedSteps.length,
   });
 
   activeSessions.set(trackingKey, { sessionId: runId, goal: `${wfType}: ${wfName}`, abort });
@@ -99,7 +120,7 @@ workflows.post("/run", sessionMiddleware, async (c) => {
       persistentDeviceId: device.persistentDeviceId,
       userId: user.id,
       name: wfName,
-      steps: body.steps as WorkflowStep[],
+      steps: resolvedSteps as WorkflowStep[],
       llmConfig: llmCfg,
       signal: abort.signal,
     }).finally(() => activeSessions.delete(trackingKey));
@@ -110,7 +131,7 @@ workflows.post("/run", sessionMiddleware, async (c) => {
       persistentDeviceId: device.persistentDeviceId,
       userId: user.id,
       name: wfName,
-      steps: body.steps as any[],
+      steps: resolvedSteps as any[],
       appId: body.appId,
       signal: abort.signal,
     }).finally(() => activeSessions.delete(trackingKey));
@@ -169,6 +190,7 @@ workflows.post("/schedule", sessionMiddleware, async (c) => {
     name?: string;
     type?: "workflow" | "flow";
     steps: unknown[];
+    variables?: Record<string, { min: number; max: number }>;
     appId?: string;
   }>();
 
@@ -214,6 +236,7 @@ workflows.post("/schedule", sessionMiddleware, async (c) => {
       deviceId: persistentDeviceId,
       userId: user.id,
       type: wfType,
+      variables: body.variables,
     },
     delay: body.delay,
   });
@@ -254,9 +277,10 @@ workflows.post("/execute", async (c) => {
     deviceId: string;
     userId: string;
     type: string;
+    variables?: Record<string, { min: number; max: number }>;
   };
 
-  const { runId, deviceId, userId, type: wfType } = payload;
+  const { runId, deviceId, userId, type: wfType, variables } = payload;
 
   // Load the run (steps are stored in the row)
   const [run] = await db.select().from(workflowRun).where(eq(workflowRun.id, runId)).limit(1);
@@ -272,6 +296,7 @@ workflows.post("/execute", async (c) => {
 
   await db.update(workflowRun).set({ status: "running", startedAt: new Date() }).where(eq(workflowRun.id, runId));
 
+  const resolvedSteps = resolveVariables(run.steps as any[], variables);
   const abort = new AbortController();
   activeSessions.set(trackingKey, { sessionId: runId, goal: `Scheduled ${wfType}: ${run.name}`, abort });
 
@@ -289,7 +314,7 @@ workflows.post("/execute", async (c) => {
       persistentDeviceId: device.persistentDeviceId,
       userId,
       name: run.name,
-      steps: run.steps as WorkflowStep[],
+      steps: resolvedSteps as WorkflowStep[],
       llmConfig: llmCfg,
       signal: abort.signal,
     }).finally(() => activeSessions.delete(trackingKey));
@@ -300,7 +325,7 @@ workflows.post("/execute", async (c) => {
       persistentDeviceId: device.persistentDeviceId,
       userId,
       name: run.name,
-      steps: run.steps as any[],
+      steps: resolvedSteps as any[],
       appId: undefined,
       signal: abort.signal,
     }).finally(() => activeSessions.delete(trackingKey));
