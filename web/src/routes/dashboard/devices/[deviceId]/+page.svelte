@@ -1042,10 +1042,10 @@
 									{/if}
 									<!-- Inline screen observation for this step -->
 									{#if matchingObs.length > 0}
-										{#each matchingObs as obs}
+										{#each matchingObs as obs, obsIdx}
+											{@const asciiKey = `ascii-inline-${sIdx}-${obsIdx}`}
+											{@const showAscii = asciiViewKeys.has(asciiKey)}
 											<div class="mt-2 ml-8 rounded-md border border-stone-200 bg-white px-2.5 py-2">
-												{@const asciiKey = `ascii-inline-${sIdx}-${matchingObs.indexOf(obs)}`}
-												{@const showAscii = asciiViewKeys.has(asciiKey)}
 												<div class="flex flex-wrap items-center gap-1.5 text-[10px]">
 													<Icon icon="solar:monitor-smartphone-bold-duotone" class="h-3 w-3 text-blue-500" />
 													{#if obs.packageName}
@@ -1074,7 +1074,7 @@
 													{#if showAscii}
 														<pre class="mt-1.5 font-mono text-[9px] leading-tight overflow-x-auto bg-stone-900 text-stone-300 rounded-lg p-3">{renderAsciiScreen(obs.elements as Record<string, unknown>[], deviceData?.screenWidth ?? 1080, deviceData?.screenHeight ?? 2400)}</pre>
 													{:else}
-														{@const elemKey = `inline-${sIdx}-${matchingObs.indexOf(obs)}`}
+														{@const elemKey = `inline-${sIdx}-${obsIdx}`}
 														{@const isExpanded = expandedElementSets.has(elemKey)}
 														<div class="mt-1 space-y-0.5" class:max-h-24={!isExpanded} class:overflow-y-auto={!isExpanded}>
 															{#each isExpanded ? obs.elements : obs.elements.slice(0, 15) as el}
@@ -1138,9 +1138,9 @@
 							</p>
 							<div class="space-y-2">
 								{#each unmatchedObs as obs, obsIdx}
+									{@const asciiKey = `ascii-unmatched-${obsIdx}`}
+									{@const showAscii = asciiViewKeys.has(asciiKey)}
 									<div class="rounded-lg bg-stone-50 px-3 py-2.5">
-										{@const asciiKey = `ascii-unmatched-${obsIdx}`}
-										{@const showAscii = asciiViewKeys.has(asciiKey)}
 										<div class="mb-1.5 flex flex-wrap items-center gap-1.5 text-[10px]">
 											<Icon icon="solar:monitor-smartphone-bold-duotone" class="h-3.5 w-3.5 text-blue-500" />
 											{#if obs.stepNumber}
