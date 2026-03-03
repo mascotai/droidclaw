@@ -7,9 +7,13 @@
 
 	let newKeyValue = $state<string | null>(null);
 	let keysPromise = $state(listKeys());
+	let showUsage = $state(false);
 </script>
 
-<h2 class="mb-6 text-xl md:text-2xl font-bold">API Keys</h2>
+<h2 class="mb-2 text-xl md:text-2xl font-bold">API Keys</h2>
+<p class="mb-6 text-sm text-stone-500">
+	Create Bearer tokens for external API access. Use these to call the DroidClaw API from scripts, CI/CD, or other services.
+</p>
 
 <!-- Create new key -->
 <p class="mb-3 text-sm font-medium text-stone-500">Create new key</p>
@@ -28,7 +32,7 @@
 			<span class="text-sm text-stone-600">Key Name</span>
 			<input
 				{...createKey.fields.name.as('text')}
-				placeholder="e.g. Production, Development"
+				placeholder="e.g. Production, CI/CD, Workflow Automation"
 				class="rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm focus:border-stone-400 focus:outline-none"
 			/>
 			{#each createKey.fields.name.issues() ?? [] as issue (issue.message)}
@@ -71,8 +75,31 @@
 				Copy
 			</button>
 		</div>
+
+		<!-- Usage example -->
 		<button
-			onclick={() => (newKeyValue = null)}
+			onclick={() => (showUsage = !showUsage)}
+			class="mt-4 flex items-center gap-1.5 text-sm font-medium text-amber-700 hover:text-amber-900"
+		>
+			<Icon icon={showUsage ? 'solar:alt-arrow-up-bold' : 'solar:alt-arrow-down-bold'} class="h-4 w-4" />
+			{showUsage ? 'Hide' : 'Show'} usage example
+		</button>
+
+		{#if showUsage}
+			<div class="mt-3 rounded-lg bg-stone-900 p-4 text-sm">
+				<p class="mb-2 text-stone-400"># Run a workflow with Bearer auth</p>
+				<pre class="overflow-x-auto text-stone-100"><code>curl -X POST https://droidclaw.stack.mascott.ai/workflows/run \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer {newKeyValue}" \
+  -d '{JSON.stringify({ deviceId: '<your-device-id>', name: 'My Workflow', steps: [{ app: 'com.example.app', goal: 'Open the app', maxSteps: 10 }] }, null, 2)}'</code></pre>
+			</div>
+		{/if}
+
+		<button
+			onclick={() => {
+				newKeyValue = null;
+				showUsage = false;
+			}}
 			class="mt-3 text-sm text-amber-600 hover:text-amber-800"
 		>
 			Dismiss
@@ -98,7 +125,14 @@
 							<Icon icon="solar:key-bold-duotone" class="h-4 w-4 text-amber-600" />
 						</div>
 						<div>
-							<p class="font-medium text-stone-900">{key.name ?? 'Unnamed Key'}</p>
+							<div class="flex items-center gap-2">
+								<p class="font-medium text-stone-900">{key.name ?? 'Unnamed Key'}</p>
+								{#if key.enabled}
+									<span class="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">Active</span>
+								{:else}
+									<span class="rounded-full bg-stone-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-stone-500">Disabled</span>
+								{/if}
+							</div>
 							<div class="mt-0.5 flex items-center gap-3 text-sm text-stone-500">
 								{#if key.start}
 									<span class="font-mono">{key.start}...</span>
@@ -132,6 +166,7 @@
 			<div class="px-6 py-10 text-center">
 				<Icon icon="solar:key-bold-duotone" class="mx-auto mb-3 h-8 w-8 text-stone-300" />
 				<p class="text-sm text-stone-500">No API keys yet. Create one above.</p>
+				<p class="mt-1 text-xs text-stone-400">API keys let you call the DroidClaw API with <code class="rounded bg-stone-100 px-1.5 py-0.5">Authorization: Bearer &lt;key&gt;</code></p>
 			</div>
 		{/if}
 	{:catch}

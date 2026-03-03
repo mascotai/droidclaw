@@ -7,32 +7,27 @@
   },
   "steps": [
     {
-      "goal": "Use the download action to download a file. The URL is {{imageUrl}} and save it to the album {{albumName}}/profile_pic.jpg. Do NOT open a browser. Use the download action directly.",
-      "maxSteps": 3,
-      "retries": 2
-    },
-    {
-      "goal": "Press the Home button to go to the Android home screen.",
-      "maxSteps": 2,
-      "retries": 1
-    },
-    {
-      "app": "com.instagram.android",
-      "goal": "Open Instagram. If you see any popup or dialog (like 'Not now', 'Skip', account suggestions, or a Google sign-in prompt), dismiss it by tapping 'Not now', 'Skip', 'X', or pressing Back. If you see someone else's profile or a post, press Back until you see the home feed. To navigate to your own profile, look for a small profile picture or avatar icon in the bottom-right corner of the screen and tap it. If you can't find the profile icon in the element list, tap at the bottom-right area of the screen (coordinates approximately [990, 2170] on a 1080-wide screen). Once on your profile page (you should see 'Edit profile' button, your posts count, followers count), tap 'Edit profile'. Wait for the Edit Profile screen to load — you should see fields like Name, Username, Bio. IMPORTANT: After Edit Profile loads, scroll UP so you can see the profile picture and 'Edit picture or avatar' at the top of the screen.",
-      "maxSteps": 12,
+      "goal": "Download this image and save it to the device gallery in an album called {{albumName}}: {{imageUrl}}",
+      "maxSteps": 10,
       "retries": 2
     },
     {
       "app": "com.instagram.android",
-      "goal": "You are on the Edit Profile screen. Complete ALL of these sub-tasks in order:\n\n1) FIRST: Make sure you can see the top of the Edit Profile screen. If needed, scroll UP until you see 'Edit picture or avatar' near the top. Tap 'Edit picture or avatar'. A bottom sheet menu will slide up.\n\n2) SECOND: A bottom sheet menu is now visible with options: 'Choose from library', 'Import from Facebook', 'Take photo', 'Remove current picture'. CRITICAL: Do NOT tap at the center of 'Choose from library' — there is a 'Links' row behind the bottom sheet at the same Y position that will intercept the tap. Instead, tap 'Choose from library' at coordinates [540, 1500] which is the LOWER part of the button, away from the overlapping 'Links' row. If after tapping you end up on a 'Links' page (showing link URLs and a 'Done' button), that means the tap hit the wrong element — press Back to return to Edit Profile and try again with coordinates [540, 1500]. The correct result is Instagram's photo picker showing a circular crop preview and a grid of photo thumbnails.\n\n3) THIRD: Once in the photo picker (you can see a circular crop preview at top, photo thumbnails grid below, and a 'Recents' dropdown label), tap the 'Recents' dropdown label above the photo grid. IMPORTANT: Do NOT tap the Android system 'Recents' button at the very bottom of the screen (y≈2272) — that opens the app switcher. The correct 'Recents' is inside the picker, above the photo thumbnails.\n\n4) FOURTH: The album selection menu opens. Find and tap 'See all' next to the 'Albums' header.\n\n5) FIFTH: Scroll through the albums and find '{{albumName}}'. Tap it.\n\n6) SIXTH: The album shows one image. Tap it. The cropper screen appears with a circular crop preview and a 'Done' button at the top-right.\n\nDo NOT mark done until you see the cropper screen with the 'Done' button.",
+      "goal": "Open Instagram. If you see any popup or dialog (like 'Not now', 'Skip', account suggestions, or a Google sign-in prompt), dismiss it by tapping 'Not now', 'Skip', 'X', or pressing Back. Navigate to your own profile by tapping the profile icon in the bottom-right corner of the screen. Once on your profile page (you should see 'Edit profile' button), tap 'Edit profile'.",
+      "maxSteps": 10,
+      "retries": 2
+    },
+    {
+      "app": "com.instagram.android",
+      "goal": "You are on the Edit Profile screen. Complete ALL of these sub-tasks in order:\n\n1) Tap 'Edit picture or avatar' near the top of the screen. A bottom sheet menu will slide up.\n\n2) In the bottom sheet, tap 'Choose from library'. The correct result is Instagram's photo picker showing a circular crop preview and a grid of photo thumbnails.\n\n3) Once in the photo picker, tap the 'Recents' dropdown label above the photo grid (NOT the Android system Recents button at the bottom of the screen).\n\n4) The album selection opens. Find and tap the '{{albumName}}' album. If you don't see it, look for 'See all' next to Albums and tap that first, then find '{{albumName}}'.\n\n5) The album shows the downloaded image. Tap it to select it.\n\n6) You should now see a circular crop preview. Tap 'Done' or the checkmark button (top-right) to confirm and save the new profile picture.\n\n7) After tapping Done, Instagram may show 'Processing...' briefly. Once you return to the Edit Profile screen, the profile picture has been updated successfully.",
       "maxSteps": 25,
       "retries": 2
     },
     {
       "app": "com.instagram.android",
-      "goal": "You are on the profile picture cropper screen with the image in a circular crop preview. Tap the 'Done' button in the top-right corner to confirm and save the new profile picture. After tapping Done, you should return to the Edit Profile screen. A 'Loading...' spinner may appear briefly while the picture is being saved. Once you see the Edit Profile screen again with fields like Name, Username, Bio visible, the profile picture has been updated successfully.",
-      "maxSteps": 5,
-      "retries": 2
+      "goal": "Verify the profile picture was changed. Navigate to your profile page (tap the profile icon in the bottom-right or press Back until you see the profile page). Check that the profile picture area shows a new image (not the default avatar). The profile picture should look different from the default silhouette. If it appears updated, mark done.",
+      "maxSteps": 8,
+      "retries": 1
     }
   ]
 }

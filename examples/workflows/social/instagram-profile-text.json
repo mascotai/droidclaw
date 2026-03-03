@@ -1,0 +1,35 @@
+{
+  "name": "Instagram Profile Text",
+  "description": "Opens Instagram, navigates to Edit Profile, and updates the display name, username, and bio in a single session.",
+  "params": {
+    "name": "The new display name to set",
+    "username": "The new username to set (without @)",
+    "bio": "The bio text to set on the profile (max 150 characters)"
+  },
+  "steps": [
+    {
+      "app": "com.instagram.android",
+      "goal": "Open Instagram. If you see any popup or dialog (like 'Not now', 'Skip', account suggestions, or a Google sign-in prompt), dismiss it by tapping 'Not now', 'Skip', 'X', or pressing Back. If you see someone else's profile or a post, press Back until you see the home feed. To navigate to your own profile, look for a small profile picture or avatar icon in the bottom-right corner of the screen and tap it. If you can't find the profile icon in the element list, tap at the bottom-right area of the screen (coordinates approximately [990, 2170] on a 1080-wide screen). Once on your profile page (you should see 'Edit profile' button, your posts count, followers count), tap 'Edit profile'. Wait for the Edit Profile screen to load — you should see fields like Name, Username, Bio.",
+      "maxSteps": 12,
+      "retries": 2
+    },
+    {
+      "app": "com.instagram.android",
+      "goal": "You are on the Edit Profile screen. Complete ALL of these field edits in order:\n\n1) NAME: Find the Name field (first text field, shows current display name). Tap it, select all existing text and delete it, then type exactly: '{{name}}'. Verify the text appears.\n\n2) USERNAME: Find the Username field (shows current @username). Tap it, select all existing text and delete it, then type exactly: '{{username}}'. Verify the text appears.\n\n3) BIO: Find the Bio field. Tap it, select all existing text and delete it, then type exactly: '{{bio}}'. Verify the text appears.\n\nAfter all three fields are filled, do NOT tap Done yet — mark done so the next step can save.",
+      "maxSteps": 15,
+      "retries": 2
+    },
+    {
+      "app": "com.instagram.android",
+      "goal": "All three fields (Name, Username, Bio) should now contain the new values. Tap the checkmark or 'Done' button (top-right corner) to save all changes. Instagram may show confirmation dialogs:\n- 'Change username?' — tap 'Change' or 'Confirm'\n- 'Change name?' — tap the confirm button\n- Any other popup ('Link accounts', Google sign-in, 'Not now') — dismiss by tapping 'Not now', 'Skip', 'X', or Back\n\nIf you end up on the Instagram profile page or feed, the save was successful. If you see an error saying the username is taken, mark as failed.",
+      "maxSteps": 10,
+      "retries": 2
+    },
+    {
+      "app": "com.instagram.android",
+      "goal": "Verify the profile was updated. Navigate to your profile page (tap the profile icon in the bottom-right if not already there). Check that the display name shows '{{name}}', the username shows '@{{username}}', and the bio shows '{{bio}}'. If all three match, mark done. If any field does not match, mark as failed.",
+      "maxSteps": 8,
+      "retries": 1
+    }
+  ]
+}
