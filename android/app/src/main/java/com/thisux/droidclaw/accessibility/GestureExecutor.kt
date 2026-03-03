@@ -103,16 +103,10 @@ class GestureExecutor(private val service: DroidClawAccessibilityService) {
     }
 
     private suspend fun executeTap(x: Int, y: Int): ActionResult {
-        val node = service.findNodeAt(x, y)
-        if (node != null) {
-            try {
-                if (node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
-                    return ActionResult(true)
-                }
-            } finally {
-                node.recycle()
-            }
-        }
+        // Always use raw gesture dispatch for taps. This sends a real touch event
+        // at the exact screen coordinates, which correctly hits whatever is visually
+        // on top. ACTION_CLICK on accessibility nodes can trigger background elements
+        // when overlapping views exist (e.g., bottom sheets over scrollable lists).
         return dispatchTapGesture(x, y)
     }
 
