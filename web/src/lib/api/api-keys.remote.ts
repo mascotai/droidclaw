@@ -45,7 +45,7 @@ export const listKeys = query(async () => {
 		.orderBy(desc(apikey.createdAt));
 });
 
-export const createKey = form(createKeySchema, async ({ name }) => {
+export const createKey = form(createKeySchema, async ({ name, type }) => {
 	const { locals } = getRequestEvent();
 	if (!locals.user) return;
 
@@ -61,7 +61,7 @@ export const createKey = form(createKeySchema, async ({ name }) => {
 		start: rawKey.slice(0, prefix.length + 6),
 		key: hashedKey,
 		userId: locals.user.id,
-		type: 'user',
+		type: type ?? 'user',
 		enabled: true,
 		rateLimitEnabled: false,
 		rateLimitTimeWindow: 86400000,

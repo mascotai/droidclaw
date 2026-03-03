@@ -39,6 +39,25 @@
 				<p class="text-sm text-red-600">{issue.message}</p>
 			{/each}
 		</label>
+		<label class="flex flex-col gap-1">
+			<span class="text-sm text-stone-600">Type</span>
+			<div class="flex gap-1 rounded-lg border border-stone-200 bg-stone-50 p-0.5">
+				<label class="flex-1">
+					<input {...createKey.fields.type.as('radio')} value="user" class="peer sr-only" checked />
+					<span class="flex cursor-pointer items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium text-stone-500 transition-colors peer-checked:bg-white peer-checked:text-violet-700 peer-checked:shadow-sm">
+						<Icon icon="solar:user-bold-duotone" class="h-3.5 w-3.5" />
+						User
+					</span>
+				</label>
+				<label class="flex-1">
+					<input {...createKey.fields.type.as('radio')} value="device" class="peer sr-only" />
+					<span class="flex cursor-pointer items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium text-stone-500 transition-colors peer-checked:bg-white peer-checked:text-blue-700 peer-checked:shadow-sm">
+						<Icon icon="solar:smartphone-bold-duotone" class="h-3.5 w-3.5" />
+						Device
+					</span>
+				</label>
+			</div>
+		</label>
 		<button
 			type="submit"
 			class="flex w-full sm:w-auto items-center justify-center gap-2 rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-800"
