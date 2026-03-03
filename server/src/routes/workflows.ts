@@ -154,6 +154,7 @@ workflows.post("/stop", sessionMiddleware, async (c) => {
   const active = activeSessions.get(trackingKey);
   if (!active) return c.json({ error: "No agent running on this device" }, 404);
 
+  active.deviceDisconnected = false; // user-initiated stop, not a disconnect
   active.abort.abort();
   console.log(`[Workflow] Stop requested for device ${body.deviceId}`);
   return c.json({ status: "stopping" });

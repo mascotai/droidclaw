@@ -169,6 +169,7 @@ goals.post("/stop", sessionMiddleware, async (c) => {
     return c.json({ error: "no agent running on this device" }, 404);
   }
 
+  active.deviceDisconnected = false; // user-initiated stop, not a disconnect
   active.abort.abort();
   console.log(`[Agent] Stop requested for device ${body.deviceId}`);
   return c.json({ status: "stopping" });

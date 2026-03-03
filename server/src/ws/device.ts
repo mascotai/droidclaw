@@ -336,6 +336,7 @@ export async function handleDeviceMessage(
       const active = key ? activeSessions.get(key) : undefined;
       if (active) {
         console.log(`[Pipeline] Stop requested for device ${deviceId} (key: ${key})`);
+        active.deviceDisconnected = false; // user-initiated stop, not a disconnect
         active.abort.abort();
         // Don't delete from activeSessions here — let the pipeline's
         // onComplete/catch handler clean up to avoid race conditions.
@@ -521,15 +522,19 @@ export function handleDeviceClose(
   const { deviceId, userId, persistentDeviceId } = ws.data;
   if (!deviceId) return;
 
-  // Abort any running pipeline — check both ephemeral and persistent keys
+  // Signal disconnect to any running pipeline — check both ephemeral and persistent keys
   const closeKey = activeSessions.has(deviceId)
     ? deviceId
     : persistentDeviceId && activeSessions.has(persistentDeviceId)
       ? persistentDeviceId
       : null;
   if (closeKey) {
-    activeSessions.get(closeKey)!.abort.abort();
-    activeSessions.delete(closeKey);
+    const active = activeSessions.get(closeKey)!;
+    // Mark as device disconnect so workflow runners can wait for reconnection
+    // instead of treating this as a user-initiated stop
+    active.deviceDisconnected = true;
+    active.abort.abort();
+    // Don't delete the entry — let the runner decide whether to wait for reconnect or give up
   }
   handleVoiceCancel(deviceId);
   sessions.removeDevice(deviceId);
