@@ -192,6 +192,40 @@ class DroidClawAccessibilityService : AccessibilityService() {
     }
 
     fun findNodeAt(x: Int, y: Int): AccessibilityNodeInfo? {
+        // Search ALL windows, preferring focused/active windows first.
+        // This ensures taps on overlays (bottom sheets, dialogs) hit the overlay
+        // element rather than a background element at the same coordinates.
+        try {
+            val allWindows = windows
+            if (allWindows != null && allWindows.isNotEmpty()) {
+                // Partition: focused/active windows first, then the rest
+                val focused = mutableListOf<AccessibilityWindowInfo>()
+                val background = mutableListOf<AccessibilityWindowInfo>()
+                for (window in allWindows) {
+                    if (window.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD) continue
+                    if (window.isFocused || window.isActive) {
+                        focused.add(window)
+                    } else {
+                        background.add(window)
+                    }
+                }
+                // Search focused/active windows first, then background
+                for (window in focused + background) {
+                    val root = window.root ?: continue
+                    try {
+                        val found = findNodeAtRecursive(root, x, y)
+                        if (found != null) return found
+                    } catch (_: Exception) {
+                        // Window may have been closed during traversal
+                    }
+                }
+                return null
+            }
+        } catch (_: Exception) {
+            // Fallback to rootInActiveWindow
+        }
+
+        // Fallback: single-window search (pre-API 21 or if windows API fails)
         val root = rootInActiveWindow ?: return null
         return findNodeAtRecursive(root, x, y)
     }
