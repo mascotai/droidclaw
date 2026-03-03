@@ -147,8 +147,8 @@ function actionToCommand(
     case "tap":
       return {
         type: "tap",
-        x: action.coordinates?.[0],
-        y: action.coordinates?.[1],
+        x: Math.max(0, Math.min(action.coordinates?.[0] ?? 0, screenWidth - 1)),
+        y: Math.max(0, Math.min(action.coordinates?.[1] ?? 0, screenHeight - 1)),
       };
 
     case "type":
@@ -189,8 +189,8 @@ function actionToCommand(
     case "longpress":
       return {
         type: "longpress",
-        x: action.coordinates?.[0],
-        y: action.coordinates?.[1],
+        x: Math.max(0, Math.min(action.coordinates?.[0] ?? 0, screenWidth - 1)),
+        y: Math.max(0, Math.min(action.coordinates?.[1] ?? 0, screenHeight - 1)),
       };
 
     case "launch":

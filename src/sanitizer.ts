@@ -102,8 +102,18 @@ export function getInteractiveElements(xmlContent: string): UIElement[] {
             .map(Number);
 
           const [x1, y1, x2, y2] = coords;
-          const centerX = Math.floor((x1 + x2) / 2);
-          const centerY = Math.floor((y1 + y2) / 2);
+
+          // Get screen dimensions (typically 1080x2400 for most Android devices)
+          // These can be overridden based on the root node or parsed from the XML header
+          let screenWidth = 1080;
+          let screenHeight = 2400;
+
+          // Check if we can extract screen dimensions from the root or context
+          // For now, use defaults but they could be parameterized if needed
+
+          // Clamp center coordinates to screen bounds
+          const centerX = Math.max(0, Math.min(Math.floor((x1 + x2) / 2), screenWidth - 1));
+          const centerY = Math.max(0, Math.min(Math.floor((y1 + y2) / 2), screenHeight - 1));
           const width = x2 - x1;
           const height = y2 - y1;
 

@@ -10,7 +10,14 @@ object ScreenTreeBuilder {
     fun capture(rootNode: AccessibilityNodeInfo?): List<UIElement> {
         if (rootNode == null) return emptyList()
         val elements = mutableListOf<UIElement>()
-        walkTree(rootNode, elements, depth = 0, parentDesc = "")
+
+        // Get screen dimensions from root node's bounds
+        val screenBounds = Rect()
+        rootNode.getBoundsInScreen(screenBounds)
+        val screenWidth = screenBounds.width()
+        val screenHeight = screenBounds.height()
+
+        walkTree(rootNode, elements, depth = 0, parentDesc = "", screenWidth, screenHeight)
         return elements
     }
 
@@ -18,7 +25,9 @@ object ScreenTreeBuilder {
         node: AccessibilityNodeInfo,
         elements: MutableList<UIElement>,
         depth: Int,
-        parentDesc: String
+        parentDesc: String,
+        screenWidth: Int,
+        screenHeight: Int
     ) {
         try {
             // Skip DroidClaw's own overlay nodes so the agent never sees them
@@ -37,8 +46,29 @@ object ScreenTreeBuilder {
                 node.isEditable || node.isScrollable || node.isFocusable
 
             if (isInteractive || displayText.isNotEmpty()) {
-                val centerX = (rect.left + rect.right) / 2
-                val centerY = (rect.top + rect.bottom) / 2
+                // Check if element is entirely off-screen before processing
+                val visibleLeft = rect.left.coerceAtLeast(0)
+                val visibleRight = rect.right.coerceAtMost(screenWidth)
+                val visibleTop = rect.top.coerceAtLeast(0)
+                val visibleBottom = rect.bottom.coerceAtMost(screenHeight)
+
+                // Skip if element is entirely off-screen (no visible portion)
+                if (visibleRight <= visibleLeft || visibleBottom <= visibleTop) {
+                    // Element is entirely off-screen — still walk children
+                    for (i in 0 until node.childCount) {
+                        val child = node.getChild(i) ?: continue
+                        try {
+                            walkTree(child, elements, depth + 1, className, screenWidth, screenHeight)
+                        } finally {
+                            child.recycle()
+                        }
+                    }
+                    return
+                }
+
+                // Clamp center coordinates to screen bounds
+                val centerX = ((rect.left + rect.right) / 2).coerceIn(0, screenWidth - 1)
+                val centerY = ((rect.top + rect.bottom) / 2).coerceIn(0, screenHeight - 1)
                 val width = rect.width()
                 val height = rect.height()
 
@@ -78,7 +108,7 @@ object ScreenTreeBuilder {
             for (i in 0 until node.childCount) {
                 val child = node.getChild(i) ?: continue
                 try {
-                    walkTree(child, elements, depth + 1, className)
+                    walkTree(child, elements, depth + 1, className, screenWidth, screenHeight)
                 } finally {
                     child.recycle()
                 }
