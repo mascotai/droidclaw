@@ -51,6 +51,14 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
   // Notify device so it hides the overlay / shows running state
   sendToDevice({ type: "goal_started", goal: `Workflow: ${name}` });
 
+  // Clean slate: press Home then Back to dismiss any leftover UI from previous workflows
+  try {
+    await sessions.sendCommand(deviceId, { type: "home" });
+    await new Promise((r) => setTimeout(r, 500));
+    await sessions.sendCommand(deviceId, { type: "back" });
+    await new Promise((r) => setTimeout(r, 500));
+  } catch { /* ignore */ }
+
   sessions.notifyDashboard(userId, {
     type: "workflow_started",
     runId,
@@ -82,12 +90,6 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       if (signal.aborted) break;
-
-      // Dismiss any leftover sheets/keyboards/dialogs before starting the step
-      try {
-        await sessions.sendCommand(deviceId, { type: "back" });
-        await new Promise((r) => setTimeout(r, 500));
-      } catch { /* ignore */ }
 
       // Launch app on each attempt (fresh state for retries)
       if (step.app) {
