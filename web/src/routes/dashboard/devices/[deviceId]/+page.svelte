@@ -16,6 +16,7 @@
 	import { onMount } from 'svelte';
 	import Icon from '@iconify/svelte';
 	import { track } from '$lib/analytics/track';
+	import { renderAsciiScreen } from '$lib/utils/ascii-screen';
 	import {
 		DEVICE_TAB_CHANGE,
 		DEVICE_GOAL_SUBMIT,
@@ -123,6 +124,7 @@
 	let workflowRuns = $state<WorkflowRun[]>([]);
 	let expandedWorkflow = $state<string | null>(null);
 	let expandedElementSets = $state<Set<string>>(new Set());
+	let asciiViewKeys = $state<Set<string>>(new Set());
 	let workflowsLoaded = $state(false);
 
 	// Modal state for step deep-dive
@@ -1042,6 +1044,8 @@
 									{#if matchingObs.length > 0}
 										{#each matchingObs as obs}
 											<div class="mt-2 ml-8 rounded-md border border-stone-200 bg-white px-2.5 py-2">
+												{@const asciiKey = `ascii-inline-${sIdx}-${matchingObs.indexOf(obs)}`}
+												{@const showAscii = asciiViewKeys.has(asciiKey)}
 												<div class="flex flex-wrap items-center gap-1.5 text-[10px]">
 													<Icon icon="solar:monitor-smartphone-bold-duotone" class="h-3 w-3 text-blue-500" />
 													{#if obs.packageName}
@@ -1053,41 +1057,57 @@
 													{/if}
 													<span class="text-stone-300">·</span>
 													<span class="text-stone-400">{obs.elements.length} element{obs.elements.length !== 1 ? 's' : ''}</span>
+													{#if obs.elements.length > 0}
+														<button
+															class="ml-auto rounded px-1.5 py-0.5 font-medium cursor-pointer transition-colors {showAscii ? 'bg-blue-100 text-blue-700' : 'bg-stone-100 text-stone-500 hover:bg-stone-200'}"
+															onclick={() => {
+																const next = new Set(asciiViewKeys);
+																if (next.has(asciiKey)) next.delete(asciiKey); else next.add(asciiKey);
+																asciiViewKeys = next;
+															}}
+														>
+															{showAscii ? '☰ List' : '⊞ ASCII'}
+														</button>
+													{/if}
 												</div>
 												{#if obs.elements.length > 0}
-													{@const elemKey = `inline-${sIdx}-${matchingObs.indexOf(obs)}`}
-													{@const isExpanded = expandedElementSets.has(elemKey)}
-													<div class="mt-1 space-y-0.5" class:max-h-24={!isExpanded} class:overflow-y-auto={!isExpanded}>
-														{#each isExpanded ? obs.elements : obs.elements.slice(0, 15) as el}
-															{@const elem = el as Record<string, unknown>}
-															<p class="truncate font-mono text-[10px] text-stone-500">
-																{#if elem.type}<span class="text-stone-300">[{(elem.type as string).split('.').pop()}]</span>{/if}
-																{#if elem.action}<span class="text-amber-500/70"> {elem.action}</span>{/if}
-																{#if elem.text}<span class="text-stone-700"> "{elem.text}"</span>{/if}
-																{#if elem.hint}<span class="text-stone-400 italic"> {elem.hint}</span>{/if}
-																{#if elem.id}<span class="text-blue-400"> #{(elem.id as string).split('/').pop()}</span>{/if}
-																{#if elem.center}<span class="text-emerald-500"> @{JSON.stringify(elem.center)}</span>{/if}
-																{#if elem.bounds}<span class="text-stone-300"> [{(elem.bounds as number[]).join(',')}]</span>{/if}
-																{#if elem.checked}<span class="text-orange-400"> checked</span>{/if}
-																{#if elem.focused}<span class="text-cyan-400"> focused</span>{/if}
-																{#if elem.selected}<span class="text-purple-400"> selected</span>{/if}
-																{#if elem.enabled === false}<span class="text-red-400"> disabled</span>{/if}
-																{#if elem.scrollable}<span class="text-teal-400"> scrollable</span>{/if}
-															</p>
-														{/each}
-														{#if obs.elements.length > 15}
-															<button
-																class="mt-0.5 text-[10px] text-blue-500 hover:text-blue-700 italic cursor-pointer"
-																onclick={() => {
-																	const next = new Set(expandedElementSets);
-																	if (next.has(elemKey)) next.delete(elemKey); else next.add(elemKey);
-																	expandedElementSets = next;
-																}}
-															>
-																{isExpanded ? '▲ Show fewer elements' : `... +${obs.elements.length - 15} more elements`}
-															</button>
-														{/if}
-													</div>
+													{#if showAscii}
+														<pre class="mt-1.5 font-mono text-[9px] leading-tight overflow-x-auto bg-stone-900 text-stone-300 rounded-lg p-3">{renderAsciiScreen(obs.elements as Record<string, unknown>[], deviceData?.screenWidth ?? 1080, deviceData?.screenHeight ?? 2400)}</pre>
+													{:else}
+														{@const elemKey = `inline-${sIdx}-${matchingObs.indexOf(obs)}`}
+														{@const isExpanded = expandedElementSets.has(elemKey)}
+														<div class="mt-1 space-y-0.5" class:max-h-24={!isExpanded} class:overflow-y-auto={!isExpanded}>
+															{#each isExpanded ? obs.elements : obs.elements.slice(0, 15) as el}
+																{@const elem = el as Record<string, unknown>}
+																<p class="truncate font-mono text-[10px] text-stone-500">
+																	{#if elem.type}<span class="text-stone-300">[{(elem.type as string).split('.').pop()}]</span>{/if}
+																	{#if elem.action}<span class="text-amber-500/70"> {elem.action}</span>{/if}
+																	{#if elem.text}<span class="text-stone-700"> "{elem.text}"</span>{/if}
+																	{#if elem.hint}<span class="text-stone-400 italic"> {elem.hint}</span>{/if}
+																	{#if elem.id}<span class="text-blue-400"> #{(elem.id as string).split('/').pop()}</span>{/if}
+																	{#if elem.center}<span class="text-emerald-500"> @{JSON.stringify(elem.center)}</span>{/if}
+																	{#if elem.bounds}<span class="text-stone-300"> [{(elem.bounds as number[]).join(',')}]</span>{/if}
+																	{#if elem.checked}<span class="text-orange-400"> checked</span>{/if}
+																	{#if elem.focused}<span class="text-cyan-400"> focused</span>{/if}
+																	{#if elem.selected}<span class="text-purple-400"> selected</span>{/if}
+																	{#if elem.enabled === false}<span class="text-red-400"> disabled</span>{/if}
+																	{#if elem.scrollable}<span class="text-teal-400"> scrollable</span>{/if}
+																</p>
+															{/each}
+															{#if obs.elements.length > 15}
+																<button
+																	class="mt-0.5 text-[10px] text-blue-500 hover:text-blue-700 italic cursor-pointer"
+																	onclick={() => {
+																		const next = new Set(expandedElementSets);
+																		if (next.has(elemKey)) next.delete(elemKey); else next.add(elemKey);
+																		expandedElementSets = next;
+																	}}
+																>
+																	{isExpanded ? '▲ Show fewer elements' : `... +${obs.elements.length - 15} more elements`}
+																</button>
+															{/if}
+														</div>
+													{/if}
 												{/if}
 											</div>
 										{/each}
@@ -1119,6 +1139,8 @@
 							<div class="space-y-2">
 								{#each unmatchedObs as obs, obsIdx}
 									<div class="rounded-lg bg-stone-50 px-3 py-2.5">
+										{@const asciiKey = `ascii-unmatched-${obsIdx}`}
+										{@const showAscii = asciiViewKeys.has(asciiKey)}
 										<div class="mb-1.5 flex flex-wrap items-center gap-1.5 text-[10px]">
 											<Icon icon="solar:monitor-smartphone-bold-duotone" class="h-3.5 w-3.5 text-blue-500" />
 											{#if obs.stepNumber}
@@ -1133,41 +1155,57 @@
 											{/if}
 											<span class="text-stone-300">·</span>
 											<span class="text-stone-400">{obs.elements.length} element{obs.elements.length !== 1 ? 's' : ''}</span>
+											{#if obs.elements.length > 0}
+												<button
+													class="ml-auto rounded px-1.5 py-0.5 font-medium cursor-pointer transition-colors {showAscii ? 'bg-blue-100 text-blue-700' : 'bg-stone-100 text-stone-500 hover:bg-stone-200'}"
+													onclick={() => {
+														const next = new Set(asciiViewKeys);
+														if (next.has(asciiKey)) next.delete(asciiKey); else next.add(asciiKey);
+														asciiViewKeys = next;
+													}}
+												>
+													{showAscii ? '☰ List' : '⊞ ASCII'}
+												</button>
+											{/if}
 										</div>
 										{#if obs.elements.length > 0}
-											{@const elemKey = `unmatched-${obsIdx}`}
-											{@const isExpanded = expandedElementSets.has(elemKey)}
-											<div class="space-y-0.5" class:max-h-32={!isExpanded} class:overflow-y-auto={!isExpanded}>
-												{#each isExpanded ? obs.elements : obs.elements.slice(0, 20) as el}
-													{@const elem = el as Record<string, unknown>}
-													<p class="truncate font-mono text-[10px] text-stone-500">
-														{#if elem.type}<span class="text-stone-300">[{(elem.type as string).split('.').pop()}]</span>{/if}
-														{#if elem.action}<span class="text-amber-500/70"> {elem.action}</span>{/if}
-														{#if elem.text}<span class="text-stone-700"> "{elem.text}"</span>{/if}
-														{#if elem.hint}<span class="text-stone-400 italic"> {elem.hint}</span>{/if}
-														{#if elem.id}<span class="text-blue-400"> #{(elem.id as string).split('/').pop()}</span>{/if}
-														{#if elem.center}<span class="text-emerald-500"> @{JSON.stringify(elem.center)}</span>{/if}
-														{#if elem.bounds}<span class="text-stone-300"> [{(elem.bounds as number[]).join(',')}]</span>{/if}
-														{#if elem.checked}<span class="text-orange-400"> checked</span>{/if}
-														{#if elem.focused}<span class="text-cyan-400"> focused</span>{/if}
-														{#if elem.selected}<span class="text-purple-400"> selected</span>{/if}
-														{#if elem.enabled === false}<span class="text-red-400"> disabled</span>{/if}
-														{#if elem.scrollable}<span class="text-teal-400"> scrollable</span>{/if}
-													</p>
-												{/each}
-												{#if obs.elements.length > 20}
-													<button
-														class="mt-0.5 text-[10px] text-blue-500 hover:text-blue-700 italic cursor-pointer"
-														onclick={() => {
-															const next = new Set(expandedElementSets);
-															if (next.has(elemKey)) next.delete(elemKey); else next.add(elemKey);
-															expandedElementSets = next;
-														}}
-													>
-														{isExpanded ? '▲ Show fewer elements' : `... +${obs.elements.length - 20} more elements`}
-													</button>
-												{/if}
-											</div>
+											{#if showAscii}
+												<pre class="font-mono text-[9px] leading-tight overflow-x-auto bg-stone-900 text-stone-300 rounded-lg p-3">{renderAsciiScreen(obs.elements as Record<string, unknown>[], deviceData?.screenWidth ?? 1080, deviceData?.screenHeight ?? 2400)}</pre>
+											{:else}
+												{@const elemKey = `unmatched-${obsIdx}`}
+												{@const isExpanded = expandedElementSets.has(elemKey)}
+												<div class="space-y-0.5" class:max-h-32={!isExpanded} class:overflow-y-auto={!isExpanded}>
+													{#each isExpanded ? obs.elements : obs.elements.slice(0, 20) as el}
+														{@const elem = el as Record<string, unknown>}
+														<p class="truncate font-mono text-[10px] text-stone-500">
+															{#if elem.type}<span class="text-stone-300">[{(elem.type as string).split('.').pop()}]</span>{/if}
+															{#if elem.action}<span class="text-amber-500/70"> {elem.action}</span>{/if}
+															{#if elem.text}<span class="text-stone-700"> "{elem.text}"</span>{/if}
+															{#if elem.hint}<span class="text-stone-400 italic"> {elem.hint}</span>{/if}
+															{#if elem.id}<span class="text-blue-400"> #{(elem.id as string).split('/').pop()}</span>{/if}
+															{#if elem.center}<span class="text-emerald-500"> @{JSON.stringify(elem.center)}</span>{/if}
+															{#if elem.bounds}<span class="text-stone-300"> [{(elem.bounds as number[]).join(',')}]</span>{/if}
+															{#if elem.checked}<span class="text-orange-400"> checked</span>{/if}
+															{#if elem.focused}<span class="text-cyan-400"> focused</span>{/if}
+															{#if elem.selected}<span class="text-purple-400"> selected</span>{/if}
+															{#if elem.enabled === false}<span class="text-red-400"> disabled</span>{/if}
+															{#if elem.scrollable}<span class="text-teal-400"> scrollable</span>{/if}
+														</p>
+													{/each}
+													{#if obs.elements.length > 20}
+														<button
+															class="mt-0.5 text-[10px] text-blue-500 hover:text-blue-700 italic cursor-pointer"
+															onclick={() => {
+																const next = new Set(expandedElementSets);
+																if (next.has(elemKey)) next.delete(elemKey); else next.add(elemKey);
+																expandedElementSets = next;
+															}}
+														>
+															{isExpanded ? '▲ Show fewer elements' : `... +${obs.elements.length - 20} more elements`}
+														</button>
+													{/if}
+												</div>
+											{/if}
 										{/if}
 									</div>
 								{/each}
