@@ -138,7 +138,16 @@
 		startedAt: Date;
 		completedAt: Date | null;
 	}
+	/** Live progress tracking for running workflows (not persisted, only from WS events) */
+	interface WorkflowLiveProgress {
+		activeStepIndex: number;
+		activeStepGoal: string;
+		attempt: number;      // current attempt (1-based, starts at 1)
+		totalAttempts: number; // total possible attempts (retries + 1)
+		stepsUsedInAttempt: number; // agent steps used in current attempt
+	}
 	let workflowRuns = $state<WorkflowRun[]>([]);
+	let workflowLiveProgress = $state<Record<string, WorkflowLiveProgress>>({});
 	let expandedWorkflow = $state<string | null>(null);
 	let expandedElementSets = $state<Set<string>>(new Set());
 	let asciiViewKeys = $state<Set<string>>(new Set());
@@ -398,6 +407,49 @@
 					}
 					break;
 				}
+				case 'workflow_step_start': {
+					const runId = msg.runId as string;
+					const stepIdx = msg.stepIndex as number;
+					const goal = (msg.goal ?? msg.command ?? '') as string;
+					const maxRetries = (msg.maxRetries as number) ?? 0;
+					workflowLiveProgress = {
+						...workflowLiveProgress,
+						[runId]: {
+							activeStepIndex: stepIdx,
+							activeStepGoal: goal,
+							attempt: 1,
+							totalAttempts: maxRetries + 1,
+							stepsUsedInAttempt: 0,
+						}
+					};
+					// Also ensure the run shows as running in the list
+					const runS = workflowRuns.find((r) => r.id === runId);
+					if (runS) {
+						runS.currentStep = stepIdx;
+						runS.status = 'running';
+						workflowRuns = [...workflowRuns];
+					}
+					break;
+				}
+				case 'workflow_step_retry': {
+					const runId = msg.runId as string;
+					const attempt = (msg.attempt as number) ?? 1;
+					const totalAttempts = (msg.maxRetries as number) ?? 1;
+					const stepsUsed = (msg.stepsUsed as number) ?? 0;
+					const prev = workflowLiveProgress[runId];
+					if (prev) {
+						workflowLiveProgress = {
+							...workflowLiveProgress,
+							[runId]: {
+								...prev,
+								attempt: attempt + 1,
+								totalAttempts,
+								stepsUsedInAttempt: stepsUsed,
+							}
+						};
+					}
+					break;
+				}
 				case 'workflow_step_done': {
 					const runId = msg.runId as string;
 					const stepIdx = msg.stepIndex as number;
@@ -422,6 +474,24 @@
 					break;
 				}
 				case 'workflow_completed': {
+					// Clean up live progress tracking
+					const completedRunId = msg.runId as string;
+					if (workflowLiveProgress[completedRunId]) {
+						const { [completedRunId]: _, ...rest } = workflowLiveProgress;
+						workflowLiveProgress = rest;
+					}
+					if (workflowsLoaded) {
+						loadWorkflowRuns();
+					}
+					break;
+				}
+				case 'workflow_stopped': {
+					// Clean up live progress tracking
+					const stoppedRunId = msg.runId as string;
+					if (workflowLiveProgress[stoppedRunId]) {
+						const { [stoppedRunId]: _, ...rest } = workflowLiveProgress;
+						workflowLiveProgress = rest;
+					}
 					if (workflowsLoaded) {
 						loadWorkflowRuns();
 					}
@@ -863,6 +933,7 @@
 		<p class="mb-3 text-sm font-medium text-stone-500">Workflow runs</p>
 		<div class="space-y-3">
 			{#each workflowRuns as run (run.id)}
+				{@const liveProgress = workflowLiveProgress[run.id]}
 				<div class="rounded-2xl bg-white">
 					<!-- Workflow header -->
 					<button
@@ -885,6 +956,16 @@
 								<span class="text-stone-300">&middot;</span>
 								{formatDuration(run.startedAt, run.completedAt)}
 							</p>
+							{#if run.status === 'running' && liveProgress}
+								<p class="mt-1 flex items-center gap-1.5 pl-6 text-xs text-amber-600">
+									<Icon icon="solar:play-circle-bold-duotone" class="h-3.5 w-3.5 animate-pulse" />
+									Step {liveProgress.activeStepIndex + 1}/{run.totalSteps}
+									{#if liveProgress.totalAttempts > 1}
+										<span class="text-amber-400">&middot;</span>
+										Attempt {liveProgress.attempt}/{liveProgress.totalAttempts}
+									{/if}
+								</p>
+							{/if}
 						</div>
 						<div class="ml-3 flex shrink-0 items-center gap-2">
 							<span
@@ -901,7 +982,7 @@
 									class="h-3.5 w-3.5 {run.status === 'running' ? 'animate-spin' : ''}"
 								/>
 								{run.status === 'completed' ? 'Completed'
-									: run.status === 'running' ? 'Running'
+									: run.status === 'running' ? `Running`
 									: run.status === 'stopped' ? 'Stopped'
 									: 'Failed'}
 							</span>
@@ -913,52 +994,81 @@
 					</button>
 
 					<!-- Expanded goal results -->
-					{#if expandedWorkflow === run.id && run.stepResults}
+					{#if expandedWorkflow === run.id}
 						<div class="border-t border-stone-100 px-4 md:px-6 py-4">
 							<div class="space-y-2">
-								{#each run.stepResults as stepResult, stepIdx}
+								{#each { length: run.totalSteps } as _, stepIdx}
+									{@const stepResult = run.stepResults?.[stepIdx]}
+									{@const isActiveStep = liveProgress && liveProgress.activeStepIndex === stepIdx && run.status === 'running'}
+									{@const isPending = !stepResult && !isActiveStep}
+									{@const stepConfig = getStepConfig(run, stepIdx)}
+									{@const stepGoal = stepResult?.goal ?? stepResult?.command ?? stepConfig?.goal ?? (typeof stepConfig === 'string' ? stepConfig : null) ?? `Goal ${stepIdx + 1}`}
 									<button
-										onclick={() => openStepModal(run, stepIdx)}
-										class="flex w-full items-start gap-2.5 rounded-xl bg-stone-50 px-3 py-3 text-left transition-colors hover:bg-stone-100"
+										onclick={() => stepResult ? openStepModal(run, stepIdx) : null}
+										class="flex w-full items-start gap-2.5 rounded-xl px-3 py-3 text-left transition-colors
+											{isActiveStep ? 'bg-amber-50 ring-1 ring-amber-200' : 'bg-stone-50 hover:bg-stone-100'}
+											{isPending ? 'opacity-50' : ''}"
+										disabled={!stepResult}
 									>
 										<!-- Goal number badge -->
 										<span
 											class="mt-0.5 shrink-0 rounded-full px-2 py-0.5 font-mono text-[10px]
-												{stepResult.success ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}"
+												{stepResult ? (stepResult.success ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700')
+												: isActiveStep ? 'bg-amber-100 text-amber-700'
+												: 'bg-stone-200 text-stone-500'}"
 										>
 											{stepIdx + 1}
 										</span>
 										<!-- Full goal text -->
 										<div class="min-w-0 flex-1">
 											<p class="text-xs leading-relaxed text-stone-800">
-												{stepResult.goal ?? stepResult.command ?? `Goal ${stepIdx + 1}`}
+												{stepGoal}
 											</p>
-											{#if stepResult.error || (stepResult.message && !stepResult.success)}
+											{#if stepResult?.error || (stepResult?.message && !stepResult?.success)}
 												<p class="mt-1 text-[11px] text-red-500">
 													{stepResult.error ?? stepResult.message}
+												</p>
+											{/if}
+											{#if isActiveStep && liveProgress.totalAttempts > 1}
+												<p class="mt-1 text-[11px] text-amber-600">
+													Attempt {liveProgress.attempt}/{liveProgress.totalAttempts}
 												</p>
 											{/if}
 										</div>
 										<!-- Right side: status + meta -->
 										<div class="flex shrink-0 flex-col items-end gap-1">
-											<span class="flex items-center gap-1 text-xs font-medium {stepResult.success ? 'text-emerald-600' : 'text-red-600'}">
-												<Icon
-													icon={stepResult.success ? 'solar:check-circle-bold-duotone' : 'solar:close-circle-bold-duotone'}
-													class="h-3.5 w-3.5"
-												/>
-												{stepResult.success ? 'OK' : 'Failed'}
-											</span>
-											{#if stepResult.stepsUsed !== undefined}
-												<span class="text-[10px] text-stone-400">
-													{stepResult.stepsUsed} step{stepResult.stepsUsed !== 1 ? 's' : ''}
+											{#if stepResult}
+												<span class="flex items-center gap-1 text-xs font-medium {stepResult.success ? 'text-emerald-600' : 'text-red-600'}">
+													<Icon
+														icon={stepResult.success ? 'solar:check-circle-bold-duotone' : 'solar:close-circle-bold-duotone'}
+														class="h-3.5 w-3.5"
+													/>
+													{stepResult.success ? 'OK' : 'Failed'}
+												</span>
+												{#if stepResult.stepsUsed !== undefined}
+													<span class="text-[10px] text-stone-400">
+														{stepResult.stepsUsed} step{stepResult.stepsUsed !== 1 ? 's' : ''}
+													</span>
+												{/if}
+												{#if stepResult.resolvedBy}
+													<span class="rounded bg-stone-200 px-1.5 py-0.5 text-[9px] text-stone-500">{stepResult.resolvedBy}</span>
+												{/if}
+											{:else if isActiveStep}
+												<span class="flex items-center gap-1 text-xs font-medium text-amber-600">
+													<Icon icon="solar:refresh-circle-bold-duotone" class="h-3.5 w-3.5 animate-spin" />
+													Running
+												</span>
+											{:else}
+												<span class="flex items-center gap-1 text-xs font-medium text-stone-400">
+													<Icon icon="solar:clock-circle-bold-duotone" class="h-3.5 w-3.5" />
+													Pending
 												</span>
 											{/if}
-											{#if stepResult.resolvedBy}
-												<span class="rounded bg-stone-200 px-1.5 py-0.5 text-[9px] text-stone-500">{stepResult.resolvedBy}</span>
-											{/if}
 										</div>
-										<!-- Open indicator -->
-										<Icon icon="solar:alt-arrow-right-linear" class="mt-0.5 h-4 w-4 shrink-0 text-stone-300" />
+										<!-- Open indicator (only for completed steps) -->
+										{#if stepResult}
+											<Icon icon="solar:alt-arrow-right-linear" class="mt-0.5 h-4 w-4 shrink-0 text-stone-300" />
+										{/if}
 									</button>
 								{/each}
 							</div>

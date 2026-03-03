@@ -83,6 +83,7 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
       runId,
       stepIndex: i,
       goal: step.goal,
+      maxRetries: step.retries ?? 0,
     } as any);
 
     const maxRetries = step.retries ?? 0;
