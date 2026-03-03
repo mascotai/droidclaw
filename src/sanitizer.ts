@@ -59,6 +59,29 @@ export function getInteractiveElements(xmlContent: string): UIElement[] {
 
   const elements: UIElement[] = [];
 
+  // Extract screen dimensions from root node bounds (e.g. "[0,0][1080,2400]")
+  // Falls back to common defaults if not found
+  let screenWidth = 1080;
+  let screenHeight = 2400;
+  try {
+    const root = (parsed as any)?.hierarchy ?? parsed;
+    const rootBounds: string = root?.["@_bounds"] ?? "";
+    if (rootBounds) {
+      const rootCoords = rootBounds
+        .replace("][", ",")
+        .replace("[", "")
+        .replace("]", "")
+        .split(",")
+        .map(Number);
+      if (rootCoords.length === 4 && rootCoords[2] > 0 && rootCoords[3] > 0) {
+        screenWidth = rootCoords[2];
+        screenHeight = rootCoords[3];
+      }
+    }
+  } catch {
+    // Use defaults
+  }
+
   function walk(node: any, parentLabel: string, depth: number): void {
     if (!node || typeof node !== "object") return;
 
@@ -102,14 +125,6 @@ export function getInteractiveElements(xmlContent: string): UIElement[] {
             .map(Number);
 
           const [x1, y1, x2, y2] = coords;
-
-          // Get screen dimensions (typically 1080x2400 for most Android devices)
-          // These can be overridden based on the root node or parsed from the XML header
-          let screenWidth = 1080;
-          let screenHeight = 2400;
-
-          // Check if we can extract screen dimensions from the root or context
-          // For now, use defaults but they could be parameterized if needed
 
           // Clamp center coordinates to screen bounds
           const centerX = Math.max(0, Math.min(Math.floor((x1 + x2) / 2), screenWidth - 1));
