@@ -45,6 +45,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.thisux.droidclaw.BuildConfig
 import com.thisux.droidclaw.DroidClawApp
 import com.thisux.droidclaw.connection.ConnectionService
 import com.thisux.droidclaw.model.AgentStep
@@ -173,6 +174,16 @@ fun HomeScreen() {
                         }
                     }
                 }
+
+                // Version info at the bottom of the empty state
+                Text(
+                    text = "v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 16.dp)
+                )
             }
         } else {
             LazyColumn(
