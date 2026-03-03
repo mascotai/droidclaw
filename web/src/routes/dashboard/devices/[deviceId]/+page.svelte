@@ -1063,9 +1063,16 @@
 															<p class="truncate font-mono text-[10px] text-stone-500">
 																{#if elem.type}<span class="text-stone-300">[{(elem.type as string).split('.').pop()}]</span>{/if}
 																{#if elem.action}<span class="text-amber-500/70"> {elem.action}</span>{/if}
-																{#if elem.text}<span class="text-stone-700"> {elem.text}</span>{/if}
+																{#if elem.text}<span class="text-stone-700"> "{elem.text}"</span>{/if}
 																{#if elem.hint}<span class="text-stone-400 italic"> {elem.hint}</span>{/if}
 																{#if elem.id}<span class="text-blue-400"> #{(elem.id as string).split('/').pop()}</span>{/if}
+																{#if elem.center}<span class="text-emerald-500"> @{JSON.stringify(elem.center)}</span>{/if}
+																{#if elem.bounds}<span class="text-stone-300"> [{(elem.bounds as number[]).join(',')}]</span>{/if}
+																{#if elem.checked}<span class="text-orange-400"> checked</span>{/if}
+																{#if elem.focused}<span class="text-cyan-400"> focused</span>{/if}
+																{#if elem.selected}<span class="text-purple-400"> selected</span>{/if}
+																{#if elem.enabled === false}<span class="text-red-400"> disabled</span>{/if}
+																{#if elem.scrollable}<span class="text-teal-400"> scrollable</span>{/if}
 															</p>
 														{/each}
 														{#if obs.elements.length > 15}
@@ -1136,9 +1143,16 @@
 													<p class="truncate font-mono text-[10px] text-stone-500">
 														{#if elem.type}<span class="text-stone-300">[{(elem.type as string).split('.').pop()}]</span>{/if}
 														{#if elem.action}<span class="text-amber-500/70"> {elem.action}</span>{/if}
-														{#if elem.text}<span class="text-stone-700"> {elem.text}</span>{/if}
+														{#if elem.text}<span class="text-stone-700"> "{elem.text}"</span>{/if}
 														{#if elem.hint}<span class="text-stone-400 italic"> {elem.hint}</span>{/if}
 														{#if elem.id}<span class="text-blue-400"> #{(elem.id as string).split('/').pop()}</span>{/if}
+														{#if elem.center}<span class="text-emerald-500"> @{JSON.stringify(elem.center)}</span>{/if}
+														{#if elem.bounds}<span class="text-stone-300"> [{(elem.bounds as number[]).join(',')}]</span>{/if}
+														{#if elem.checked}<span class="text-orange-400"> checked</span>{/if}
+														{#if elem.focused}<span class="text-cyan-400"> focused</span>{/if}
+														{#if elem.selected}<span class="text-purple-400"> selected</span>{/if}
+														{#if elem.enabled === false}<span class="text-red-400"> disabled</span>{/if}
+														{#if elem.scrollable}<span class="text-teal-400"> scrollable</span>{/if}
 													</p>
 												{/each}
 												{#if obs.elements.length > 20}
