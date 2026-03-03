@@ -41,6 +41,16 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
   const { runId, deviceId, persistentDeviceId, userId, name, steps, llmConfig, signal } = options;
   const stepResults: Array<{ goal: string; success: boolean; stepsUsed: number; sessionId?: string; resolvedBy?: string; error?: string; observations?: ScreenObservation[] }> = [];
 
+  /** Send a JSON message to the device WebSocket (if still connected) */
+  const sendToDevice = (msg: Record<string, unknown>) => {
+    const d = sessions.getDevice(deviceId) ?? sessions.getDeviceByPersistentId(persistentDeviceId ?? "");
+    if (!d) return;
+    try { d.ws.send(JSON.stringify(msg)); } catch { /* disconnected */ }
+  };
+
+  // Notify device so it hides the overlay / shows running state
+  sendToDevice({ type: "goal_started", goal: `Workflow: ${name}` });
+
   sessions.notifyDashboard(userId, {
     type: "workflow_started",
     runId,
@@ -53,6 +63,7 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
     if (signal.aborted) {
       await db.update(workflowRun).set({ status: "stopped", completedAt: new Date() }).where(eq(workflowRun.id, runId));
       sessions.notifyDashboard(userId, { type: "workflow_stopped", runId } as any);
+      sendToDevice({ type: "goal_completed", success: false, stepsUsed: 0 });
       return;
     }
 
@@ -158,6 +169,7 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
         success: false,
         stepResults,
       } as any);
+      sendToDevice({ type: "goal_completed", success: false, stepsUsed: stepResults.reduce((sum, r) => sum + r.stepsUsed, 0) });
       return;
     }
   }
@@ -175,4 +187,5 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
     success: true,
     stepResults,
   } as any);
+  sendToDevice({ type: "goal_completed", success: true, stepsUsed: stepResults.reduce((sum, r) => sum + r.stepsUsed, 0) });
 }

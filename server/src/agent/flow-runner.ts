@@ -162,8 +162,18 @@ async function executeFlowStepWs(
 }
 
 export async function runFlowServer(options: RunFlowOptions): Promise<void> {
-  const { runId, deviceId, userId, name, steps, appId, signal } = options;
+  const { runId, deviceId, persistentDeviceId, userId, name, steps, appId, signal } = options;
   const stepResults: Array<{ command: string; success: boolean; message: string }> = [];
+
+  /** Send a JSON message to the device WebSocket (if still connected) */
+  const sendToDevice = (msg: Record<string, unknown>) => {
+    const d = sessions.getDevice(deviceId) ?? sessions.getDeviceByPersistentId(persistentDeviceId ?? "");
+    if (!d) return;
+    try { d.ws.send(JSON.stringify(msg)); } catch { /* disconnected */ }
+  };
+
+  // Notify device so it hides the overlay / shows running state
+  sendToDevice({ type: "goal_started", goal: `Flow: ${name}` });
 
   sessions.notifyDashboard(userId, {
     type: "workflow_started",
@@ -177,6 +187,7 @@ export async function runFlowServer(options: RunFlowOptions): Promise<void> {
     if (signal.aborted) {
       await db.update(workflowRun).set({ status: "stopped", completedAt: new Date() }).where(eq(workflowRun.id, runId));
       sessions.notifyDashboard(userId, { type: "workflow_stopped", runId } as any);
+      sendToDevice({ type: "goal_completed", success: false, stepsUsed: 0 });
       return;
     }
 
@@ -218,6 +229,7 @@ export async function runFlowServer(options: RunFlowOptions): Promise<void> {
           success: false,
           stepResults,
         } as any);
+        sendToDevice({ type: "goal_completed", success: false, stepsUsed: stepResults.length });
         return;
       }
 
@@ -238,6 +250,7 @@ export async function runFlowServer(options: RunFlowOptions): Promise<void> {
         success: false,
         stepResults,
       } as any);
+      sendToDevice({ type: "goal_completed", success: false, stepsUsed: stepResults.length });
       return;
     }
   }
@@ -254,4 +267,5 @@ export async function runFlowServer(options: RunFlowOptions): Promise<void> {
     success: true,
     stepResults,
   } as any);
+  sendToDevice({ type: "goal_completed", success: true, stepsUsed: stepResults.length });
 }
