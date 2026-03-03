@@ -182,7 +182,7 @@ export async function handleDeviceMessage(
         name,
       });
 
-      console.log(`Device authenticated: ${deviceId} (db: ${persistentDeviceId}) for user ${userId}`);
+      console.log(`Device authenticated: ${deviceId} (db: ${persistentDeviceId}) for user ${userId} — app v${msg.deviceInfo?.appVersionName ?? '?'} (code ${msg.deviceInfo?.appVersionCode ?? '?'})`);
     } catch (err) {
       ws.send(
         JSON.stringify({

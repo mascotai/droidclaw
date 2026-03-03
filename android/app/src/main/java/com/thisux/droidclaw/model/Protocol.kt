@@ -18,7 +18,9 @@ data class DeviceInfoMsg(
     val screenWidth: Int,
     val screenHeight: Int,
     val batteryLevel: Int,
-    val isCharging: Boolean
+    val isCharging: Boolean,
+    val appVersionName: String = "",
+    val appVersionCode: Int = 0
 )
 
 @Serializable

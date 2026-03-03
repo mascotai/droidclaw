@@ -6,6 +6,7 @@ import android.content.IntentFilter
 import android.os.BatteryManager
 import android.util.DisplayMetrics
 import android.view.WindowManager
+import com.thisux.droidclaw.BuildConfig
 import com.thisux.droidclaw.model.DeviceInfoMsg
 
 object DeviceInfoHelper {
@@ -28,7 +29,9 @@ object DeviceInfoHelper {
             screenWidth = metrics.widthPixels,
             screenHeight = metrics.heightPixels,
             batteryLevel = batteryPct,
-            isCharging = plugged != 0
+            isCharging = plugged != 0,
+            appVersionName = BuildConfig.VERSION_NAME,
+            appVersionCode = BuildConfig.VERSION_CODE
         )
     }
 

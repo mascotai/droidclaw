@@ -93,6 +93,8 @@ export interface DeviceInfo {
   screenHeight: number;
   batteryLevel: number;
   isCharging: boolean;
+  appVersionName?: string;
+  appVersionCode?: number;
 }
 
 export interface InstalledApp {
