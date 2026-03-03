@@ -58,6 +58,12 @@ class CommandRouter(
                 currentGoal.value = msg.goal ?: ""
                 currentGoalStatus.value = GoalStatus.Running
                 currentSteps.value = emptyList()
+                // Hide overlay during server-driven workflows to prevent
+                // accidental stop_goal from agent taps hitting the pill
+                val goal = msg.goal ?: ""
+                if (goal.startsWith("Workflow:")) {
+                    ConnectionService.instance?.overlay?.hide()
+                }
                 Log.i(TAG, "Goal started: ${msg.goal}")
             }
             "step" -> {
@@ -81,11 +87,13 @@ class CommandRouter(
             }
             "goal_completed" -> {
                 currentGoalStatus.value = if (msg.success == true) GoalStatus.Completed else GoalStatus.Failed
+                ConnectionService.instance?.overlay?.show()
                 ConnectionService.instance?.overlay?.returnToIdle()
                 Log.i(TAG, "Goal completed: success=${msg.success}, steps=${msg.stepsUsed}")
             }
             "goal_failed" -> {
                 currentGoalStatus.value = GoalStatus.Failed
+                ConnectionService.instance?.overlay?.show()
                 ConnectionService.instance?.overlay?.returnToIdle()
                 Log.i(TAG, "Goal failed: ${msg.message}")
             }
