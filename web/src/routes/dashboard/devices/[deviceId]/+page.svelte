@@ -29,14 +29,29 @@
 	const deviceId = page.params.deviceId!;
 
 	// Tabs
-	let activeTab = $state<'overview' | 'goals' | 'workflows' | 'run'>('overview');
-
 	const tabs = [
 		{ id: 'overview' as const, label: 'Overview', icon: 'solar:info-circle-bold-duotone' },
 		{ id: 'goals' as const, label: 'Goals', icon: 'solar:history-bold-duotone' },
 		{ id: 'workflows' as const, label: 'Workflows', icon: 'solar:layers-bold-duotone' },
 		{ id: 'run' as const, label: 'Run', icon: 'solar:play-bold-duotone' }
 	];
+
+	// Tab deeplinking via URL search params
+	const urlTab = new URL(page.url).searchParams.get('tab');
+	let activeTab = $state<'overview' | 'goals' | 'workflows' | 'run'>(
+		tabs.some((t) => t.id === urlTab) ? (urlTab as 'overview' | 'goals' | 'workflows' | 'run') : 'overview'
+	);
+	const urlPage = Number(new URL(page.url).searchParams.get('page')) || 1;
+
+	function setTab(tabId: typeof activeTab) {
+		activeTab = tabId;
+		const u = new URL(window.location.href);
+		u.searchParams.set('tab', tabId);
+		u.searchParams.delete('page'); // reset page on tab switch
+		history.replaceState({}, '', u);
+		track(DEVICE_TAB_CHANGE, { tab: tabId });
+		if (tabId === 'workflows' && !workflowsLoaded) loadWorkflowRuns();
+	}
 
 	// Device data from DB
 	const deviceData = (await getDevice(deviceId)) as {
@@ -79,8 +94,10 @@
 		reasoning: string | null;
 		result: string | null;
 	}
-	const initialSessions = await listDeviceSessions(deviceId);
-	let sessions = $state<Session[]>(initialSessions as Session[]);
+	const initialResult = await listDeviceSessions({ deviceId, page: urlTab === 'goals' ? urlPage : 1 });
+	let sessions = $state<Session[]>(initialResult.items as Session[]);
+	let goalsPage = $state(urlTab === 'goals' ? urlPage : 1);
+	let goalsTotalPages = $state(Math.ceil(initialResult.total / 20) || 1);
 	let expandedSession = $state<string | null>(null);
 	let sessionSteps = $state<Map<string, Step[]>>(new Map());
 
@@ -126,16 +143,43 @@
 	let expandedElementSets = $state<Set<string>>(new Set());
 	let asciiViewKeys = $state<Set<string>>(new Set());
 	let workflowsLoaded = $state(false);
+	let workflowsPage = $state(urlTab === 'workflows' ? urlPage : 1);
+	let workflowsTotalPages = $state(1);
 
 	// Modal state for step deep-dive
 	let modalStep = $state<{ run: WorkflowRun; stepIdx: number; stepResult: StepResult; config: WorkflowStepConfig | null } | null>(null);
 	let modalSteps = $state<Step[]>([]);
 	let modalStepsLoading = $state(false);
 
-	async function loadWorkflowRuns() {
-		const runs = await listWorkflowRuns(deviceId);
-		workflowRuns = runs as WorkflowRun[];
+	async function loadGoals(p: number) {
+		goalsPage = p;
+		const result = await listDeviceSessions({ deviceId, page: p });
+		sessions = result.items as Session[];
+		goalsTotalPages = Math.ceil(result.total / 20) || 1;
+		const u = new URL(window.location.href);
+		u.searchParams.set('tab', 'goals');
+		if (p > 1) {
+			u.searchParams.set('page', String(p));
+		} else {
+			u.searchParams.delete('page');
+		}
+		history.replaceState({}, '', u);
+	}
+
+	async function loadWorkflowRuns(p?: number) {
+		if (p !== undefined) workflowsPage = p;
+		const result = await listWorkflowRuns({ deviceId, page: workflowsPage });
+		workflowRuns = result.items as WorkflowRun[];
+		workflowsTotalPages = Math.ceil(result.total / 20) || 1;
 		workflowsLoaded = true;
+		const u = new URL(window.location.href);
+		u.searchParams.set('tab', 'workflows');
+		if (workflowsPage > 1) {
+			u.searchParams.set('page', String(workflowsPage));
+		} else {
+			u.searchParams.delete('page');
+		}
+		history.replaceState({}, '', u);
 	}
 
 	function toggleWorkflow(runId: string) {
@@ -286,6 +330,11 @@
 	}
 
 	onMount(() => {
+		// Load workflows if deeplinked to workflows tab
+		if (activeTab === 'workflows' && !workflowsLoaded) {
+			loadWorkflowRuns(urlPage);
+		}
+
 		const unsub = dashboardWs.subscribe((msg) => {
 			switch (msg.type) {
 				case 'device_status': {
@@ -323,20 +372,23 @@
 					const success = msg.success as boolean;
 					runStatus = success ? 'completed' : 'failed';
 					track(DEVICE_GOAL_COMPLETE, { success });
-					listDeviceSessions(deviceId).then((s) => {
-						sessions = s as Session[];
+					listDeviceSessions({ deviceId, page: goalsPage }).then((r) => {
+						sessions = r.items as Session[];
+						goalsTotalPages = Math.ceil(r.total / 20) || 1;
 					});
 					break;
 				}
 				case 'goal_scheduled': {
-					listDeviceSessions(deviceId).then((s) => {
-						sessions = s as Session[];
+					listDeviceSessions({ deviceId, page: goalsPage }).then((r) => {
+						sessions = r.items as Session[];
+						goalsTotalPages = Math.ceil(r.total / 20) || 1;
 					});
 					break;
 				}
 				case 'goal_cancelled': {
-					listDeviceSessions(deviceId).then((s) => {
-						sessions = s as Session[];
+					listDeviceSessions({ deviceId, page: goalsPage }).then((r) => {
+						sessions = r.items as Session[];
+						goalsTotalPages = Math.ceil(r.total / 20) || 1;
 					});
 					break;
 				}
@@ -447,13 +499,7 @@
 <div class="mb-6 flex gap-1 rounded-full bg-white p-1">
 	{#each tabs as tab}
 		<button
-			onclick={() => {
-				activeTab = tab.id;
-				track(DEVICE_TAB_CHANGE, { tab: tab.id });
-				if (tab.id === 'workflows' && !workflowsLoaded) {
-					loadWorkflowRuns();
-				}
-			}}
+			onclick={() => setTab(tab.id)}
 			class="flex flex-1 items-center justify-center gap-2 rounded-full px-3 py-2 text-sm font-medium transition-colors
 				{activeTab === tab.id
 				? 'bg-stone-900 text-white'
@@ -668,7 +714,9 @@
 									<button
 										onclick={async () => {
 											await cancelScheduledGoal({ sessionId: sess.id });
-											sessions = (await listDeviceSessions(deviceId)) as Session[];
+											const r = await listDeviceSessions({ deviceId, page: goalsPage });
+											sessions = r.items as Session[];
+											goalsTotalPages = Math.ceil(r.total / 20) || 1;
 										}}
 										class="rounded-lg bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-100"
 									>
@@ -782,6 +830,19 @@
 				</div>
 			{/each}
 		</div>
+		{#if goalsTotalPages > 1}
+			<div class="mt-3 flex items-center justify-between rounded-2xl bg-white px-4 md:px-6 py-3">
+				<button onclick={() => loadGoals(goalsPage - 1)} disabled={goalsPage <= 1}
+					class="text-sm text-stone-500 hover:text-stone-700 disabled:opacity-30 transition-colors">
+					← Previous
+				</button>
+				<span class="text-xs text-stone-400">Page {goalsPage} of {goalsTotalPages}</span>
+				<button onclick={() => loadGoals(goalsPage + 1)} disabled={goalsPage >= goalsTotalPages}
+					class="text-sm text-stone-500 hover:text-stone-700 disabled:opacity-30 transition-colors">
+					Next →
+				</button>
+			</div>
+		{/if}
 	{/if}
 
 <!-- Workflows Tab -->
@@ -906,6 +967,19 @@
 				</div>
 			{/each}
 		</div>
+		{#if workflowsTotalPages > 1}
+			<div class="mt-3 flex items-center justify-between rounded-2xl bg-white px-4 md:px-6 py-3">
+				<button onclick={() => loadWorkflowRuns(workflowsPage - 1)} disabled={workflowsPage <= 1}
+					class="text-sm text-stone-500 hover:text-stone-700 disabled:opacity-30 transition-colors">
+					← Previous
+				</button>
+				<span class="text-xs text-stone-400">Page {workflowsPage} of {workflowsTotalPages}</span>
+				<button onclick={() => loadWorkflowRuns(workflowsPage + 1)} disabled={workflowsPage >= workflowsTotalPages}
+					class="text-sm text-stone-500 hover:text-stone-700 disabled:opacity-30 transition-colors">
+					Next →
+				</button>
+			</div>
+		{/if}
 	{/if}
 
 <!-- Step Detail Modal -->

@@ -119,19 +119,32 @@ export const getDeviceStats = query(v.string(), async (deviceId) => {
 	}
 });
 
-export const listDeviceSessions = query(v.string(), async (deviceId) => {
-	const { locals } = getRequestEvent();
-	if (!locals.user) return [];
+const PAGE_SIZE = 20;
 
-	const sessions = await db
-		.select()
-		.from(agentSession)
-		.where(and(eq(agentSession.deviceId, deviceId), eq(agentSession.userId, locals.user.id)))
-		.orderBy(desc(agentSession.startedAt))
-		.limit(50);
+export const listDeviceSessions = query(
+	v.object({ deviceId: v.string(), page: v.optional(v.number(), 1) }),
+	async ({ deviceId, page }) => {
+		const { locals } = getRequestEvent();
+		if (!locals.user) return { items: [], total: 0 };
+		const offset = (Math.max(1, page ?? 1) - 1) * PAGE_SIZE;
 
-	return sessions;
-});
+		const [sessions, totalResult] = await Promise.all([
+			db
+				.select()
+				.from(agentSession)
+				.where(and(eq(agentSession.deviceId, deviceId), eq(agentSession.userId, locals.user.id)))
+				.orderBy(desc(agentSession.startedAt))
+				.limit(PAGE_SIZE)
+				.offset(offset),
+			db
+				.select({ count: count() })
+				.from(agentSession)
+				.where(and(eq(agentSession.deviceId, deviceId), eq(agentSession.userId, locals.user.id)))
+		]);
+
+		return { items: sessions, total: Number(totalResult[0].count) };
+	}
+);
 
 export const listSessionSteps = query(
 	v.object({ deviceId: v.string(), sessionId: v.string() }),
@@ -158,19 +171,30 @@ export const listSessionSteps = query(
 	}
 );
 
-export const listWorkflowRuns = query(v.string(), async (deviceId) => {
-	const { locals } = getRequestEvent();
-	if (!locals.user) return [];
+export const listWorkflowRuns = query(
+	v.object({ deviceId: v.string(), page: v.optional(v.number(), 1) }),
+	async ({ deviceId, page }) => {
+		const { locals } = getRequestEvent();
+		if (!locals.user) return { items: [], total: 0 };
+		const offset = (Math.max(1, page ?? 1) - 1) * PAGE_SIZE;
 
-	const runs = await db
-		.select()
-		.from(workflowRun)
-		.where(and(eq(workflowRun.deviceId, deviceId), eq(workflowRun.userId, locals.user.id)))
-		.orderBy(desc(workflowRun.startedAt))
-		.limit(50);
+		const [runs, totalResult] = await Promise.all([
+			db
+				.select()
+				.from(workflowRun)
+				.where(and(eq(workflowRun.deviceId, deviceId), eq(workflowRun.userId, locals.user.id)))
+				.orderBy(desc(workflowRun.startedAt))
+				.limit(PAGE_SIZE)
+				.offset(offset),
+			db
+				.select({ count: count() })
+				.from(workflowRun)
+				.where(and(eq(workflowRun.deviceId, deviceId), eq(workflowRun.userId, locals.user.id)))
+		]);
 
-	return runs;
-});
+		return { items: runs, total: Number(totalResult[0].count) };
+	}
+);
 
 // ─── Commands (write operations) ─────────────────────────────
 
