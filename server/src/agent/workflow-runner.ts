@@ -160,8 +160,12 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
     for (let i = 0; i < steps.length; i++) {
       let signal = getCurrentSignal(trackingKey, options.signal);
 
+      const activeAtTop = activeSessions.get(trackingKey);
+      console.log(`[Workflow ${runId}] Step ${i}: signal.aborted=${signal.aborted}, activeSession=${!!activeAtTop}, deviceDisconnected=${activeAtTop?.deviceDisconnected}, isUserStop=${isUserStop(trackingKey)}`);
+
       // Check for user-initiated stop at the top of each step
       if (signal.aborted && isUserStop(trackingKey)) {
+        console.log(`[Workflow ${runId}] STOPPING at step ${i}: signal aborted + isUserStop=true`);
         await db.update(workflowRun).set({ status: "stopped", stepResults, completedAt: new Date() }).where(eq(workflowRun.id, runId));
         sessions.notifyDashboard(userId, { type: "workflow_stopped", runId } as any);
         sendToDevice({ type: "goal_completed", success: false, stepsUsed: 0 });

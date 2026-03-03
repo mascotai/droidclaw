@@ -335,7 +335,7 @@ export async function handleDeviceMessage(
 
       const active = key ? activeSessions.get(key) : undefined;
       if (active) {
-        console.log(`[Pipeline] Stop requested for device ${deviceId} (key: ${key})`);
+        console.log(`[Pipeline] Stop requested for device ${deviceId} (key: ${key}), goal="${active.goal}"`);
         active.deviceDisconnected = false; // user-initiated stop, not a disconnect
         active.abort.abort();
         // Don't delete from activeSessions here — let the pipeline's
@@ -530,6 +530,7 @@ export function handleDeviceClose(
       : null;
   if (closeKey) {
     const active = activeSessions.get(closeKey)!;
+    console.log(`[Device] handleDeviceClose: aborting active session for key=${closeKey}, goal="${active.goal}", setting deviceDisconnected=true`);
     // Mark as device disconnect so workflow runners can wait for reconnection
     // instead of treating this as a user-initiated stop
     active.deviceDisconnected = true;
