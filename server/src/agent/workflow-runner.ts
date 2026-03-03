@@ -7,6 +7,17 @@ import { activeSessions } from "./active-sessions.js";
 import type { LLMConfig } from "./llm.js";
 import type { ScreenObservation } from "./loop.js";
 
+/** In-memory ring buffer for workflow debug logs (last 200 entries). */
+const _debugLog: string[] = [];
+function wfLog(msg: string) {
+  const ts = new Date().toISOString();
+  const entry = `[${ts}] ${msg}`;
+  _debugLog.push(entry);
+  if (_debugLog.length > 200) _debugLog.shift();
+  console.log(msg);
+}
+export function getWorkflowDebugLog(): string[] { return _debugLog; }
+
 export interface WorkflowStep {
   goal: string;
   app?: string;
@@ -161,11 +172,11 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
       let signal = getCurrentSignal(trackingKey, options.signal);
 
       const activeAtTop = activeSessions.get(trackingKey);
-      console.log(`[Workflow ${runId}] Step ${i}: signal.aborted=${signal.aborted}, activeSession=${!!activeAtTop}, deviceDisconnected=${activeAtTop?.deviceDisconnected}, isUserStop=${isUserStop(trackingKey)}`);
+      wfLog(`[Workflow ${runId}] Step ${i}: signal.aborted=${signal.aborted}, activeSession=${!!activeAtTop}, deviceDisconnected=${activeAtTop?.deviceDisconnected}, isUserStop=${isUserStop(trackingKey)}, trackingKey=${trackingKey}`);
 
       // Check for user-initiated stop at the top of each step
       if (signal.aborted && isUserStop(trackingKey)) {
-        console.log(`[Workflow ${runId}] STOPPING at step ${i}: signal aborted + isUserStop=true`);
+        wfLog(`[Workflow ${runId}] STOPPING at step ${i}: signal aborted + isUserStop=true, activeSession=${!!activeSessions.get(trackingKey)}`);
         await db.update(workflowRun).set({ status: "stopped", stepResults, completedAt: new Date() }).where(eq(workflowRun.id, runId));
         sessions.notifyDashboard(userId, { type: "workflow_stopped", runId } as any);
         sendToDevice({ type: "goal_completed", success: false, stepsUsed: 0 });
