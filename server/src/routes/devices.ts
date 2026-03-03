@@ -60,6 +60,39 @@ devices.get("/", async (c) => {
   );
 });
 
+/** Get app version info for a specific device (from last handshake) */
+devices.get("/:deviceId/version", async (c) => {
+  const user = c.get("user");
+  const deviceId = c.req.param("deviceId");
+
+  const rows = await db
+    .select({
+      name: device.name,
+      status: device.status,
+      deviceInfo: device.deviceInfo,
+      lastSeen: device.lastSeen,
+    })
+    .from(device)
+    .where(and(eq(device.id, deviceId), eq(device.userId, user.id)))
+    .limit(1);
+
+  if (rows.length === 0) {
+    return c.json({ error: "Device not found" }, 404);
+  }
+
+  const d = rows[0];
+  const info = d.deviceInfo as Record<string, unknown> | null;
+
+  return c.json({
+    deviceId,
+    name: d.name,
+    status: d.status,
+    appVersionName: info?.appVersionName ?? null,
+    appVersionCode: info?.appVersionCode ?? null,
+    lastSeen: d.lastSeen?.toISOString() ?? null,
+  });
+});
+
 /** List agent sessions for a specific device */
 devices.get("/:deviceId/sessions", async (c) => {
   const user = c.get("user");
