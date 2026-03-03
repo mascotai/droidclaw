@@ -43,6 +43,13 @@
       "when": 1772028113393,
       "tag": "0005_brave_lionheart",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1772700000000,
+      "tag": "0006_scope_separate_api_keys",
+      "breakpoints": true
     }
   ]
 }

@@ -127,6 +127,11 @@
 						<div>
 							<div class="flex items-center gap-2">
 								<p class="font-medium text-stone-900">{key.name ?? 'Unnamed Key'}</p>
+								{#if key.type === 'device'}
+									<span class="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-700">Device</span>
+								{:else}
+									<span class="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-700">User</span>
+								{/if}
 								{#if key.enabled}
 									<span class="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">Active</span>
 								{:else}

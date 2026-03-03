@@ -97,7 +97,7 @@ export async function handleDeviceMessage(
       // Hash the incoming key and look it up directly in the DB
       const hashedKey = await hashApiKey(msg.apiKey);
       const rows = await db
-        .select({ id: apikey.id, userId: apikey.userId, enabled: apikey.enabled, expiresAt: apikey.expiresAt })
+        .select({ id: apikey.id, userId: apikey.userId, enabled: apikey.enabled, expiresAt: apikey.expiresAt, type: apikey.type })
         .from(apikey)
         .where(eq(apikey.key, hashedKey))
         .limit(1);
@@ -118,6 +118,17 @@ export async function handleDeviceMessage(
           JSON.stringify({
             type: "auth_error",
             message: "API key expired",
+          })
+        );
+        return;
+      }
+
+      // Reject non-device keys (user keys must not work for WS device connections)
+      if (rows[0].type && rows[0].type !== 'device') {
+        ws.send(
+          JSON.stringify({
+            type: "auth_error",
+            message: "This key is not authorized for device connections. Use a device key.",
           })
         );
         return;

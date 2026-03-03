@@ -1086,7 +1086,7 @@
 																	{#if elem.hint}<span class="text-stone-400 italic"> {elem.hint}</span>{/if}
 																	{#if elem.id}<span class="text-blue-400"> #{(elem.id as string).split('/').pop()}</span>{/if}
 																	{#if elem.center}<span class="text-emerald-500"> @{JSON.stringify(elem.center)}</span>{/if}
-																	{#if elem.bounds}<span class="text-stone-300"> [{(elem.bounds as number[]).join(',')}]</span>{/if}
+																	{#if elem.bounds}<span class="text-stone-300"> [{typeof elem.bounds === 'string' ? elem.bounds : (elem.bounds as number[]).join(',')}]</span>{/if}
 																	{#if elem.checked}<span class="text-orange-400"> checked</span>{/if}
 																	{#if elem.focused}<span class="text-cyan-400"> focused</span>{/if}
 																	{#if elem.selected}<span class="text-purple-400"> selected</span>{/if}
@@ -1184,7 +1184,7 @@
 															{#if elem.hint}<span class="text-stone-400 italic"> {elem.hint}</span>{/if}
 															{#if elem.id}<span class="text-blue-400"> #{(elem.id as string).split('/').pop()}</span>{/if}
 															{#if elem.center}<span class="text-emerald-500"> @{JSON.stringify(elem.center)}</span>{/if}
-															{#if elem.bounds}<span class="text-stone-300"> [{(elem.bounds as number[]).join(',')}]</span>{/if}
+															{#if elem.bounds}<span class="text-stone-300"> [{typeof elem.bounds === 'string' ? elem.bounds : (elem.bounds as number[]).join(',')}]</span>{/if}
 															{#if elem.checked}<span class="text-orange-400"> checked</span>{/if}
 															{#if elem.focused}<span class="text-cyan-400"> focused</span>{/if}
 															{#if elem.selected}<span class="text-purple-400"> selected</span>{/if}

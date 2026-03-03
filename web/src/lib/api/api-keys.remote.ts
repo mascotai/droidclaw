@@ -37,7 +37,8 @@ export const listKeys = query(async () => {
 			name: apikey.name,
 			start: apikey.start,
 			enabled: apikey.enabled,
-			createdAt: apikey.createdAt
+			createdAt: apikey.createdAt,
+			type: apikey.type
 		})
 		.from(apikey)
 		.where(eq(apikey.userId, locals.user.id))
@@ -60,6 +61,7 @@ export const createKey = form(createKeySchema, async ({ name }) => {
 		start: rawKey.slice(0, prefix.length + 6),
 		key: hashedKey,
 		userId: locals.user.id,
+		type: 'user',
 		enabled: true,
 		rateLimitEnabled: false,
 		rateLimitTimeWindow: 86400000,

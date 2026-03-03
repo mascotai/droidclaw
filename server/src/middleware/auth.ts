@@ -55,7 +55,7 @@ export async function sessionMiddleware(c: Context, next: Next) {
     const hashedKey = await hashApiKey(token);
 
     const rows = await db
-      .select({ id: apikey.id, userId: apikey.userId, enabled: apikey.enabled, expiresAt: apikey.expiresAt })
+      .select({ id: apikey.id, userId: apikey.userId, enabled: apikey.enabled, expiresAt: apikey.expiresAt, type: apikey.type })
       .from(apikey)
       .where(eq(apikey.key, hashedKey))
       .limit(1);
@@ -71,6 +71,11 @@ export async function sessionMiddleware(c: Context, next: Next) {
     }
     if (keyRow.expiresAt && keyRow.expiresAt < new Date()) {
       return c.json({ error: "API key expired" }, 401);
+    }
+
+    // Reject device keys from HTTP API access
+    if (keyRow.type === 'device') {
+      return c.json({ error: "Device keys cannot be used for API access. Use a user API key." }, 403);
     }
 
     const users = await db

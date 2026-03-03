@@ -1,9 +1,31 @@
 import { Hono } from "hono";
 import { sessionMiddleware, type AuthEnv } from "../middleware/auth.js";
 import { db } from "../db.js";
-import { pairingCode } from "../schema.js";
+import { pairingCode, apikey } from "../schema.js";
 import { eq, and, gt } from "drizzle-orm";
-import { auth } from "../auth.js";
+
+/**
+ * Hash an API key the same way better-auth does:
+ * SHA-256 → base64url (no padding).
+ */
+async function hashApiKey(key: string): Promise<string> {
+  const data = new TextEncoder().encode(key);
+  const hash = await crypto.subtle.digest("SHA-256", data);
+  return btoa(String.fromCharCode(...new Uint8Array(hash)))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
+
+/** Generate a random API key string: prefix + 32 random hex chars */
+function generateRawKey(prefix: string): string {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  const hex = Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+  return `${prefix}${hex}`;
+}
 
 // ── Rate limiter for claim endpoint ──
 const claimAttempts = new Map<string, { count: number; resetAt: number }>();
@@ -62,13 +84,24 @@ pairing.post("/claim", async (c) => {
 
   const row = rows[0];
 
-  // Generate API key for this user
-  const result = await auth.api.createApiKey({
-    body: {
-      name: "Paired Device",
-      prefix: "droidclaw_",
-      userId: row.userId,
-    },
+  // Generate a device API key with direct DB insert (type: 'device')
+  const prefix = 'droidclaw_dev_';
+  const rawKey = generateRawKey(prefix);
+  const hashedKey = await hashApiKey(rawKey);
+  const keyCreatedAt = new Date();
+
+  await db.insert(apikey).values({
+    id: crypto.randomUUID(),
+    name: 'Paired Device',
+    prefix,
+    start: rawKey.slice(0, prefix.length + 6),
+    key: hashedKey,
+    userId: row.userId,
+    type: 'device',
+    enabled: true,
+    rateLimitEnabled: false,
+    createdAt: keyCreatedAt,
+    updatedAt: keyCreatedAt,
   });
 
   // Delete the used code
@@ -76,7 +109,7 @@ pairing.post("/claim", async (c) => {
 
   const wsUrl = process.env.WS_URL ?? "wss://tunnel.droidclaw.ai";
 
-  return c.json({ apiKey: result.key, wsUrl });
+  return c.json({ apiKey: rawKey, wsUrl });
 });
 
 /** POST /pairing/create — generate a 6-digit pairing code (authed) */

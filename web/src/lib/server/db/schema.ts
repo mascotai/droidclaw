@@ -86,7 +86,8 @@ export const apikey = pgTable('apikey', {
 	createdAt: timestamp('created_at').notNull(),
 	updatedAt: timestamp('updated_at').notNull(),
 	permissions: text('permissions'),
-	metadata: text('metadata')
+	metadata: text('metadata'),
+	type: text('type').default('user')  // "user" | "device"
 });
 
 export const llmConfig = pgTable('llm_config', {
