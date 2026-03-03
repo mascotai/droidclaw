@@ -997,7 +997,7 @@
 					{#if expandedWorkflow === run.id}
 						<div class="border-t border-stone-100 px-4 md:px-6 py-4">
 							<div class="space-y-2">
-								{#each { length: run.totalSteps } as _, stepIdx}
+								{#each Array.from({ length: run.totalSteps }, (_, i) => i) as stepIdx}
 									{@const stepResult = run.stepResults?.[stepIdx]}
 									{@const isActiveStep = liveProgress && liveProgress.activeStepIndex === stepIdx && run.status === 'running'}
 									{@const isPending = !stepResult && !isActiveStep}
