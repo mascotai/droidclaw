@@ -12,8 +12,8 @@ android {
         applicationId = "com.thisux.droidclaw"
         minSdk = 24
         targetSdk = 36
-        versionCode = (System.getenv("VERSION_CODE")?.toIntOrNull()) ?: 19
-        versionName = System.getenv("VERSION_NAME") ?: "1.18"
+        versionCode = (System.getenv("VERSION_CODE")?.toIntOrNull()) ?: 20
+        versionName = System.getenv("VERSION_NAME") ?: "1.19"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

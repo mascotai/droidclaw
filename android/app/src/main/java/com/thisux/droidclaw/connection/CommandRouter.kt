@@ -58,12 +58,9 @@ class CommandRouter(
                 currentGoal.value = msg.goal ?: ""
                 currentGoalStatus.value = GoalStatus.Running
                 currentSteps.value = emptyList()
-                // Hide overlay during server-driven workflows to prevent
+                // Hide overlay during ALL goals to prevent
                 // accidental stop_goal from agent taps hitting the pill
-                val goal = msg.goal ?: ""
-                if (goal.startsWith("Workflow:")) {
-                    ConnectionService.instance?.overlay?.hide()
-                }
+                ConnectionService.instance?.overlay?.hide()
                 Log.i(TAG, "Goal started: ${msg.goal}")
             }
             "step" -> {

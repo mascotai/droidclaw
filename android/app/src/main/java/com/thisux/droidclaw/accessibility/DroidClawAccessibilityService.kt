@@ -42,13 +42,37 @@ class DroidClawAccessibilityService : AccessibilityService() {
         Log.i(TAG, "Accessibility service connected")
         instance = this
         isRunning.value = true
+        disableAutofill()
+    }
+
+    /**
+     * Disable the system autofill service to prevent credential manager / autofill
+     * popups from appearing when the agent types into text fields.
+     * Uses 'settings put' which works without root on managed devices (Esper).
+     */
+    private fun disableAutofill() {
+        try {
+            Runtime.getRuntime().exec(arrayOf("settings", "put", "secure", "autofill_service", ""))
+            Log.i(TAG, "Autofill service disabled via settings")
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to disable autofill: ${e.message}")
+        }
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         // Track the current Activity name from window state changes
         if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             val className = event.className?.toString()
-            Log.d(TAG, "TYPE_WINDOW_STATE_CHANGED: className=$className pkg=${event.packageName}")
+            val pkgName = event.packageName?.toString()
+            Log.d(TAG, "TYPE_WINDOW_STATE_CHANGED: className=$className pkg=$pkgName")
+
+            // Auto-dismiss autofill / credential manager popups
+            if (isAutofillPopup(pkgName, className)) {
+                Log.i(TAG, "Dismissing autofill/credential popup: pkg=$pkgName class=$className")
+                performGlobalAction(GLOBAL_ACTION_BACK)
+                return
+            }
+
             // Only update if it looks like an Activity (contains a dot — package-qualified class name)
             // This filters out things like "android.widget.PopupWindow" from dialogs
             if (className != null && className.contains('.') && !className.startsWith("android.widget.") && !className.startsWith("android.view.")) {
@@ -56,6 +80,37 @@ class DroidClawAccessibilityService : AccessibilityService() {
                 Log.i(TAG, "Activity updated (event): $currentActivityName")
             }
         }
+    }
+
+    /** Check if a window event comes from an autofill or credential manager popup */
+    private fun isAutofillPopup(pkgName: String?, className: String?): Boolean {
+        if (pkgName == null) return false
+        // Known autofill/credential manager packages
+        val autofillPackages = setOf(
+            "com.google.android.gms",           // Google Credential Manager / Autofill
+            "com.samsung.android.autofill",      // Samsung Autofill
+            "com.samsung.android.vaultkeeper",   // Samsung Pass / Vault
+            "com.samsung.android.samsungpass",   // Samsung Pass
+            "com.samsung.android.samsungpassautofill",
+        )
+        // Match by package
+        if (pkgName in autofillPackages) {
+            // Only dismiss if it looks like an autofill/credential UI, not regular GMS
+            val isAutofillClass = className?.let { cn ->
+                cn.contains("autofill", ignoreCase = true) ||
+                cn.contains("credential", ignoreCase = true) ||
+                cn.contains("password", ignoreCase = true) ||
+                cn.contains("Fido", ignoreCase = true) ||
+                cn.contains("SavePassword", ignoreCase = true) ||
+                cn.contains("CredentialProvider", ignoreCase = true) ||
+                cn.contains("HalfSheetActivity", ignoreCase = true) ||
+                cn.contains("BottomSheet", ignoreCase = true)
+            } ?: false
+            // For Samsung autofill-specific packages, always dismiss
+            if (pkgName != "com.google.android.gms") return true
+            return isAutofillClass
+        }
+        return false
     }
 
     /**
