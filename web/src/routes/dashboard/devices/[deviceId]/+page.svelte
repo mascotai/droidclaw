@@ -51,32 +51,19 @@
 		history.replaceState({}, '', u);
 		track(DEVICE_TAB_CHANGE, { tab: tabId });
 		if (tabId === 'workflows' && !workflowsLoaded) loadWorkflowRuns();
+		if (tabId === 'goals' && !goalsLoaded) loadGoals(1);
 	}
 
-	// Device data from DB
-	const deviceData = (await getDevice(deviceId)) as {
-		deviceId: string;
-		name: string;
-		status: string;
-		model: string | null;
-		manufacturer: string | null;
-		androidVersion: string | null;
-		screenWidth: number | null;
-		screenHeight: number | null;
-		batteryLevel: number | null;
-		isCharging: boolean;
-		lastSeen: string;
-		installedApps: Array<{ packageName: string; label: string }>;
-	} | null;
+	// Preload tab data on hover — so it's ready by the time user clicks
+	let prefetchedTabs = new Set<string>();
+	function prefetchTab(tabId: string) {
+		if (prefetchedTabs.has(tabId) || tabId === activeTab) return;
+		prefetchedTabs.add(tabId);
+		if (tabId === 'workflows' && !workflowsLoaded) loadWorkflowRuns();
+		if (tabId === 'goals' && !goalsLoaded) loadGoals(1);
+	}
 
-	// Device stats
-	const stats = (await getDeviceStats(deviceId)) as {
-		totalSessions: number;
-		successRate: number;
-		avgSteps: number;
-	} | null;
-
-	// Session history
+	// ─── Types ───────────────────────────────────────────────────
 	interface Session {
 		id: string;
 		goal: string;
@@ -94,21 +81,6 @@
 		reasoning: string | null;
 		result: string | null;
 	}
-	const initialResult = await listDeviceSessions({ deviceId, page: urlTab === 'goals' ? urlPage : 1 });
-	let sessions = $state<Session[]>(initialResult.items as Session[]);
-	let goalsPage = $state(urlTab === 'goals' ? urlPage : 1);
-	let goalsTotalPages = $state(Math.ceil(initialResult.total / 20) || 1);
-	let expandedSession = $state<string | null>(null);
-	let sessionSteps = $state<Map<string, Step[]>>(new Map());
-
-	// Investigate state
-	let investigating = $state<string | null>(null);
-	let investigateResults = $state<
-		Map<string, { packageName: string; hints: { id: string; hint: string }[]; analysis: string }>
-	>(new Map());
-	let investigateError = $state<string | null>(null);
-
-	// Workflow runs state
 	interface WorkflowStepConfig {
 		goal: string;
 		app?: string;
@@ -142,18 +114,100 @@
 	interface WorkflowLiveProgress {
 		activeStepIndex: number;
 		activeStepGoal: string;
-		attempt: number;      // current attempt (1-based, starts at 1)
-		totalAttempts: number; // total possible attempts (retries + 1)
-		stepsUsedInAttempt: number; // agent steps used in current attempt
+		attempt: number;
+		totalAttempts: number;
+		stepsUsedInAttempt: number;
 	}
+
+	// ─── Parallel data loading — only block on what's needed ──
+	// Device info is needed for the header on every tab, so always await it.
+	// Stats + sessions/workflows are loaded in parallel, and we only block
+	// on the data the active tab actually needs.
+
+	const isWorkflowsTab = activeTab === 'workflows';
+	const isGoalsTab = activeTab === 'goals';
+
+	// Fire ALL requests in parallel — no waterfalls
+	const deviceDataPromise = getDevice(deviceId);
+	const statsPromise = getDeviceStats(deviceId);
+	const sessionsPromise = listDeviceSessions({ deviceId, page: isGoalsTab ? urlPage : 1 });
+	const workflowsPromise = isWorkflowsTab ? listWorkflowRuns({ deviceId, page: urlPage }) : null;
+
+	// Always await device data (needed for header)
+	const deviceData = (await deviceDataPromise) as {
+		deviceId: string;
+		name: string;
+		status: string;
+		model: string | null;
+		manufacturer: string | null;
+		androidVersion: string | null;
+		screenWidth: number | null;
+		screenHeight: number | null;
+		batteryLevel: number | null;
+		isCharging: boolean;
+		lastSeen: string;
+		installedApps: Array<{ packageName: string; label: string }>;
+	} | null;
+
+	// For the active tab, await its data; for other tabs, resolve in background
+	let stats = $state<{ totalSessions: number; successRate: number; avgSteps: number } | null>(null);
+	let sessions = $state<Session[]>([]);
+	let goalsPage = $state(isGoalsTab ? urlPage : 1);
+	let goalsTotalPages = $state(1);
+	let goalsLoaded = $state(false);
+	let expandedSession = $state<string | null>(null);
+	let sessionSteps = $state<Map<string, Step[]>>(new Map());
+
+	// Investigate state
+	let investigating = $state<string | null>(null);
+	let investigateResults = $state<
+		Map<string, { packageName: string; hints: { id: string; hint: string }[]; analysis: string }>
+	>(new Map());
+	let investigateError = $state<string | null>(null);
+
+	// Workflow state
 	let workflowRuns = $state<WorkflowRun[]>([]);
 	let workflowLiveProgress = $state<Record<string, WorkflowLiveProgress>>({});
 	let expandedWorkflow = $state<string | null>(null);
 	let expandedElementSets = $state<Set<string>>(new Set());
 	let asciiViewKeys = $state<Set<string>>(new Set());
 	let workflowsLoaded = $state(false);
-	let workflowsPage = $state(urlTab === 'workflows' ? urlPage : 1);
+	let workflowsPage = $state(isWorkflowsTab ? urlPage : 1);
 	let workflowsTotalPages = $state(1);
+
+	// Page-level cache: remember loaded pages so pagination back is instant
+	let workflowPageCache = $state<Map<number, { items: WorkflowRun[]; total: number }>>(new Map());
+
+	// Resolve the data for active tab immediately, background-fill the rest
+	if (isWorkflowsTab) {
+		// Workflows tab — await workflows, background-fill stats & sessions
+		const wfResult = await workflowsPromise!;
+		workflowRuns = wfResult.items as WorkflowRun[];
+		workflowsTotalPages = Math.ceil(wfResult.total / 20) || 1;
+		workflowsLoaded = true;
+		workflowPageCache.set(urlPage, { items: workflowRuns, total: wfResult.total });
+		// Background: stats + sessions (don't block render)
+		statsPromise.then((s) => { stats = s as typeof stats; });
+		sessionsPromise.then((r) => {
+			sessions = r.items as Session[];
+			goalsTotalPages = Math.ceil(r.total / 20) || 1;
+			goalsLoaded = true;
+		});
+	} else if (isGoalsTab) {
+		// Goals tab — await sessions, background-fill stats
+		const [sessResult, statsResult] = await Promise.all([sessionsPromise, statsPromise]);
+		sessions = sessResult.items as Session[];
+		goalsTotalPages = Math.ceil(sessResult.total / 20) || 1;
+		goalsLoaded = true;
+		stats = statsResult as typeof stats;
+	} else {
+		// Overview / Run tab — await stats + sessions together
+		const [sessResult, statsResult] = await Promise.all([sessionsPromise, statsPromise]);
+		sessions = sessResult.items as Session[];
+		goalsTotalPages = Math.ceil(sessResult.total / 20) || 1;
+		goalsLoaded = true;
+		stats = statsResult as typeof stats;
+	}
 
 	// Modal state for step deep-dive
 	let modalStep = $state<{ run: WorkflowRun; stepIdx: number; stepResult: StepResult; config: WorkflowStepConfig | null } | null>(null);
@@ -165,6 +219,7 @@
 		const result = await listDeviceSessions({ deviceId, page: p });
 		sessions = result.items as Session[];
 		goalsTotalPages = Math.ceil(result.total / 20) || 1;
+		goalsLoaded = true;
 		const u = new URL(window.location.href);
 		u.searchParams.set('tab', 'goals');
 		if (p > 1) {
@@ -175,12 +230,21 @@
 		history.replaceState({}, '', u);
 	}
 
-	async function loadWorkflowRuns(p?: number) {
+	async function loadWorkflowRuns(p?: number, bypassCache = false) {
 		if (p !== undefined) workflowsPage = p;
-		const result = await listWorkflowRuns({ deviceId, page: workflowsPage });
-		workflowRuns = result.items as WorkflowRun[];
-		workflowsTotalPages = Math.ceil(result.total / 20) || 1;
-		workflowsLoaded = true;
+		// Check page cache first for instant pagination
+		if (!bypassCache && workflowPageCache.has(workflowsPage)) {
+			const cached = workflowPageCache.get(workflowsPage)!;
+			workflowRuns = cached.items;
+			workflowsTotalPages = Math.ceil(cached.total / 20) || 1;
+			workflowsLoaded = true;
+		} else {
+			const result = await listWorkflowRuns({ deviceId, page: workflowsPage });
+			workflowRuns = result.items as WorkflowRun[];
+			workflowsTotalPages = Math.ceil(result.total / 20) || 1;
+			workflowsLoaded = true;
+			workflowPageCache.set(workflowsPage, { items: workflowRuns, total: result.total });
+		}
 		const u = new URL(window.location.href);
 		u.searchParams.set('tab', 'workflows');
 		if (workflowsPage > 1) {
@@ -369,11 +433,6 @@
 	}
 
 	onMount(() => {
-		// Load workflows if deeplinked to workflows tab
-		if (activeTab === 'workflows' && !workflowsLoaded) {
-			loadWorkflowRuns(urlPage);
-		}
-
 		const unsub = dashboardWs.subscribe((msg) => {
 			switch (msg.type) {
 				case 'device_status': {
@@ -432,8 +491,10 @@
 					break;
 				}
 				case 'workflow_started': {
+					// Invalidate page cache — new run appeared
+					workflowPageCache.clear();
 					if (workflowsLoaded) {
-						loadWorkflowRuns();
+						loadWorkflowRuns(undefined, true);
 					}
 					break;
 				}
@@ -510,8 +571,10 @@
 						const { [completedRunId]: _, ...rest } = workflowLiveProgress;
 						workflowLiveProgress = rest;
 					}
+					// Invalidate cache and refresh
+					workflowPageCache.clear();
 					if (workflowsLoaded) {
-						loadWorkflowRuns();
+						loadWorkflowRuns(undefined, true);
 					}
 					break;
 				}
@@ -522,8 +585,10 @@
 						const { [stoppedRunId]: _, ...rest } = workflowLiveProgress;
 						workflowLiveProgress = rest;
 					}
+					// Invalidate cache and refresh
+					workflowPageCache.clear();
 					if (workflowsLoaded) {
-						loadWorkflowRuns();
+						loadWorkflowRuns(undefined, true);
 					}
 					break;
 				}
@@ -600,6 +665,7 @@
 	{#each tabs as tab}
 		<button
 			onclick={() => setTab(tab.id)}
+			onmouseenter={() => prefetchTab(tab.id)}
 			class="flex flex-1 items-center justify-center gap-2 rounded-full px-3 py-2 text-sm font-medium transition-colors
 				{activeTab === tab.id
 				? 'bg-stone-900 text-white'
@@ -948,9 +1014,21 @@
 <!-- Workflows Tab -->
 {:else if activeTab === 'workflows'}
 	{#if !workflowsLoaded}
-		<div class="rounded-2xl bg-white p-10 text-center">
-			<Icon icon="solar:refresh-circle-bold-duotone" class="mx-auto mb-3 h-6 w-6 animate-spin text-stone-400" />
-			<p class="text-sm text-stone-500">Loading workflows...</p>
+		<!-- Skeleton loading cards — perceived as near-instant -->
+		<p class="mb-3 text-sm font-medium text-stone-500">Workflow runs</p>
+		<div class="space-y-3">
+			{#each [1, 2, 3, 4] as _}
+				<div class="animate-pulse rounded-2xl bg-white px-4 md:px-6 py-4">
+					<div class="flex items-center gap-3">
+						<div class="h-4 w-4 rounded-full bg-stone-200"></div>
+						<div class="flex-1 space-y-2">
+							<div class="h-3.5 w-40 rounded bg-stone-200"></div>
+							<div class="h-2.5 w-56 rounded bg-stone-100"></div>
+						</div>
+						<div class="h-6 w-20 rounded-full bg-stone-100"></div>
+					</div>
+				</div>
+			{/each}
 		</div>
 	{:else if workflowRuns.length === 0}
 		<div class="rounded-2xl bg-white p-10 text-center">

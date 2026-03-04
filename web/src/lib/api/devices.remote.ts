@@ -128,27 +128,37 @@ export const listDeviceSessions = query(
 		if (!locals.user) return { items: [], total: 0 };
 		const offset = (Math.max(1, page ?? 1) - 1) * PAGE_SIZE;
 
-		const [sessions, totalResult] = await Promise.all([
-			db
-				.select()
-				.from(agentSession)
-				.where(and(eq(agentSession.deviceId, deviceId), eq(agentSession.userId, locals.user.id)))
-				.orderBy(desc(agentSession.startedAt))
-				.limit(PAGE_SIZE)
-				.offset(offset),
-			db
-				.select({ count: count() })
-				.from(agentSession)
-				.where(and(eq(agentSession.deviceId, deviceId), eq(agentSession.userId, locals.user.id)))
-		]);
+		// Single query with window function — avoids a separate COUNT round-trip
+		const rows = await db
+			.select({
+				id: agentSession.id,
+				userId: agentSession.userId,
+				deviceId: agentSession.deviceId,
+				goal: agentSession.goal,
+				status: agentSession.status,
+				stepsUsed: agentSession.stepsUsed,
+				startedAt: agentSession.startedAt,
+				completedAt: agentSession.completedAt,
+				qstashMessageId: agentSession.qstashMessageId,
+				scheduledFor: agentSession.scheduledFor,
+				scheduledDelay: agentSession.scheduledDelay,
+				_total: sql<number>`count(*) over()`.as('_total')
+			})
+			.from(agentSession)
+			.where(and(eq(agentSession.deviceId, deviceId), eq(agentSession.userId, locals.user.id)))
+			.orderBy(desc(agentSession.startedAt))
+			.limit(PAGE_SIZE)
+			.offset(offset);
 
-		return { items: sessions, total: Number(totalResult[0].count) };
+		const total = rows.length > 0 ? Number(rows[0]._total) : 0;
+		const items = rows.map(({ _total, ...rest }) => rest);
+		return { items, total };
 	}
 );
 
 export const listSessionSteps = query(
 	v.object({ deviceId: v.string(), sessionId: v.string() }),
-	async ({ deviceId, sessionId }) => {
+	async ({ sessionId }) => {
 		const { locals } = getRequestEvent();
 		if (!locals.user) return [];
 
@@ -178,21 +188,35 @@ export const listWorkflowRuns = query(
 		if (!locals.user) return { items: [], total: 0 };
 		const offset = (Math.max(1, page ?? 1) - 1) * PAGE_SIZE;
 
-		const [runs, totalResult] = await Promise.all([
-			db
-				.select()
-				.from(workflowRun)
-				.where(and(eq(workflowRun.deviceId, deviceId), eq(workflowRun.userId, locals.user.id)))
-				.orderBy(desc(workflowRun.startedAt))
-				.limit(PAGE_SIZE)
-				.offset(offset),
-			db
-				.select({ count: count() })
-				.from(workflowRun)
-				.where(and(eq(workflowRun.deviceId, deviceId), eq(workflowRun.userId, locals.user.id)))
-		]);
+		// Single query with window function — avoids a separate COUNT round-trip
+		const rows = await db
+			.select({
+				id: workflowRun.id,
+				userId: workflowRun.userId,
+				deviceId: workflowRun.deviceId,
+				name: workflowRun.name,
+				type: workflowRun.type,
+				steps: workflowRun.steps,
+				status: workflowRun.status,
+				currentStep: workflowRun.currentStep,
+				totalSteps: workflowRun.totalSteps,
+				stepResults: workflowRun.stepResults,
+				startedAt: workflowRun.startedAt,
+				completedAt: workflowRun.completedAt,
+				qstashMessageId: workflowRun.qstashMessageId,
+				scheduledFor: workflowRun.scheduledFor,
+				_total: sql<number>`count(*) over()`.as('_total')
+			})
+			.from(workflowRun)
+			.where(and(eq(workflowRun.deviceId, deviceId), eq(workflowRun.userId, locals.user.id)))
+			.orderBy(desc(workflowRun.startedAt))
+			.limit(PAGE_SIZE)
+			.offset(offset);
 
-		return { items: runs, total: Number(totalResult[0].count) };
+		const total = rows.length > 0 ? Number(rows[0]._total) : 0;
+		// Strip the _total field from items sent to the client
+		const items = rows.map(({ _total, ...rest }) => rest);
+		return { items, total };
 	}
 );
 
