@@ -130,6 +130,13 @@ export async function executeWorkflowRun(input: ExecuteRunInput): Promise<void> 
         signal: abort.signal,
       });
     }
+  } catch (err) {
+    // Mark the run as failed in the DB so it doesn't stay "running" forever
+    await db
+      .update(workflowRun)
+      .set({ status: "failed", completedAt: new Date() })
+      .where(eq(workflowRun.id, runId));
+    throw err; // Re-throw so Temporal sees the failure
   } finally {
     clearInterval(heartbeatInterval);
     activeSessions.delete(trackingKey);

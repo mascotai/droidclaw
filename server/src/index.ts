@@ -16,6 +16,9 @@ import { pairing } from "./routes/pairing.js";
 import { investigate } from "./routes/investigate.js";
 import { workflows } from "./routes/workflows.js";
 import { startTemporalWorker } from "./temporal/worker.js";
+import { db } from "./db.js";
+import { workflowRun } from "./schema.js";
+import { eq } from "drizzle-orm";
 
 const app = new Hono();
 
@@ -106,6 +109,17 @@ const server = Bun.serve<WebSocketData>({
 });
 
 console.log(`Server running on port ${server.port}`);
+
+// Clean up stale "running" workflow rows from previous crashes/restarts
+db.update(workflowRun)
+  .set({ status: "failed", completedAt: new Date() })
+  .where(eq(workflowRun.status, "running"))
+  .then(() => {
+    console.log(`[Startup] Marked stale running workflows as failed`);
+  })
+  .catch((err) => {
+    console.error("[Startup] Failed to clean stale workflows:", err);
+  });
 
 // Start embedded Temporal worker (non-blocking — runs in background)
 startTemporalWorker().catch((err) => {
