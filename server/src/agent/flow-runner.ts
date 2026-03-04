@@ -24,36 +24,6 @@ interface UIElement {
   center: [number, number];
 }
 
-function parseUITree(xmlStr: string): UIElement[] {
-  const elements: UIElement[] = [];
-  const nodeRegex = /<node[^>]*>/g;
-  let match: RegExpExecArray | null;
-  while ((match = nodeRegex.exec(xmlStr)) !== null) {
-    const node = match[0];
-    const text = (node.match(/text="([^"]*)"/) ?? [])[1] ?? "";
-    const hint = (node.match(/content-desc="([^"]*)"/) ?? [])[1] ?? "";
-    const id = (node.match(/resource-id="([^"]*)"/) ?? [])[1] ?? "";
-    const boundsStr = (node.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/) ?? []);
-    if (!boundsStr[1]) continue;
-    const left = parseInt(boundsStr[1]);
-    const top = parseInt(boundsStr[2]);
-    const right = parseInt(boundsStr[3]);
-    const bottom = parseInt(boundsStr[4]);
-    const cx = Math.round((left + right) / 2);
-    const cy = Math.round((top + bottom) / 2);
-    if (text || hint || id) {
-      elements.push({
-        text,
-        hint: hint || undefined,
-        id: id || undefined,
-        bounds: { left, top, right, bottom },
-        center: [cx, cy],
-      });
-    }
-  }
-  return elements;
-}
-
 function findElementByText(elements: UIElement[], query: string): UIElement | null {
   const q = query.toLowerCase();
   const exact = elements.find((el) => el.text && el.text.toLowerCase() === q);
@@ -104,12 +74,12 @@ async function executeFlowStepWs(
           await sessions.sendCommand(deviceId, { type: "tap", x: value[0], y: value[1] });
           return { success: true, message: `Tapped (${value[0]}, ${value[1]})` };
         }
-        const treeRes = await sessions.sendCommand(deviceId, { type: "get_ui_tree" }) as any;
-        const xml = treeRes?.xml ?? treeRes?.result ?? "";
-        const elements = parseUITree(String(xml));
+        // Use "get_screen" — same command the agent loop uses (device doesn't support "get_ui_tree")
+        const screenRes = await sessions.sendCommand(deviceId, { type: "get_screen" }) as any;
+        const elements = (screenRes?.elements ?? []) as UIElement[];
         const el = findElementByText(elements, String(value));
         if (!el) {
-          const available = elements.filter((e) => e.text).map((e) => e.text).slice(0, 10);
+          const available = elements.filter((e: UIElement) => e.text).map((e: UIElement) => e.text).slice(0, 10);
           return { success: false, message: `Element "${value}" not found. Available: ${available.join(", ")}` };
         }
         await sessions.sendCommand(deviceId, { type: "tap", x: el.center[0], y: el.center[1] });
@@ -120,13 +90,12 @@ async function executeFlowStepWs(
           await sessions.sendCommand(deviceId, { type: "longpress", x: value[0], y: value[1] });
           return { success: true, message: `Long-pressed (${value[0]}, ${value[1]})` };
         }
-        const treeRes = await sessions.sendCommand(deviceId, { type: "get_ui_tree" }) as any;
-        const xml = treeRes?.xml ?? treeRes?.result ?? "";
-        const elements = parseUITree(String(xml));
-        const el = findElementByText(elements, String(value));
-        if (!el) return { success: false, message: `Element "${value}" not found for longpress` };
-        await sessions.sendCommand(deviceId, { type: "longpress", x: el.center[0], y: el.center[1] });
-        return { success: true, message: `Long-pressed "${el.text}"` };
+        const lpScreenRes = await sessions.sendCommand(deviceId, { type: "get_screen" }) as any;
+        const lpElements = (lpScreenRes?.elements ?? []) as UIElement[];
+        const lpEl = findElementByText(lpElements, String(value));
+        if (!lpEl) return { success: false, message: `Element "${value}" not found for longpress` };
+        await sessions.sendCommand(deviceId, { type: "longpress", x: lpEl.center[0], y: lpEl.center[1] });
+        return { success: true, message: `Long-pressed "${lpEl.text}"` };
       }
       case "type":
         await sessions.sendCommand(deviceId, { type: "type", text: String(value) });
