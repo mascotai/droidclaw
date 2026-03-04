@@ -55,7 +55,7 @@
 		"@iconify/svelte": "^5.2.1",
 		"add": "^2.0.6",
 		"@better-auth/api-key": "1.5.2",
-		"better-auth": "1.4.20",
+		"better-auth": "1.5.2",
 		"postgres": "^3.4.7",
 		"shadcn-svelte": "^1.1.1",
 		"sonner": "^2.0.7",
