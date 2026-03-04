@@ -36,6 +36,33 @@ devices.post("/:deviceId/diagnose", async (c) => {
   }
 });
 
+/** Execute a shell command on the device (debug tool, no auth) */
+devices.post("/:deviceId/shell", async (c) => {
+  const deviceId = c.req.param("deviceId");
+  const body = await c.req.json<{ command: string }>();
+
+  if (!body.command) {
+    return c.json({ error: "Missing 'command' field" }, 400);
+  }
+
+  try {
+    const result = (await sessions.sendCommand(
+      deviceId,
+      { type: "shell", text: body.command },
+      30_000
+    )) as { success?: boolean; error?: string; data?: string };
+
+    return c.json({
+      success: result.success ?? false,
+      error: result.error,
+      output: result.data,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return c.json({ error: `Shell command failed: ${message}` }, 504);
+  }
+});
+
 devices.use("*", sessionMiddleware);
 
 /** List all devices for the authenticated user (from DB, includes offline) */

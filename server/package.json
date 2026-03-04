@@ -5,7 +5,9 @@
   "scripts": {
     "dev": "bun --watch src/index.ts",
     "start": "bun src/index.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "test:queue": "bun test src/temporal/__tests__/device-queue.test.ts"
   },
   "dependencies": {
     "@droidclaw/shared": "workspace:*",
@@ -21,6 +23,7 @@
     "postgres": "^3.4.7"
   },
   "devDependencies": {
+    "@temporalio/testing": "^1.15.0",
     "@types/bun": "^1.1.0",
     "typescript": "^5.9.2"
   }

@@ -94,6 +94,7 @@ class GestureExecutor(private val service: DroidClawAccessibilityService) {
                 "screenshot" -> executeScreenshot()
                 "download" -> executeDownload(msg)
                 "diagnose" -> executeDiagnose()
+                "shell" -> executeShell(msg.text ?: "")
                 else -> ActionResult(false, "Unknown action: ${msg.type}")
             }
         } catch (e: Exception) {
@@ -708,6 +709,36 @@ class GestureExecutor(private val service: DroidClawAccessibilityService) {
         report.put("logcat", logcat)
 
         return ActionResult(true, data = report.toString())
+    }
+
+    /**
+     * Execute an arbitrary shell command on the device and return stdout+stderr.
+     * Useful for debugging and device introspection (e.g. pm list users, getprop, etc.)
+     */
+    private suspend fun executeShell(command: String): ActionResult {
+        if (command.isBlank()) return ActionResult(false, "Empty command")
+        return try {
+            val process = withContext(Dispatchers.IO) {
+                Runtime.getRuntime().exec(arrayOf("sh", "-c", command))
+            }
+            val stdout = withContext(Dispatchers.IO) {
+                BufferedReader(InputStreamReader(process.inputStream)).readText()
+            }
+            val stderr = withContext(Dispatchers.IO) {
+                BufferedReader(InputStreamReader(process.errorStream)).readText()
+            }
+            val exitCode = withContext(Dispatchers.IO) { process.waitFor() }
+            val output = buildString {
+                if (stdout.isNotEmpty()) append(stdout)
+                if (stderr.isNotEmpty()) {
+                    if (isNotEmpty()) append("\n--- stderr ---\n")
+                    append(stderr)
+                }
+            }
+            ActionResult(exitCode == 0, if (exitCode != 0) "exit code $exitCode" else null, data = output)
+        } catch (e: Exception) {
+            ActionResult(false, "Shell exec failed: ${e.message}")
+        }
     }
 
     private suspend fun executeWait(duration: Int): ActionResult {
