@@ -11,6 +11,8 @@ export const env = {
   QSTASH_CURRENT_SIGNING_KEY: process.env.QSTASH_CURRENT_SIGNING_KEY || "",
   QSTASH_NEXT_SIGNING_KEY: process.env.QSTASH_NEXT_SIGNING_KEY || "",
   SERVER_PUBLIC_URL: process.env.SERVER_PUBLIC_URL || "",
+  TEMPORAL_ADDRESS: process.env.TEMPORAL_ADDRESS || "localhost:7233",
+  TEMPORAL_NAMESPACE: process.env.TEMPORAL_NAMESPACE || "mascotai-dev",
 };
 
 if (!env.DATABASE_URL) {

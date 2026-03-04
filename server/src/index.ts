@@ -15,6 +15,7 @@ import { license } from "./routes/license.js";
 import { pairing } from "./routes/pairing.js";
 import { investigate } from "./routes/investigate.js";
 import { workflows } from "./routes/workflows.js";
+import { startTemporalWorker } from "./temporal/worker.js";
 
 const app = new Hono();
 
@@ -105,3 +106,8 @@ const server = Bun.serve<WebSocketData>({
 });
 
 console.log(`Server running on port ${server.port}`);
+
+// Start embedded Temporal worker (non-blocking — runs in background)
+startTemporalWorker().catch((err) => {
+  console.error("[Temporal] Worker failed:", err);
+});
