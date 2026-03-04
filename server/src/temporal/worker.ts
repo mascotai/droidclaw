@@ -30,7 +30,7 @@ export async function startTemporalWorker(): Promise<void> {
     connection,
     namespace: env.TEMPORAL_NAMESPACE,
     taskQueue: TASK_QUEUE,
-    workflowsPath: new URL("./workflows/index.js", import.meta.url).pathname,
+    workflowsPath: new URL("./workflows/index.ts", import.meta.url).pathname,
     activities,
     maxConcurrentActivityTaskExecutions: 10,
     maxConcurrentWorkflowTaskExecutions: 20,
