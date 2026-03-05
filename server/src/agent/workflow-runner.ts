@@ -8,19 +8,6 @@ import { compileSessionToFlow, normalizeGoalKey, isCacheable, resolveFlowVariabl
 import { activeSessions } from "./active-sessions.js";
 import type { LLMConfig } from "./llm.js";
 import type { ScreenObservation } from "./loop.js";
-import type { UIElement } from "@droidclaw/shared";
-
-/** Get the current screen elements from a device. */
-async function getScreen(deviceId: string): Promise<{ elements: UIElement[] }> {
-  try {
-    const res = (await sessions.sendCommand(deviceId, { type: "get_screen" })) as {
-      elements?: UIElement[];
-    };
-    return { elements: res.elements ?? [] };
-  } catch {
-    return { elements: [] };
-  }
-}
 
 /** In-memory ring buffer for workflow debug logs (last 200 entries). */
 const _debugLog: string[] = [];
@@ -290,43 +277,18 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
           sendToDevice({ type: "goal_started", goal: `Workflow: ${name}` });
         }
 
-        // Close all apps before each step so the app always starts fresh
-        // from its main activity (prevents stale mid-flow states like stuck
-        // 2FA screens from a previous run).
+        // Launch app fresh — go Home first to dismiss any overlays,
+        // then launch the app. The companion app uses
+        // FLAG_ACTIVITY_CLEAR_TASK so the entire task stack is cleared
+        // and the app restarts from its main activity.
         if (step.app) {
           try {
-            // Open recents → find and tap "Close all" → go Home → launch
-            await sessions.sendCommand(deviceId, { type: "recents" });
-            await new Promise((r) => setTimeout(r, 1000));
-
-            // Look for "Close all" button and tap it
-            const { elements } = await getScreen(deviceId);
-            const closeBtn = elements.find((el) =>
-              el.text && /close\s*all/i.test(el.text)
-            );
-            if (closeBtn) {
-              await sessions.sendCommand(deviceId, {
-                type: "tap",
-                x: closeBtn.center[0],
-                y: closeBtn.center[1],
-              });
-              await new Promise((r) => setTimeout(r, 800));
-            } else {
-              // No "Close all" — press Home to exit recents
-              await sessions.sendCommand(deviceId, { type: "home" });
-              await new Promise((r) => setTimeout(r, 500));
-            }
-
-            // Launch the app fresh
+            await sessions.sendCommand(deviceId, { type: "home" });
+            await new Promise((r) => setTimeout(r, 500));
             await sessions.sendCommand(deviceId, { type: "launch", packageName: step.app });
             await new Promise((r) => setTimeout(r, 2500));
           } catch (err) {
-            console.warn(`[Workflow] Failed to close-all + launch ${step.app}: ${err}`);
-            // Fallback: just try to launch directly
-            try {
-              await sessions.sendCommand(deviceId, { type: "launch", packageName: step.app });
-              await new Promise((r) => setTimeout(r, 2000));
-            } catch { /* ignore */ }
+            console.warn(`[Workflow] Failed to launch ${step.app}: ${err}`);
           }
         }
 
