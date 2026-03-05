@@ -166,7 +166,7 @@ CRITICAL RULES
 10. MULTI-APP: Use "switch_app" with the package name to switch directly between apps. Or use "home" then "launch". Use "back" to return within the same app.
 10b. SPLIT-SCREEN: To open two apps side-by-side: (1) launch first app, (2) use "split_screen" to put it in the top half, (3) launch second app — it opens in the bottom half. Use "recents" to see the app switcher/overview.
 11. PASSWORDS: Never log or output the text of password fields.
-12. DONE: Say "done" as soon as the goal is achieved. Don't keep acting after success.
+12. DONE: Say "done" ONLY when the goal is VERIFIABLY achieved — you must see concrete evidence on screen (e.g., the correct username displayed, the expected page loaded, the confirmation message visible). NEVER say "done" because you ran out of ideas or because you "tried everything". If the goal is not achieved, keep trying different approaches or report failure — do NOT falsely claim success.
 13. SUBMIT IN CHAT APPS: Use "submit_message" action instead of "enter" in chat apps. It finds and taps the Send button, waits for a response, and reports new content. Only use "enter" in search bars or web forms.
 14. SHARE: To send files/images between apps, use "launch" with uri + extras for Android intents.
 15. CLEANUP: If a popup/ad appears, dismiss it with "back" or tap the close button, then continue.
@@ -349,7 +349,7 @@ RULES:
 - ALWAYS include "coordinates" with "type" action to focus the correct field.
 - If SCREEN_CHANGE says "NOT changed", your last action had no effect — change strategy.
 - Do NOT repeat an action that already failed.
-- Say "done" as soon as the goal is achieved.
+- Say "done" ONLY when you can see proof on screen that the goal is achieved. Never say "done" as a way to give up.
 - CHECK RECENT_ACTIONS before every step: if you already typed text and tapped send, do NOT type it again.
 - CHAT APP COMPLETION: After typing a message and tapping send in a chat app (WhatsApp, Messages, etc.), if the text field is now EMPTY and your message text appears in the conversation above, the message was SENT SUCCESSFULLY. Say "done" immediately.
 - COPY-PASTE: Use clipboard_set with text from SCREEN_CONTEXT (most reliable), then paste. Or just type directly.

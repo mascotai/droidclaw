@@ -676,15 +676,17 @@ export async function runAgentLoop(
             skillResult.success ? undefined : "skill_error"
           );
         } else {
-          // ── 9b. Tap-to-focus before type ──
-          // If the AI wants to type into a field with coordinates, tap it first to focus
-          if (action.action === "type" && action.coordinates) {
-            const focusX = Math.max(0, Math.min(action.coordinates[0], screenWidth - 1));
-            const focusY = Math.max(0, Math.min(action.coordinates[1], screenHeight - 1));
-            console.log(`[Agent ${sessionId}] Type with coords: tapping [${focusX}, ${focusY}] to focus before typing`);
-            await sessions.sendCommand(deviceId, { type: "tap", x: focusX, y: focusY });
-            // Brief pause to let the keyboard appear and field focus
-            await new Promise(r => setTimeout(r, 400));
+          // ── 9b. Tap-to-focus before type, dismiss keyboard after ──
+          if (action.action === "type") {
+            // If coordinates are provided, tap the field first to focus it
+            if (action.coordinates) {
+              const focusX = Math.max(0, Math.min(action.coordinates[0], screenWidth - 1));
+              const focusY = Math.max(0, Math.min(action.coordinates[1], screenHeight - 1));
+              console.log(`[Agent ${sessionId}] Type with coords: tapping [${focusX}, ${focusY}] to focus before typing`);
+              await sessions.sendCommand(deviceId, { type: "tap", x: focusX, y: focusY });
+              // Brief pause to let the keyboard appear and field focus
+              await new Promise(r => setTimeout(r, 400));
+            }
           }
 
           // Regular action: map to WebSocket command and send to device
@@ -696,6 +698,16 @@ export async function runAgentLoop(
           };
           const resultSuccess = result.success !== false;
           lastActionFeedback = `${actionSig} -> ${resultSuccess ? "OK" : "FAILED"}: ${result.error ?? result.data ?? "completed"}`;
+
+          // ── 9c. Dismiss keyboard after type ──
+          // After typing text, press Back to dismiss the keyboard so subsequent
+          // taps hit the actual UI elements (buttons etc.) instead of the keyboard
+          if (action.action === "type" && resultSuccess) {
+            console.log(`[Agent ${sessionId}] Dismissing keyboard after type`);
+            await sessions.sendCommand(deviceId, { type: "back" });
+            await new Promise(r => setTimeout(r, 300));
+          }
+
           structuredResult = buildStepResult(
             actionSig,
             resultSuccess,
