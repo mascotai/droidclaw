@@ -4,7 +4,7 @@ import { workflowRun, cachedFlow, agentStep } from "../schema.js";
 import { eq, and, sql } from "drizzle-orm";
 import { runPipeline } from "./pipeline.js";
 import { executeFlowStepWs } from "./flow-runner.js";
-import { compileSessionToFlow, normalizeGoalKey } from "./session-to-flow.js";
+import { compileSessionToFlow, normalizeGoalKey, isCacheable, resolveFlowVariables } from "./session-to-flow.js";
 import { activeSessions } from "./active-sessions.js";
 import type { LLMConfig } from "./llm.js";
 import type { ScreenObservation } from "./loop.js";
@@ -61,48 +61,7 @@ function buildGoal(step: WorkflowStep): string {
   return goal;
 }
 
-/**
- * Determine if a workflow step is eligible for deterministic flow caching.
- *
- * Returns false for:
- * - Steps with `exhaustIsSuccess` (open-ended browsing — no stable "done" state)
- * - Steps with `cache: false` (explicit opt-out)
- * - Steps with formData (dynamic input that changes each run)
- */
-function isCacheable(step: WorkflowStep): boolean {
-  if (step.cache === false) return false;
-  if (step.exhaustIsSuccess) return false;
-  if (step.formData && Object.keys(step.formData).length > 0) return false;
-  return true;
-}
-
 type FlowStep = string | { [key: string]: string | number | [number, number] };
-
-/**
- * Resolve `{{variable}}` placeholders in cached flow steps using the resolved values map.
- */
-function resolveFlowVariables(
-  flowSteps: FlowStep[],
-  resolvedValues: Record<string, string>,
-): FlowStep[] {
-  if (Object.keys(resolvedValues).length === 0) return flowSteps;
-
-  return flowSteps.map((step) => {
-    if (typeof step === "string") return step;
-    if (typeof step !== "object" || step === null) return step;
-
-    const [command, value] = Object.entries(step)[0];
-    if (typeof value !== "string") return step;
-
-    // Replace {{var}} placeholders in the value
-    const resolved = value.replace(/\{\{(\w+)\}\}/g, (_: string, key: string) =>
-      resolvedValues[key] !== undefined ? resolvedValues[key] : `{{${key}}}`
-    );
-
-    if (resolved === value) return step; // no change
-    return { [command]: resolved };
-  });
-}
 
 /**
  * Replay a cached deterministic flow on the device.

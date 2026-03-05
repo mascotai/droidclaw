@@ -7,7 +7,40 @@
  * placeholders, and validates the result is stable enough to cache.
  */
 
-type FlowStep = string | { [key: string]: string | number | [number, number] };
+export type FlowStep = string | { [key: string]: string | number | [number, number] };
+
+// ── Element matching utility ────────────────────────────────────────────
+// Pure function used by flow-runner during replay and available for testing.
+
+/** Minimal shape required by findElementByText */
+export interface TextMatchElement {
+  text: string;
+  hint?: string;
+  id?: string;
+  center: [number, number];
+}
+
+/**
+ * Find a UI element by text query with 4-level fallback:
+ *   1. Exact text match (case-insensitive)
+ *   2. Partial text match (shortest wins)
+ *   3. Hint match
+ *   4. Resource ID match
+ */
+export function findElementByText<T extends TextMatchElement>(elements: T[], query: string): T | null {
+  const q = query.toLowerCase();
+  const exact = elements.find((el) => el.text && el.text.toLowerCase() === q);
+  if (exact) return exact;
+  const matches = elements
+    .filter((el) => el.text && el.text.toLowerCase().includes(q))
+    .sort((a, b) => a.text.length - b.text.length);
+  if (matches.length > 0) return matches[0];
+  const hintMatch = elements.find((el) => el.hint && el.hint.toLowerCase().includes(q));
+  if (hintMatch) return hintMatch;
+  const idMatch = elements.find((el) => el.id && el.id.toLowerCase().includes(q));
+  if (idMatch) return idMatch;
+  return null;
+}
 
 /** Action types that are observation-only and should not appear in a replay flow. */
 const SKIP_ACTIONS = new Set([
@@ -209,4 +242,60 @@ function isIntentionalBack(
  */
 export function normalizeGoalKey(goal: string): string {
   return goal.toLowerCase().trim().replace(/\s+/g, " ");
+}
+
+// ── Workflow step cacheability & variable resolution ─────────────────────
+// These pure functions live here to keep them free of side-effect imports
+// (DB, WebSocket, etc.) so they are easily testable.
+
+export interface CacheableWorkflowStep {
+  goal: string;
+  app?: string;
+  maxSteps?: number;
+  formData?: Record<string, string>;
+  retries?: number;
+  exhaustIsSuccess?: boolean;
+  cache?: boolean;
+  _goalTemplate?: string;
+}
+
+/**
+ * Determine if a workflow step is eligible for deterministic flow caching.
+ *
+ * Returns false for:
+ * - Steps with `exhaustIsSuccess` (open-ended browsing — no stable "done" state)
+ * - Steps with `cache: false` (explicit opt-out)
+ * - Steps with formData (dynamic input that changes each run)
+ */
+export function isCacheable(step: CacheableWorkflowStep): boolean {
+  if (step.cache === false) return false;
+  if (step.exhaustIsSuccess) return false;
+  if (step.formData && Object.keys(step.formData).length > 0) return false;
+  return true;
+}
+
+/**
+ * Resolve `{{variable}}` placeholders in cached flow steps using the resolved values map.
+ */
+export function resolveFlowVariables(
+  flowSteps: FlowStep[],
+  resolvedValues: Record<string, string>,
+): FlowStep[] {
+  if (Object.keys(resolvedValues).length === 0) return flowSteps;
+
+  return flowSteps.map((step) => {
+    if (typeof step === "string") return step;
+    if (typeof step !== "object" || step === null) return step;
+
+    const [command, value] = Object.entries(step)[0];
+    if (typeof value !== "string") return step;
+
+    // Replace {{var}} placeholders in the value
+    const resolved = value.replace(/\{\{(\w+)\}\}/g, (_: string, key: string) =>
+      resolvedValues[key] !== undefined ? resolvedValues[key] : `{{${key}}}`
+    );
+
+    if (resolved === value) return step; // no change
+    return { [command]: resolved };
+  });
 }

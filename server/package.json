@@ -7,7 +7,8 @@
     "start": "bun src/index.ts",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
-    "test:queue": "bun test src/temporal/__tests__/device-queue.test.ts"
+    "test:queue": "bun test src/temporal/__tests__/device-queue.test.ts",
+    "test:caching": "bun test src/agent/__tests__/caching.test.ts"
   },
   "dependencies": {
     "@droidclaw/shared": "workspace:*",

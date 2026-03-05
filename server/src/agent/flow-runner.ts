@@ -2,6 +2,8 @@ import { sessions } from "../ws/sessions.js";
 import { db } from "../db.js";
 import { workflowRun } from "../schema.js";
 import { eq } from "drizzle-orm";
+import { findElementByText } from "./session-to-flow.js";
+export { findElementByText } from "./session-to-flow.js";
 
 type FlowStep = string | { [key: string]: string | number | [number, number] };
 
@@ -22,29 +24,6 @@ interface FlowUIElement {
   id?: string;
   bounds: { left: number; top: number; right: number; bottom: number };
   center: [number, number];
-}
-
-/** Minimal shape required by findElementByText — works with both flow-runner and shared UIElement types */
-interface TextMatchElement {
-  text: string;
-  hint?: string;
-  id?: string;
-  center: [number, number];
-}
-
-export function findElementByText<T extends TextMatchElement>(elements: T[], query: string): T | null {
-  const q = query.toLowerCase();
-  const exact = elements.find((el) => el.text && el.text.toLowerCase() === q);
-  if (exact) return exact;
-  const matches = elements
-    .filter((el) => el.text && el.text.toLowerCase().includes(q))
-    .sort((a, b) => a.text.length - b.text.length);
-  if (matches.length > 0) return matches[0];
-  const hintMatch = elements.find((el) => el.hint && el.hint.toLowerCase().includes(q));
-  if (hintMatch) return hintMatch;
-  const idMatch = elements.find((el) => el.id && el.id.toLowerCase().includes(q));
-  if (idMatch) return idMatch;
-  return null;
 }
 
 export async function executeFlowStepWs(
