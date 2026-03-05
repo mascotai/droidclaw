@@ -253,8 +253,8 @@
 		goalsTotalPages = Math.ceil(sessResult.total / 20) || 1;
 		goalsLoaded = true;
 		stats = statsResult as typeof stats;
-		// Background-load cached flows for Overview tab
-		loadCachedFlows();
+		// Background-load cached flows for Overview tab (non-blocking, safe if table doesn't exist)
+		loadCachedFlows().catch(() => {});
 	}
 
 	// Modal state for step deep-dive
