@@ -6,6 +6,8 @@
 		listSessionSteps,
 		getDeviceStats,
 		listWorkflowRuns,
+		listCachedFlows,
+		deleteCachedFlow as deleteCachedFlowCmd,
 		submitGoal as submitGoalCmd,
 		stopGoal as stopGoalCmd,
 		investigateSession as investigateSessionCmd,
@@ -52,6 +54,7 @@
 		track(DEVICE_TAB_CHANGE, { tab: tabId });
 		if (tabId === 'workflows' && !workflowsLoaded) loadWorkflowRuns();
 		if (tabId === 'goals' && !goalsLoaded) loadGoals(1);
+		if (tabId === 'overview' && !cachedFlowsLoaded) loadCachedFlows();
 	}
 
 	// Preload tab data on hover — so it's ready by the time user clicks
@@ -61,6 +64,7 @@
 		prefetchedTabs.add(tabId);
 		if (tabId === 'workflows' && !workflowsLoaded) loadWorkflowRuns();
 		if (tabId === 'goals' && !goalsLoaded) loadGoals(1);
+		if (tabId === 'overview' && !cachedFlowsLoaded) loadCachedFlows();
 	}
 
 	// ─── Types ───────────────────────────────────────────────────
@@ -178,6 +182,48 @@
 	// Page-level cache: remember loaded pages so pagination back is instant
 	let workflowPageCache = $state<Map<number, { items: WorkflowRun[]; total: number }>>(new Map());
 
+	// Cached flows state
+	interface CachedFlowEntry {
+		id: string;
+		goalKey: string;
+		appPackage: string | null;
+		stepCount: number;
+		successCount: number | null;
+		failCount: number | null;
+		createdAt: Date;
+		lastUsedAt: Date | null;
+	}
+	let cachedFlows = $state<CachedFlowEntry[]>([]);
+	let cachedFlowsLoaded = $state(false);
+
+	// Live workflow run tracking for the Run tab
+	interface LiveAgentStep {
+		step: number;
+		action: string;
+		reasoning: string;
+	}
+	interface LiveWorkflowRun {
+		runId: string;
+		name: string;
+		wfType: string;
+		totalSteps: number;
+		stepGoals: Array<{ goal: string; app?: string }>;
+		status: 'running' | 'completed' | 'failed' | 'stopped';
+		stepResults: Array<{
+			success: boolean;
+			stepsUsed?: number;
+			resolvedBy?: string;
+			error?: string;
+			message?: string;
+		} | null>;
+		activeStepIndex: number;
+		attempt: number;
+		totalAttempts: number;
+		/** Live agent steps for the currently active workflow step */
+		liveSteps: LiveAgentStep[];
+	}
+	let liveWorkflowRun = $state<LiveWorkflowRun | null>(null);
+
 	// Resolve the data for active tab immediately, background-fill the rest
 	if (isWorkflowsTab) {
 		// Workflows tab — await workflows, background-fill stats & sessions
@@ -207,6 +253,8 @@
 		goalsTotalPages = Math.ceil(sessResult.total / 20) || 1;
 		goalsLoaded = true;
 		stats = statsResult as typeof stats;
+		// Background-load cached flows for Overview tab
+		loadCachedFlows();
 	}
 
 	// Modal state for step deep-dive
@@ -253,6 +301,44 @@
 			u.searchParams.delete('page');
 		}
 		history.replaceState({}, '', u);
+	}
+
+	async function loadCachedFlows() {
+		try {
+			const rows = await listCachedFlows(deviceId);
+			cachedFlows = rows as CachedFlowEntry[];
+			cachedFlowsLoaded = true;
+		} catch {
+			cachedFlowsLoaded = true;
+		}
+	}
+
+	async function handleDeleteCachedFlow(flowId: string) {
+		try {
+			await deleteCachedFlowCmd({ flowId });
+			cachedFlows = cachedFlows.filter((f) => f.id !== flowId);
+		} catch {
+			// ignore
+		}
+	}
+
+	function stopWorkflow() {
+		if (!liveWorkflowRun) return;
+		serverStopWorkflow(deviceId);
+	}
+
+	async function serverStopWorkflow(devId: string) {
+		try {
+			await stopGoalCmd({ deviceId: devId });
+		} catch {
+			// ignore
+		}
+	}
+
+	/** Count cache hits in a workflow run's step results */
+	function countCacheHits(run: WorkflowRun): number {
+		if (!run.stepResults) return 0;
+		return (run.stepResults as StepResult[]).filter((r) => r?.resolvedBy === 'cached_flow').length;
 	}
 
 	function toggleWorkflow(runId: string) {
@@ -456,14 +542,19 @@
 					const actionStr = action?.action
 						? `${action.action}${action.coordinates ? `(${(action.coordinates as number[]).join(',')})` : ''}`
 						: JSON.stringify(action);
-					steps = [
-						...steps,
-						{
-							step: msg.step as number,
-							action: actionStr,
-							reasoning: (msg.reasoning as string) ?? ''
-						}
-					];
+					const agentStep: LiveAgentStep = {
+						step: msg.step as number,
+						action: actionStr,
+						reasoning: (msg.reasoning as string) ?? ''
+					};
+					steps = [...steps, { step: agentStep.step, action: agentStep.action, reasoning: agentStep.reasoning }];
+					// Also feed into live workflow run if active
+					if (liveWorkflowRun && liveWorkflowRun.status === 'running' && liveWorkflowRun.activeStepIndex >= 0) {
+						liveWorkflowRun = {
+							...liveWorkflowRun,
+							liveSteps: [...liveWorkflowRun.liveSteps, agentStep],
+						};
+					}
 					break;
 				}
 				case 'goal_completed': {
@@ -496,6 +587,24 @@
 					if (workflowsLoaded) {
 						loadWorkflowRuns(undefined, true);
 					}
+					// Populate live workflow run for the Run tab
+					const wfStepGoals = (msg.stepGoals as Array<{ goal: string; app?: string }>) ?? [];
+					const wfTotalSteps = (msg.totalSteps as number) ?? wfStepGoals.length;
+					liveWorkflowRun = {
+						runId: msg.runId as string,
+						name: (msg.name as string) ?? 'Workflow',
+						wfType: (msg.wfType as string) ?? 'workflow',
+						totalSteps: wfTotalSteps,
+						stepGoals: wfStepGoals,
+						status: 'running',
+						stepResults: Array.from({ length: wfTotalSteps }, () => null),
+						activeStepIndex: -1,
+						attempt: 1,
+						totalAttempts: 1,
+						liveSteps: [],
+					};
+					// Auto-switch to Run tab
+					activeTab = 'run';
 					break;
 				}
 				case 'workflow_step_start': {
@@ -520,6 +629,16 @@
 						runS.status = 'running';
 						workflowRuns = [...workflowRuns];
 					}
+					// Update live workflow run
+					if (liveWorkflowRun && liveWorkflowRun.runId === runId) {
+						liveWorkflowRun = {
+							...liveWorkflowRun,
+							activeStepIndex: stepIdx,
+							attempt: 1,
+							totalAttempts: maxRetries + 1,
+							liveSteps: [], // Reset for new workflow step
+						};
+					}
 					break;
 				}
 				case 'workflow_step_retry': {
@@ -537,6 +656,15 @@
 								totalAttempts,
 								stepsUsedInAttempt: stepsUsed,
 							}
+						};
+					}
+					// Update live workflow run
+					if (liveWorkflowRun && liveWorkflowRun.runId === runId) {
+						liveWorkflowRun = {
+							...liveWorkflowRun,
+							attempt: attempt + 1,
+							totalAttempts,
+							liveSteps: [], // Reset for retry
 						};
 					}
 					break;
@@ -562,6 +690,21 @@
 						}
 						workflowRuns = [...workflowRuns];
 					}
+					// Update live workflow run
+					if (liveWorkflowRun && liveWorkflowRun.runId === runId) {
+						const newResults = [...liveWorkflowRun.stepResults];
+						newResults[stepIdx] = {
+							success: stepSuccess,
+							stepsUsed: (msg.stepsUsed as number) ?? 0,
+							resolvedBy: (msg.resolvedBy as string) ?? undefined,
+							error: (msg.error as string) ?? undefined,
+							message: (msg.message as string) ?? undefined,
+						};
+						liveWorkflowRun = {
+							...liveWorkflowRun,
+							stepResults: newResults,
+						};
+					}
 					break;
 				}
 				case 'workflow_completed': {
@@ -576,6 +719,15 @@
 					if (workflowsLoaded) {
 						loadWorkflowRuns(undefined, true);
 					}
+					// Update live workflow run status
+					if (liveWorkflowRun && liveWorkflowRun.runId === completedRunId) {
+						const wfSuccess = msg.success as boolean;
+						liveWorkflowRun = {
+							...liveWorkflowRun,
+							status: wfSuccess ? 'completed' : 'failed',
+							activeStepIndex: -1,
+						};
+					}
 					break;
 				}
 				case 'workflow_stopped': {
@@ -589,6 +741,14 @@
 					workflowPageCache.clear();
 					if (workflowsLoaded) {
 						loadWorkflowRuns(undefined, true);
+					}
+					// Update live workflow run status
+					if (liveWorkflowRun && liveWorkflowRun.runId === stoppedRunId) {
+						liveWorkflowRun = {
+							...liveWorkflowRun,
+							status: 'stopped',
+							activeStepIndex: -1,
+						};
 					}
 					break;
 				}
@@ -676,7 +836,7 @@
 				class="h-4 w-4 {activeTab === tab.id ? 'text-white' : 'text-stone-400'}"
 			/>
 			{tab.label}
-			{#if tab.id === 'run' && runStatus === 'running'}
+			{#if tab.id === 'run' && (runStatus === 'running' || liveWorkflowRun?.status === 'running')}
 				<span class="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400"></span>
 			{/if}
 		</button>
@@ -804,6 +964,54 @@
 					</div>
 				{:else}
 					<p class="px-4 md:px-6 py-4 text-xs text-stone-400">No apps match "{appSearch}"</p>
+				{/each}
+			</div>
+		</div>
+	{/if}
+
+	<!-- Cached Flows -->
+	{#if cachedFlowsLoaded && cachedFlows.length > 0}
+		<div class="mt-6">
+			<p class="mb-3 text-sm font-medium text-stone-500">
+				<span class="inline-flex items-center gap-1.5">
+					<Icon icon="solar:bolt-bold-duotone" class="h-4 w-4 text-cyan-500" />
+					Cached flows
+					<span class="text-stone-400">({cachedFlows.length})</span>
+				</span>
+			</p>
+			<div class="rounded-2xl bg-white">
+				{#each cachedFlows as flow, i (flow.id)}
+					<div class="flex items-center justify-between px-4 md:px-6 py-3 text-sm {i > 0 ? 'border-t border-stone-100' : ''}">
+						<div class="min-w-0 flex-1">
+							<p class="truncate text-xs font-medium text-stone-800">{flow.goalKey}</p>
+							<div class="mt-0.5 flex flex-wrap items-center gap-2 text-[10px] text-stone-400">
+								{#if flow.appPackage}
+									<span class="flex items-center gap-0.5 rounded bg-blue-50 px-1.5 py-0.5 text-blue-600">
+										<Icon icon="solar:box-bold-duotone" class="h-2.5 w-2.5" />
+										{flow.appPackage}
+									</span>
+								{/if}
+								<span>{flow.stepCount} step{flow.stepCount !== 1 ? 's' : ''}</span>
+								<span class="text-stone-300">&middot;</span>
+								<span class="text-emerald-600">{flow.successCount ?? 0} hits</span>
+								{#if (flow.failCount ?? 0) > 0}
+									<span class="text-stone-300">&middot;</span>
+									<span class="text-red-500">{flow.failCount} fails</span>
+								{/if}
+								{#if flow.lastUsedAt}
+									<span class="text-stone-300">&middot;</span>
+									<span>last used {relativeTime(flow.lastUsedAt instanceof Date ? flow.lastUsedAt.toISOString() : String(flow.lastUsedAt))}</span>
+								{/if}
+							</div>
+						</div>
+						<button
+							onclick={() => handleDeleteCachedFlow(flow.id)}
+							class="ml-3 shrink-0 rounded-lg p-1.5 text-stone-300 transition-colors hover:bg-red-50 hover:text-red-500"
+							title="Delete cached flow"
+						>
+							<Icon icon="solar:trash-bin-minimalistic-bold-duotone" class="h-3.5 w-3.5" />
+						</button>
+					</div>
 				{/each}
 			</div>
 		</div>
@@ -1061,6 +1269,13 @@
 								{formatTime(run.startedAt)}
 								<span class="text-stone-300">&middot;</span>
 								{run.totalSteps} goal{run.totalSteps !== 1 ? 's' : ''}
+								{#if countCacheHits(run) > 0}
+									<span class="text-stone-300">&middot;</span>
+									<span class="inline-flex items-center gap-0.5 text-cyan-600">
+										<Icon icon="solar:bolt-bold-duotone" class="h-3 w-3" />
+										{countCacheHits(run)}/{run.totalSteps} cached
+									</span>
+								{/if}
 								<span class="text-stone-300">&middot;</span>
 								{formatDuration(run.startedAt, run.completedAt)}
 							</p>
@@ -1149,8 +1364,15 @@
 													</span>
 												{/if}
 												{#if run.stepResults[stepIdx].resolvedBy}
+												{#if run.stepResults[stepIdx].resolvedBy === 'cached_flow'}
+													<span class="flex items-center gap-0.5 rounded bg-cyan-100 px-1.5 py-0.5 text-[9px] font-medium text-cyan-700">
+														<Icon icon="solar:bolt-bold-duotone" class="h-2.5 w-2.5" />
+														cached
+													</span>
+												{:else}
 													<span class="rounded bg-stone-200 px-1.5 py-0.5 text-[9px] text-stone-500">{run.stepResults[stepIdx].resolvedBy}</span>
 												{/if}
+											{/if}
 											{:else if isStepActive(run, stepIdx, liveProgress)}
 												<span class="flex items-center gap-1 text-xs font-medium text-amber-600">
 													<Icon icon="solar:refresh-circle-bold-duotone" class="h-3.5 w-3.5 animate-spin" />
@@ -1248,7 +1470,14 @@
 								<span class="rounded-lg bg-stone-100 px-2.5 py-1 text-xs text-stone-600">{modalStep.config.retries} retries</span>
 							{/if}
 							{#if modalStep.stepResult.resolvedBy}
-								<span class="rounded-lg bg-violet-50 px-2.5 py-1 text-xs text-violet-700">Resolved by: {modalStep.stepResult.resolvedBy}</span>
+								{#if modalStep.stepResult.resolvedBy === 'cached_flow'}
+									<span class="flex items-center gap-1 rounded-lg bg-cyan-50 px-2.5 py-1 text-xs text-cyan-700">
+										<Icon icon="solar:bolt-bold-duotone" class="h-3.5 w-3.5" />
+										Cached flow
+									</span>
+								{:else}
+									<span class="rounded-lg bg-violet-50 px-2.5 py-1 text-xs text-violet-700">Resolved by: {modalStep.stepResult.resolvedBy}</span>
+								{/if}
 							{/if}
 							{#if modalStep.stepResult.stepsUsed !== undefined}
 								<span class="rounded-lg bg-stone-100 px-2.5 py-1 text-xs text-stone-600">Used {modalStep.stepResult.stepsUsed} steps</span>
@@ -1520,7 +1749,7 @@
 				bind:value={goal}
 				placeholder="e.g., Open YouTube and search for lofi beats"
 				class="flex-1 rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm focus:border-stone-400 focus:outline-none"
-				disabled={runStatus === 'running'}
+				disabled={runStatus === 'running' || liveWorkflowRun?.status === 'running'}
 				onkeydown={(e) => e.key === 'Enter' && submitGoal()}
 			/>
 			{#if runStatus === 'running'}
@@ -1534,7 +1763,8 @@
 			{:else}
 				<button
 					onclick={submitGoal}
-					class="flex w-full sm:w-auto items-center justify-center gap-2 rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-800"
+					disabled={liveWorkflowRun?.status === 'running'}
+					class="flex w-full sm:w-auto items-center justify-center gap-2 rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-800 disabled:opacity-40"
 				>
 					<Icon icon="solar:play-bold" class="h-4 w-4" />
 					Run
@@ -1543,8 +1773,8 @@
 		</div>
 	</div>
 
-	<!-- Example Goals -->
-	{#if runStatus === 'idle' && !goal.trim()}
+	<!-- Example Goals (only when idle and no live workflow) -->
+	{#if runStatus === 'idle' && !goal.trim() && !liveWorkflowRun}
 		<div class="mb-6">
 			<p class="mb-2 text-xs font-medium text-stone-400">Try an example</p>
 			<div class="flex flex-wrap gap-2">
@@ -1560,8 +1790,187 @@
 		</div>
 	{/if}
 
-	<!-- Live Steps -->
-	{#if steps.length > 0 || runStatus !== 'idle'}
+	<!-- Live Workflow Run — shows all steps upfront, fills in as they complete -->
+	{#if liveWorkflowRun}
+		{@const lwr = liveWorkflowRun}
+		<div class="mb-6">
+			<!-- Workflow header with status -->
+			<div class="mb-3 flex items-center justify-between">
+				<div class="flex items-center gap-2">
+					<Icon
+						icon={lwr.wfType === 'flow' ? 'solar:programming-bold-duotone' : 'solar:layers-bold-duotone'}
+						class="h-4 w-4 {lwr.status === 'completed' ? 'text-emerald-500' : lwr.status === 'running' ? 'text-amber-500' : 'text-red-500'}"
+					/>
+					<p class="text-sm font-medium text-stone-700">{lwr.name}</p>
+				</div>
+				<div class="flex items-center gap-2">
+					{#if lwr.status === 'running'}
+						<span class="flex items-center gap-1.5 text-xs font-medium text-amber-600">
+							<span class="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-amber-500"></span>
+							Running
+						</span>
+						<button
+							onclick={stopWorkflow}
+							class="flex items-center gap-1 rounded-lg bg-red-50 px-2.5 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-100"
+						>
+							<Icon icon="solar:stop-bold" class="h-3 w-3" />
+							Stop
+						</button>
+					{:else if lwr.status === 'completed'}
+						<span class="flex items-center gap-1.5 text-xs font-medium text-emerald-600">
+							<Icon icon="solar:check-circle-bold-duotone" class="h-4 w-4" />
+							Completed
+						</span>
+					{:else if lwr.status === 'stopped'}
+						<span class="flex items-center gap-1.5 text-xs font-medium text-stone-500">
+							<Icon icon="solar:stop-circle-bold-duotone" class="h-4 w-4" />
+							Stopped
+						</span>
+					{:else}
+						<span class="flex items-center gap-1.5 text-xs font-medium text-red-600">
+							<Icon icon="solar:close-circle-bold-duotone" class="h-4 w-4" />
+							Failed
+						</span>
+					{/if}
+				</div>
+			</div>
+
+			<!-- Step list — all steps shown upfront -->
+			<div class="space-y-2">
+				{#each lwr.stepGoals as stepGoal, stepIdx (stepIdx)}
+					{@const result = lwr.stepResults[stepIdx]}
+					{@const isActive = lwr.activeStepIndex === stepIdx && lwr.status === 'running'}
+					{@const isPending = !result && !isActive}
+					<div class="rounded-xl bg-white transition-all {isActive ? 'ring-1 ring-amber-200 shadow-sm' : ''}">
+						<div class="flex items-start gap-2.5 px-4 py-3">
+							<!-- Step number badge -->
+							<span
+								class="mt-0.5 shrink-0 rounded-full px-2 py-0.5 font-mono text-[10px]
+									{result
+										? result.success ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
+										: isActive ? 'bg-amber-100 text-amber-700'
+										: 'bg-stone-200 text-stone-500'}"
+							>
+								{stepIdx + 1}
+							</span>
+							<!-- Goal + app info -->
+							<div class="min-w-0 flex-1 {isPending ? 'opacity-50' : ''}">
+								<p class="text-xs leading-relaxed text-stone-800">
+									{stepGoal.goal}
+								</p>
+								{#if stepGoal.app}
+									<span class="mt-0.5 inline-flex items-center gap-1 rounded bg-blue-50 px-1.5 py-0.5 text-[10px] text-blue-600">
+										<Icon icon="solar:box-bold-duotone" class="h-2.5 w-2.5" />
+										{stepGoal.app}
+									</span>
+								{/if}
+								<!-- Active step indicator + live agent reasoning -->
+								{#if isActive}
+									<div class="mt-1.5 flex items-center gap-1.5">
+										<Icon icon="solar:refresh-circle-bold-duotone" class="h-3.5 w-3.5 animate-spin text-amber-500" />
+										<span class="text-[11px] text-amber-600">
+											Working on this step...
+											{#if lwr.totalAttempts > 1}
+												<span class="text-amber-400">&middot;</span>
+												Attempt {lwr.attempt}/{lwr.totalAttempts}
+											{/if}
+										</span>
+									</div>
+									<!-- Live agent steps within this workflow step -->
+									{#if lwr.liveSteps.length > 0}
+										<div class="mt-2 space-y-1 border-l-2 border-amber-200 pl-3">
+											{#each lwr.liveSteps as agentStep (agentStep.step)}
+												<div class="flex items-start gap-1.5">
+													<span class="mt-0.5 shrink-0 rounded bg-stone-100 px-1 py-0.5 font-mono text-[9px] text-stone-500">{agentStep.step}</span>
+													<div class="min-w-0 flex-1">
+														<span class="rounded-md px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide
+															{agentStep.action.startsWith('tap') ? 'bg-blue-100 text-blue-700'
+															: agentStep.action.startsWith('type') ? 'bg-violet-100 text-violet-700'
+															: agentStep.action.startsWith('swipe') || agentStep.action.startsWith('scroll') ? 'bg-amber-100 text-amber-700'
+															: agentStep.action.startsWith('back') || agentStep.action.startsWith('home') ? 'bg-stone-200 text-stone-600'
+															: agentStep.action.startsWith('done') ? 'bg-emerald-100 text-emerald-700'
+															: agentStep.action.startsWith('wait') ? 'bg-cyan-100 text-cyan-700'
+															: agentStep.action.startsWith('long_press') ? 'bg-pink-100 text-pink-700'
+															: 'bg-stone-100 text-stone-600'}">
+															{agentStep.action}
+														</span>
+														{#if agentStep.reasoning}
+															<p class="mt-0.5 text-[11px] leading-relaxed text-stone-500">{agentStep.reasoning}</p>
+														{/if}
+													</div>
+												</div>
+											{/each}
+										</div>
+									{/if}
+								{/if}
+								<!-- Error message -->
+								{#if result && !result.success && (result.error || result.message)}
+									<p class="mt-1 text-[11px] text-red-500">{result.error ?? result.message}</p>
+								{/if}
+							</div>
+							<!-- Right side: status + meta -->
+							<div class="flex shrink-0 flex-col items-end gap-1">
+								{#if result}
+									<span class="flex items-center gap-1 text-xs font-medium {result.success ? 'text-emerald-600' : 'text-red-600'}">
+										<Icon
+											icon={result.success ? 'solar:check-circle-bold-duotone' : 'solar:close-circle-bold-duotone'}
+											class="h-3.5 w-3.5"
+										/>
+										{result.success ? 'OK' : 'Failed'}
+									</span>
+									{#if result.stepsUsed !== undefined && result.stepsUsed > 0}
+										<span class="text-[10px] text-stone-400">
+											{result.stepsUsed} step{result.stepsUsed !== 1 ? 's' : ''}
+										</span>
+									{/if}
+									{#if result.resolvedBy}
+										{#if result.resolvedBy === 'cached_flow'}
+											<span class="flex items-center gap-0.5 rounded bg-cyan-100 px-1.5 py-0.5 text-[9px] font-medium text-cyan-700">
+												<Icon icon="solar:bolt-bold-duotone" class="h-2.5 w-2.5" />
+												cached
+											</span>
+										{:else}
+											<span class="rounded bg-stone-200 px-1.5 py-0.5 text-[9px] text-stone-500">{result.resolvedBy}</span>
+										{/if}
+									{/if}
+								{:else if isActive}
+									<span class="flex items-center gap-1 text-xs font-medium text-amber-600">
+										<Icon icon="solar:refresh-circle-bold-duotone" class="h-3.5 w-3.5 animate-spin" />
+										Running
+									</span>
+								{:else}
+									<span class="flex items-center gap-1 text-xs font-medium text-stone-400">
+										<Icon icon="solar:clock-circle-bold-duotone" class="h-3.5 w-3.5" />
+										Pending
+									</span>
+								{/if}
+							</div>
+						</div>
+					</div>
+				{/each}
+			</div>
+
+			<!-- Summary bar for completed workflows -->
+			{#if lwr.status !== 'running'}
+				{@const completedSteps = lwr.stepResults.filter((r) => r !== null)}
+				{@const successSteps = completedSteps.filter((r) => r?.success)}
+				{@const cachedSteps = completedSteps.filter((r) => r?.resolvedBy === 'cached_flow')}
+				<div class="mt-3 flex items-center gap-3 rounded-xl bg-stone-50 px-4 py-2.5 text-xs text-stone-500">
+					<span>{successSteps.length}/{lwr.totalSteps} passed</span>
+					{#if cachedSteps.length > 0}
+						<span class="text-stone-300">&middot;</span>
+						<span class="flex items-center gap-0.5 text-cyan-600">
+							<Icon icon="solar:bolt-bold-duotone" class="h-3 w-3" />
+							{cachedSteps.length} cached
+						</span>
+					{/if}
+				</div>
+			{/if}
+		</div>
+	{/if}
+
+	<!-- Live single-goal Steps (non-workflow) -->
+	{#if (steps.length > 0 || runStatus !== 'idle') && !liveWorkflowRun}
 		<p class="mb-3 text-sm font-medium text-stone-500">
 			{currentGoal ? currentGoal : 'Current run'}
 		</p>

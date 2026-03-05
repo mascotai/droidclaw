@@ -28,10 +28,25 @@ import {
 import { formatAppHints } from "./hints.js";
 import { isSkillAction, executeSkill } from "./skills.js";
 import { createStuckDetector } from "./stuck.js";
+import { findElementByText } from "./flow-runner.js";
 import { db } from "../db.js";
 import { agentSession, agentStep, device as deviceTable } from "../schema.js";
 import { eq } from "drizzle-orm";
 import type { UIElement, ActionDecision } from "@droidclaw/shared";
+
+// ─── Structured Step Result ─────────────────────────────────────
+
+interface StructuredResult {
+  success: boolean;
+  action: string;
+  errorType?: "timeout" | "element_not_found" | "parse_error" | "device_error" | "skill_error" | "llm_error";
+  details: string;
+  durationMs?: number;
+}
+
+function buildStepResult(actionSig: string, success: boolean, details: string, errorType?: StructuredResult["errorType"]): StructuredResult {
+  return { success, action: actionSig, details, ...(errorType && { errorType }) };
+}
 
 // ─── Public Types ───────────────────────────────────────────────
 
@@ -353,6 +368,7 @@ export async function runAgentLoop(
       }
 
       stepsUsed = step + 1;
+      const stepStartTime = Date.now();
 
       // ── 1. Get screen state from device ─────────────────────
       const screenResponse = (await sessions.sendCommand(deviceId, {
@@ -594,6 +610,7 @@ export async function runAgentLoop(
             action: action as unknown as Record<string, unknown>,
             reasoning: action.reason ?? "",
             packageName: packageName ?? null,
+            durationMs: Date.now() - stepStartTime,
           })
           .catch((err) =>
             console.error(`[Agent ${sessionId}] Failed to save step ${step + 1}: ${err}`)
@@ -607,7 +624,41 @@ export async function runAgentLoop(
       }
 
       // ── 9. Execute on device (skills intercepted server-side) ──
+      let structuredResult: StructuredResult | undefined;
       try {
+        // ── 9a. Text-based tap resolution ──
+        // If the AI specified a target text for tap/longpress, resolve to exact element center
+        if (
+          (action.action === "tap" || action.action === "longpress") &&
+          action.target
+        ) {
+          const originalCoords = action.coordinates ? [...action.coordinates] : undefined;
+          const matched = findElementByText(elements, action.target);
+          if (matched) {
+            console.log(
+              `[Agent ${sessionId}] Text match: "${action.target}" → [${matched.center[0]}, ${matched.center[1]}]` +
+                (action.coordinates
+                  ? ` (was [${action.coordinates[0]}, ${action.coordinates[1]}])`
+                  : "")
+            );
+            action.coordinates = matched.center;
+            (action as any)._resolved = {
+              target: action.target,
+              matchedText: matched.text,
+              matchedCenter: matched.center,
+              originalCoords,
+            };
+          } else {
+            console.log(
+              `[Agent ${sessionId}] Text match: "${action.target}" → no match, using coordinates [${action.coordinates?.[0]}, ${action.coordinates?.[1]}]`
+            );
+            (action as any)._resolved = {
+              target: action.target,
+              matched: false,
+            };
+          }
+        }
+
         if (isSkillAction(action.action)) {
           // Multi-step skill: run server-side using WebSocket primitives
           const skillResult = await executeSkill(
@@ -618,6 +669,12 @@ export async function runAgentLoop(
             screenHeight
           );
           lastActionFeedback = `${actionSig} -> ${skillResult.success ? "OK" : "FAILED"}: ${skillResult.message}`;
+          structuredResult = buildStepResult(
+            actionSig,
+            skillResult.success,
+            skillResult.message,
+            skillResult.success ? undefined : "skill_error"
+          );
         } else {
           // Regular action: map to WebSocket command and send to device
           const command = actionToCommand(action, screenWidth, screenHeight);
@@ -628,6 +685,12 @@ export async function runAgentLoop(
           };
           const resultSuccess = result.success !== false;
           lastActionFeedback = `${actionSig} -> ${resultSuccess ? "OK" : "FAILED"}: ${result.error ?? result.data ?? "completed"}`;
+          structuredResult = buildStepResult(
+            actionSig,
+            resultSuccess,
+            result.error ?? result.data ?? "completed",
+            resultSuccess ? undefined : "device_error"
+          );
         }
         console.log(`[Agent ${sessionId}] Step ${step + 1} result: ${lastActionFeedback}`);
         // Append result to last history entry
@@ -637,14 +700,17 @@ export async function runAgentLoop(
         }
         // Update step result in DB
         if (persistentDeviceId) {
-          db.update(agentStep).set({ result: lastActionFeedback }).where(eq(agentStep.id, stepId))
+          structuredResult!.durationMs = Date.now() - stepStartTime;
+          db.update(agentStep).set({ result: JSON.stringify(structuredResult), durationMs: Date.now() - stepStartTime }).where(eq(agentStep.id, stepId))
             .catch(() => {});
         }
       } catch (err) {
         lastActionFeedback = `${actionSig} -> FAILED: ${(err as Error).message}`;
+        structuredResult = buildStepResult(actionSig, false, (err as Error).message, "device_error");
+        structuredResult.durationMs = Date.now() - stepStartTime;
         console.log(`[Agent ${sessionId}] Step ${step + 1} result: ${lastActionFeedback}`);
         if (persistentDeviceId) {
-          db.update(agentStep).set({ result: lastActionFeedback }).where(eq(agentStep.id, stepId))
+          db.update(agentStep).set({ result: JSON.stringify(structuredResult), durationMs: Date.now() - stepStartTime }).where(eq(agentStep.id, stepId))
             .catch(() => {});
         }
         console.error(

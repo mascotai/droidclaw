@@ -13,6 +13,7 @@ export const env = {
   SERVER_PUBLIC_URL: process.env.SERVER_PUBLIC_URL || "",
   TEMPORAL_ADDRESS: process.env.TEMPORAL_ADDRESS || "localhost:7233",
   TEMPORAL_NAMESPACE: process.env.TEMPORAL_NAMESPACE || "mascotai-dev",
+  TRUST_PROXY_AUTH: process.env.TRUST_PROXY_AUTH || "false",
 };
 
 if (!env.DATABASE_URL) {

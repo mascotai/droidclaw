@@ -16,7 +16,7 @@ export interface RunFlowOptions {
   signal: AbortSignal;
 }
 
-interface UIElement {
+interface FlowUIElement {
   text: string;
   hint?: string;
   id?: string;
@@ -24,7 +24,15 @@ interface UIElement {
   center: [number, number];
 }
 
-function findElementByText(elements: UIElement[], query: string): UIElement | null {
+/** Minimal shape required by findElementByText — works with both flow-runner and shared UIElement types */
+interface TextMatchElement {
+  text: string;
+  hint?: string;
+  id?: string;
+  center: [number, number];
+}
+
+export function findElementByText<T extends TextMatchElement>(elements: T[], query: string): T | null {
   const q = query.toLowerCase();
   const exact = elements.find((el) => el.text && el.text.toLowerCase() === q);
   if (exact) return exact;
@@ -39,7 +47,7 @@ function findElementByText(elements: UIElement[], query: string): UIElement | nu
   return null;
 }
 
-async function executeFlowStepWs(
+export async function executeFlowStepWs(
   deviceId: string,
   step: FlowStep,
   appId?: string
@@ -76,10 +84,10 @@ async function executeFlowStepWs(
         }
         // Use "get_screen" — same command the agent loop uses (device doesn't support "get_ui_tree")
         const screenRes = await sessions.sendCommand(deviceId, { type: "get_screen" }) as any;
-        const elements = (screenRes?.elements ?? []) as UIElement[];
+        const elements = (screenRes?.elements ?? []) as FlowUIElement[];
         const el = findElementByText(elements, String(value));
         if (!el) {
-          const available = elements.filter((e: UIElement) => e.text).map((e: UIElement) => e.text).slice(0, 10);
+          const available = elements.filter((e: FlowUIElement) => e.text).map((e: FlowUIElement) => e.text).slice(0, 10);
           return { success: false, message: `Element "${value}" not found. Available: ${available.join(", ")}` };
         }
         await sessions.sendCommand(deviceId, { type: "tap", x: el.center[0], y: el.center[1] });
@@ -91,7 +99,7 @@ async function executeFlowStepWs(
           return { success: true, message: `Long-pressed (${value[0]}, ${value[1]})` };
         }
         const lpScreenRes = await sessions.sendCommand(deviceId, { type: "get_screen" }) as any;
-        const lpElements = (lpScreenRes?.elements ?? []) as UIElement[];
+        const lpElements = (lpScreenRes?.elements ?? []) as FlowUIElement[];
         const lpEl = findElementByText(lpElements, String(value));
         if (!lpEl) return { success: false, message: `Element "${value}" not found for longpress` };
         await sessions.sendCommand(deviceId, { type: "longpress", x: lpEl.center[0], y: lpEl.center[1] });
@@ -150,6 +158,14 @@ export async function runFlowServer(options: RunFlowOptions): Promise<void> {
     name,
     wfType: "flow",
     totalSteps: steps.length,
+    stepGoals: steps.map((s) => {
+      if (typeof s === 'string') return { goal: s };
+      if (typeof s === 'object' && s !== null) {
+        const [cmd, val] = Object.entries(s)[0] ?? [];
+        return { goal: cmd ? `${cmd}: ${val}` : JSON.stringify(s) };
+      }
+      return { goal: String(s) };
+    }),
   } as any);
 
   for (let i = 0; i < steps.length; i++) {
@@ -184,6 +200,8 @@ export async function runFlowServer(options: RunFlowOptions): Promise<void> {
         runId,
         stepIndex: i,
         success: result.success,
+        resolvedBy: "flow",
+        message: result.message,
       } as any);
 
       if (!result.success) {

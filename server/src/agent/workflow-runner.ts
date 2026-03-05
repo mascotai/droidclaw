@@ -1,8 +1,10 @@
 import { sessions } from "../ws/sessions.js";
 import { db } from "../db.js";
-import { workflowRun } from "../schema.js";
-import { eq } from "drizzle-orm";
+import { workflowRun, cachedFlow, agentStep } from "../schema.js";
+import { eq, and, sql } from "drizzle-orm";
 import { runPipeline } from "./pipeline.js";
+import { executeFlowStepWs } from "./flow-runner.js";
+import { compileSessionToFlow, normalizeGoalKey } from "./session-to-flow.js";
 import { activeSessions } from "./active-sessions.js";
 import type { LLMConfig } from "./llm.js";
 import type { ScreenObservation } from "./loop.js";
@@ -25,6 +27,9 @@ export interface WorkflowStep {
   formData?: Record<string, string>;
   retries?: number; // max retry attempts on failure (default: 0 = no retry)
   exhaustIsSuccess?: boolean; // treat maxSteps exhaustion as success (for open-ended browsing)
+  cache?: boolean; // explicit opt-in/out for deterministic flow caching (default: true for cacheable steps)
+  /** Preserved by resolveVariables() — the original goal text with {{placeholders}} intact */
+  _goalTemplate?: string;
 }
 
 export interface RunWorkflowOptions {
@@ -36,6 +41,8 @@ export interface RunWorkflowOptions {
   steps: WorkflowStep[];
   llmConfig: LLMConfig;
   signal: AbortSignal;
+  /** Resolved variable values (variable name → resolved string value) for cache key reconstruction */
+  resolvedValues?: Record<string, string>;
 }
 
 /** Max time (ms) to wait for a device to reconnect after a disconnect */
@@ -52,6 +59,79 @@ function buildGoal(step: WorkflowStep): string {
     goal += `\n\nFORM DATA TO FILL:\n${lines}\n\nFind each field on screen and enter the corresponding value.`;
   }
   return goal;
+}
+
+/**
+ * Determine if a workflow step is eligible for deterministic flow caching.
+ *
+ * Returns false for:
+ * - Steps with `exhaustIsSuccess` (open-ended browsing — no stable "done" state)
+ * - Steps with `cache: false` (explicit opt-out)
+ * - Steps with formData (dynamic input that changes each run)
+ */
+function isCacheable(step: WorkflowStep): boolean {
+  if (step.cache === false) return false;
+  if (step.exhaustIsSuccess) return false;
+  if (step.formData && Object.keys(step.formData).length > 0) return false;
+  return true;
+}
+
+type FlowStep = string | { [key: string]: string | number | [number, number] };
+
+/**
+ * Resolve `{{variable}}` placeholders in cached flow steps using the resolved values map.
+ */
+function resolveFlowVariables(
+  flowSteps: FlowStep[],
+  resolvedValues: Record<string, string>,
+): FlowStep[] {
+  if (Object.keys(resolvedValues).length === 0) return flowSteps;
+
+  return flowSteps.map((step) => {
+    if (typeof step === "string") return step;
+    if (typeof step !== "object" || step === null) return step;
+
+    const [command, value] = Object.entries(step)[0];
+    if (typeof value !== "string") return step;
+
+    // Replace {{var}} placeholders in the value
+    const resolved = value.replace(/\{\{(\w+)\}\}/g, (_: string, key: string) =>
+      resolvedValues[key] !== undefined ? resolvedValues[key] : `{{${key}}}`
+    );
+
+    if (resolved === value) return step; // no change
+    return { [command]: resolved };
+  });
+}
+
+/**
+ * Replay a cached deterministic flow on the device.
+ *
+ * @returns `true` if all steps succeeded, `false` if any step failed.
+ */
+async function replayCachedFlow(
+  deviceId: string,
+  flowSteps: FlowStep[],
+  appId?: string,
+): Promise<boolean> {
+  for (let i = 0; i < flowSteps.length; i++) {
+    const step = flowSteps[i];
+    try {
+      const result = await executeFlowStepWs(deviceId, step, appId);
+      if (!result.success) {
+        wfLog(`[Workflow] Cached flow replay failed at step ${i}: ${result.message}`);
+        return false;
+      }
+      // Brief pause between steps for UI to settle
+      if (i < flowSteps.length - 1 && typeof step !== "string") {
+        await new Promise((r) => setTimeout(r, 800));
+      }
+    } catch (err) {
+      wfLog(`[Workflow] Cached flow replay threw at step ${i}: ${err}`);
+      return false;
+    }
+  }
+  return true;
 }
 
 /**
@@ -136,7 +216,7 @@ function isUserStop(trackingKey: string): boolean {
 }
 
 export async function runWorkflowServer(options: RunWorkflowOptions): Promise<void> {
-  const { runId, persistentDeviceId, userId, name, steps, llmConfig } = options;
+  const { runId, persistentDeviceId, userId, name, steps, llmConfig, resolvedValues } = options;
   let { deviceId } = options;
   const trackingKey = persistentDeviceId ?? deviceId;
   const stepResults: Array<{ goal: string; success: boolean; stepsUsed: number; sessionId?: string; resolvedBy?: string; error?: string; observations?: ScreenObservation[] }> = [];
@@ -166,6 +246,7 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
       name,
       wfType: "workflow",
       totalSteps: steps.length,
+      stepGoals: steps.map((s) => ({ goal: s.goal, app: s.app })),
     } as any);
 
     for (let i = 0; i < steps.length; i++) {
@@ -247,6 +328,80 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
           }
         }
 
+        // ── Cache lookup: try to replay a cached deterministic flow ──
+        const stepCacheable = isCacheable(step);
+        if (stepCacheable && persistentDeviceId) {
+          const goalKey = normalizeGoalKey(step._goalTemplate ?? step.goal);
+          const appPackage = step.app ?? null;
+
+          try {
+            const cached = await db
+              .select()
+              .from(cachedFlow)
+              .where(
+                and(
+                  eq(cachedFlow.userId, userId),
+                  eq(cachedFlow.deviceId, persistentDeviceId),
+                  eq(cachedFlow.goalKey, goalKey),
+                  appPackage ? eq(cachedFlow.appPackage, appPackage) : sql`${cachedFlow.appPackage} IS NULL`,
+                )
+              )
+              .limit(1);
+
+            if (cached.length > 0) {
+              const cachedEntry = cached[0];
+              const rawFlowSteps = cachedEntry.steps as FlowStep[];
+              const resolvedFlowSteps = resolveFlowVariables(rawFlowSteps, resolvedValues ?? {});
+
+              wfLog(`[Workflow ${runId}] Step ${i}: replaying cached flow (${resolvedFlowSteps.length} steps, success=${cachedEntry.successCount}, fail=${cachedEntry.failCount})`);
+
+              const replayOk = await replayCachedFlow(deviceId, resolvedFlowSteps, step.app);
+              if (replayOk) {
+                // Cache hit success — update stats and move on
+                await db
+                  .update(cachedFlow)
+                  .set({
+                    successCount: sql`${cachedFlow.successCount} + 1`,
+                    lastUsedAt: new Date(),
+                  })
+                  .where(eq(cachedFlow.id, cachedEntry.id));
+
+                stepResults.push({
+                  goal: step.goal,
+                  success: true,
+                  stepsUsed: resolvedFlowSteps.length,
+                  resolvedBy: "cached_flow",
+                });
+                stepSuccess = true;
+                wfLog(`[Workflow ${runId}] Step ${i}: cached flow replay SUCCESS`);
+                break; // Success — move to next step
+              } else {
+                // Cache replay failed — delete stale cache entry and fall through to AI
+                wfLog(`[Workflow ${runId}] Step ${i}: cached flow replay FAILED, deleting cache entry and falling through to AI`);
+                await db
+                  .update(cachedFlow)
+                  .set({ failCount: sql`${cachedFlow.failCount} + 1` })
+                  .where(eq(cachedFlow.id, cachedEntry.id));
+                await db.delete(cachedFlow).where(eq(cachedFlow.id, cachedEntry.id));
+
+                // Re-launch app since cached flow may have left UI in a bad state
+                if (step.app) {
+                  try {
+                    await sessions.sendCommand(deviceId, { type: "home" });
+                    await new Promise((r) => setTimeout(r, 500));
+                    await sessions.sendCommand(deviceId, { type: "launch", packageName: step.app });
+                    await new Promise((r) => setTimeout(r, 2000));
+                  } catch { /* ignore */ }
+                }
+              }
+            }
+          } catch (cacheErr) {
+            // Cache lookup/replay error — non-fatal, fall through to AI
+            wfLog(`[Workflow ${runId}] Step ${i}: cache lookup error: ${cacheErr}`);
+          }
+        }
+
+        // ── AI execution: run the full LLM pipeline ──
         try {
           wfLog(`[Workflow ${runId}] Step ${i} attempt ${attempt}: calling runPipeline...`);
           const result = await runPipeline({
@@ -266,6 +421,41 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
           if (isSuccess) {
             stepResults.push({ goal: step.goal, success: true, stepsUsed: result.stepsUsed, sessionId: result.sessionId, resolvedBy: result.resolvedBy, observations: result.observations });
             stepSuccess = true;
+
+            // ── Cache save: compile the successful AI session into a deterministic flow ──
+            if (stepCacheable && persistentDeviceId && result.sessionId) {
+              try {
+                const sessionSteps = await db
+                  .select({ action: agentStep.action, result: agentStep.result })
+                  .from(agentStep)
+                  .where(eq(agentStep.sessionId, result.sessionId))
+                  .orderBy(agentStep.stepNumber);
+
+                const compiled = compileSessionToFlow(
+                  sessionSteps as Array<{ action: Record<string, unknown> | null; result: string | null }>,
+                  step.app,
+                  resolvedValues,
+                );
+
+                if (compiled) {
+                  const goalKey = normalizeGoalKey(step._goalTemplate ?? step.goal);
+                  await db.insert(cachedFlow).values({
+                    id: crypto.randomUUID(),
+                    userId,
+                    deviceId: persistentDeviceId,
+                    goalKey,
+                    appPackage: step.app ?? null,
+                    steps: compiled as any,
+                    sourceSessionId: result.sessionId,
+                  }).onConflictDoNothing();
+                  wfLog(`[Workflow ${runId}] Step ${i}: compiled and cached deterministic flow (${compiled.length} steps)`);
+                }
+              } catch (cacheErr) {
+                // Cache save error — non-fatal, just log
+                wfLog(`[Workflow ${runId}] Step ${i}: cache save error: ${cacheErr}`);
+              }
+            }
+
             break; // Success — move to next step
           }
 
@@ -321,12 +511,15 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
         stepResults: stepResults,
       }).where(eq(workflowRun.id, runId));
 
+      const lastResult = stepResults[stepResults.length - 1];
       sessions.notifyDashboard(userId, {
         type: "workflow_step_done",
         runId,
         stepIndex: i,
         success: stepSuccess,
-        stepsUsed: stepResults[stepResults.length - 1]?.stepsUsed ?? 0,
+        stepsUsed: lastResult?.stepsUsed ?? 0,
+        resolvedBy: lastResult?.resolvedBy,
+        error: lastResult?.error,
       } as any);
 
       if (!stepSuccess) {

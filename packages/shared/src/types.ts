@@ -43,6 +43,8 @@ export interface ActionDecision {
   dest?: string;
   code?: number;
   setting?: string;
+  /** Visible text of the element to tap/longpress — used for precise coordinate resolution */
+  target?: string;
   /** Android intent action (e.g. "android.intent.action.VIEW") */
   intentAction?: string;
   /** MIME type for intent (e.g. "text/plain") */

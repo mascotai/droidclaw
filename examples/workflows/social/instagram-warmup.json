@@ -1,9 +1,10 @@
 {
   "name": "Instagram Warm-up",
-  "description": "Simulates natural Instagram browsing with randomized engagement targets per run.",
+  "description": "Simulates natural Instagram browsing with randomized engagement targets per run. Comment steps navigate the search results grid so each comment lands on a different user's reel.",
   "params": {
-    "nicheKeywords": "Search terms for the Explore tab",
-    "commentPrompt": "Instruction for generating comments"
+    "nicheKeywords": "Search terms for the Explore tab (e.g. 'fitness motivation')",
+    "commentPrompt": "Persona/style instruction for comments (e.g. 'You are a fitness enthusiast. Write a 5-6 word funny supportive reply')",
+    "commentCount": "Number of unique reels to comment on — duplicate the comment step that many times"
   },
   "variables": {
     "watchReels": { "min": 8, "max": 15 },
@@ -48,8 +49,14 @@
     },
     {
       "app": "com.instagram.android",
-      "goal": "Comment on current reel: {{commentPrompt}}. Post it. Done.",
-      "maxSteps": 15,
+      "goal": "Go to Search/Explore tab. Search for '{{nicheKeywords}}'. Tap the Reels filter to show only reels. Tap the 1st reel to open it. Tap the comment button. {{commentPrompt}}. Post exactly ONE comment and tap Post. After posting, press Back to close comments, then press Back to return to the search results grid. Stop immediately — do NOT open or comment on any other reels. Done.",
+      "maxSteps": 20,
+      "retries": 2
+    },
+    {
+      "app": "com.instagram.android",
+      "goal": "You are on the search results grid showing reels. Scroll down to see new results. Tap a reel that looks different from previous ones. Tap the comment button. {{commentPrompt}}. Post exactly ONE comment and tap Post. After posting, press Back to close comments, then press Back to return to the search results grid. Stop immediately — do NOT open or comment on any other reels. Done.",
+      "maxSteps": 12,
       "retries": 2
     },
     {

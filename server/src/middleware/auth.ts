@@ -48,6 +48,27 @@ export async function sessionMiddleware(c: Context, next: Next) {
     return;
   }
 
+  // ── Proxy-auth (authentik forward-auth headers via Traefik) ──
+  if (env.TRUST_PROXY_AUTH === "true") {
+    const proxyEmail = c.req.header("x-authentik-email");
+
+    if (proxyEmail) {
+      const users = await db
+        .select({ id: userTable.id, name: userTable.name, email: userTable.email })
+        .from(userTable)
+        .where(eq(userTable.email, proxyEmail))
+        .limit(1);
+
+      if (users.length > 0) {
+        c.set("user", users[0]);
+        c.set("session", { id: "proxy-auth", userId: users[0].id });
+        await next();
+        return;
+      }
+      // If no matching user found, fall through to other auth methods
+    }
+  }
+
   // ── Bearer token auth (external API consumers) ──
   const authHeader = c.req.header("Authorization");
   if (authHeader?.startsWith("Bearer ")) {

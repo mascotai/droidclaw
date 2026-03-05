@@ -157,6 +157,7 @@ export const agentStep = pgTable("agent_step", {
   reasoning: text("reasoning"),
   result: text("result"),
   packageName: text("package_name"),
+  durationMs: integer("duration_ms"),
   timestamp: timestamp("timestamp").defaultNow().notNull(),
 });
 
@@ -190,4 +191,26 @@ export const workflowRun = pgTable("workflow_run", {
   completedAt: timestamp("completed_at"),
   qstashMessageId: text("qstash_message_id"),
   scheduledFor: timestamp("scheduled_for"),
+});
+
+// ── Cached Deterministic Flows ──
+
+export const cachedFlow = pgTable("cached_flow", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  deviceId: text("device_id").notNull().references(() => device.id, { onDelete: "cascade" }),
+  /** Normalized goal text (lowercase, trimmed) — used as lookup key. Variables kept as {{placeholders}}. */
+  goalKey: text("goal_key").notNull(),
+  /** App package name — part of the lookup key (same goal in different apps = different flow) */
+  appPackage: text("app_package"),
+  /** Deterministic flow steps in flow-runner format */
+  steps: jsonb("steps").notNull(),
+  /** How many times this flow has been replayed successfully */
+  successCount: integer("success_count").default(0),
+  /** How many times replay failed (triggers re-discovery) */
+  failCount: integer("fail_count").default(0),
+  /** Source session ID the flow was compiled from */
+  sourceSessionId: text("source_session_id").references(() => agentSession.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  lastUsedAt: timestamp("last_used_at"),
 });

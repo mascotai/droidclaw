@@ -2,7 +2,7 @@ import * as v from 'valibot';
 import { query, command, getRequestEvent } from '$app/server';
 import { env } from '$env/dynamic/private';
 import { db } from '$lib/server/db';
-import { device, agentSession, agentStep, appHint, workflowRun } from '$lib/server/db/schema';
+import { device, agentSession, agentStep, appHint, workflowRun, cachedFlow } from '$lib/server/db/schema';
 import { eq, desc, and, count, avg, sql, inArray } from 'drizzle-orm';
 
 export const listDevices = query(async () => {
@@ -303,6 +303,46 @@ export const deleteAppHint = command(
 		await db
 			.delete(appHint)
 			.where(and(eq(appHint.id, hintId), eq(appHint.userId, locals.user.id)));
+		return { success: true };
+	}
+);
+
+// ─── Cached Flows ─────────────────────────────────────────────
+
+export const listCachedFlows = query(v.string(), async (deviceId) => {
+	const { locals } = getRequestEvent();
+	if (!locals.user) return [];
+
+	const rows = await db
+		.select({
+			id: cachedFlow.id,
+			goalKey: cachedFlow.goalKey,
+			appPackage: cachedFlow.appPackage,
+			steps: cachedFlow.steps,
+			successCount: cachedFlow.successCount,
+			failCount: cachedFlow.failCount,
+			createdAt: cachedFlow.createdAt,
+			lastUsedAt: cachedFlow.lastUsedAt,
+		})
+		.from(cachedFlow)
+		.where(and(eq(cachedFlow.deviceId, deviceId), eq(cachedFlow.userId, locals.user.id)))
+		.orderBy(desc(cachedFlow.lastUsedAt));
+
+	return rows.map((r) => ({
+		...r,
+		stepCount: Array.isArray(r.steps) ? (r.steps as unknown[]).length : 0,
+		steps: undefined, // don't send full flow steps to client
+	}));
+});
+
+export const deleteCachedFlow = command(
+	v.object({ flowId: v.string() }),
+	async ({ flowId }) => {
+		const { locals } = getRequestEvent();
+		if (!locals.user) throw new Error('unauthorized');
+		await db
+			.delete(cachedFlow)
+			.where(and(eq(cachedFlow.id, flowId), eq(cachedFlow.userId, locals.user.id)));
 		return { success: true };
 	}
 );

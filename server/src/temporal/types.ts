@@ -17,6 +17,8 @@ export interface RunPayload {
   scheduledFor?: string;
   /** Optional LLM overrides supplied by the caller */
   llmModel?: string;
+  /** Resolved variable values (variable name → resolved string value) for cache key reconstruction */
+  resolvedValues?: Record<string, string>;
 }
 
 export interface ExecuteRunInput extends RunPayload {

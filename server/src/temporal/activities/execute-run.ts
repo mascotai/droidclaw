@@ -38,6 +38,7 @@ export async function executeWorkflowRun(input: ExecuteRunInput): Promise<void> 
     steps,
     totalSteps,
     llmModel,
+    resolvedValues,
   } = input;
 
   // ── Check device is online ──
@@ -118,6 +119,7 @@ export async function executeWorkflowRun(input: ExecuteRunInput): Promise<void> 
         steps: steps as WorkflowStep[],
         llmConfig: llmCfg!,
         signal: abort.signal,
+        resolvedValues,
       });
     } else {
       await runFlowServer({

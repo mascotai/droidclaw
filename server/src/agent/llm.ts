@@ -68,8 +68,8 @@ AVAILABLE ACTIONS (26 total)
 ═══════════════════════════════════════════
 
 Navigation (coordinates MUST be a JSON array of TWO separate integers [x, y] -- never concatenate them):
-  {"action": "tap", "coordinates": [540, 1200], "reason": "..."}
-  {"action": "longpress", "coordinates": [540, 1200], "reason": "..."}
+  {"action": "tap", "coordinates": [540, 1200], "target": "Submit", "reason": "..."}
+  {"action": "longpress", "coordinates": [540, 1200], "target": "Settings", "reason": "..."}
   {"action": "scroll", "direction": "up|down|left|right", "reason": "Scroll to see more content (down=below, up=above)"}
   {"action": "enter", "reason": "Press Enter/submit"}
   {"action": "back", "reason": "Navigate back"}
@@ -175,10 +175,11 @@ CRITICAL RULES
     FALLBACK: Just "type" the text directly into the target app field.
     NEVER type a vague description -- always use the actual text content.
 17. COORDINATES: ALWAYS use coordinates from SCREEN_CONTEXT elements (the "center" field). NEVER estimate or guess coordinates from screenshots -- they are inaccurate. Screenshots help you understand the layout; SCREEN_CONTEXT provides the correct tap targets.
-18. BACK IS DESTRUCTIVE: NEVER use "back" to leave an app while you have a task in progress within it. You will LOSE all progress (typed text, loading responses, navigation state). Try all other in-app approaches first. Only use "back" after 5+ failed attempts within the app.
-19. LEARN FROM HISTORY: Before choosing an action, check your earlier turns. If "enter" failed to submit a query before, do NOT try "enter" again -- find and tap the Send button. If specific coordinates didn't work, try different ones. Never repeat a strategy that already failed in this session.
-20. EMAIL COMPOSE: ALWAYS use "compose_email" action when sending emails. Pass recipient in "query", subject in "subject", body in "text". After compose_email opens the email app, ALWAYS follow up with "submit_message" to tap the Send button. Do NOT mark as "done" until Send is tapped. NEVER manually type/paste into email fields.
-21. INTENTS: ALWAYS prefer "intent" over UI navigation when the goal maps to a known intent pattern. Intents skip the UI entirely — no screen parsing, no stuck loops, no wasted steps. Use intents for: messaging (WhatsApp wa.me, SMS, email, calls), payments (UPI, PhonePe), navigation (Google Maps), productivity (alarms, timers, calendar events), media (Spotify, YouTube), and social (Instagram, Twitter/X profiles). Each intent replaces 5-10 UI navigation steps with a single action.
+18. TAP TARGET: For tap and longpress, include "target" with the visible text of the element you want to tap (from SCREEN_CONTEXT "text" field). This improves tap precision by resolving the exact element. Keep "coordinates" as a fallback.
+19. BACK IS DESTRUCTIVE: NEVER use "back" to leave an app while you have a task in progress within it. You will LOSE all progress (typed text, loading responses, navigation state). Try all other in-app approaches first. Only use "back" after 5+ failed attempts within the app.
+20. LEARN FROM HISTORY: Before choosing an action, check your earlier turns. If "enter" failed to submit a query before, do NOT try "enter" again -- find and tap the Send button. If specific coordinates didn't work, try different ones. Never repeat a strategy that already failed in this session.
+21. EMAIL COMPOSE: ALWAYS use "compose_email" action when sending emails. Pass recipient in "query", subject in "subject", body in "text". After compose_email opens the email app, ALWAYS follow up with "submit_message" to tap the Send button. Do NOT mark as "done" until Send is tapped. NEVER manually type/paste into email fields.
+22. INTENTS: ALWAYS prefer "intent" over UI navigation when the goal maps to a known intent pattern. Intents skip the UI entirely — no screen parsing, no stuck loops, no wasted steps. Use intents for: messaging (WhatsApp wa.me, SMS, email, calls), payments (UPI, PhonePe), navigation (Google Maps), productivity (alarms, timers, calendar events), media (Spotify, YouTube), and social (Instagram, Twitter/X profiles). Each intent replaces 5-10 UI navigation steps with a single action.
 
 ═══════════════════════════════════════════
 ADAPTIVE PROBLEM-SOLVING
@@ -277,8 +278,8 @@ export function buildDynamicPrompt(options: {
 
   // ── Base actions (always available) ──
   let actions = `Navigation:
-  {"action": "tap", "coordinates": [x, y], "reason": "..."}
-  {"action": "longpress", "coordinates": [x, y], "reason": "..."}
+  {"action": "tap", "coordinates": [x, y], "target": "Button Text", "reason": "..."}
+  {"action": "longpress", "coordinates": [x, y], "target": "Item Text", "reason": "..."}
   {"action": "back", "reason": "Navigate back"}
   {"action": "home", "reason": "Go to home screen"}
   {"action": "recents", "reason": "Open recent apps / app switcher"}
@@ -343,6 +344,7 @@ ${actions}
 
 RULES:
 - Use coordinates from SCREEN_CONTEXT "center" field — never guess.
+- For tap/longpress, include "target" with the element's visible text (from SCREEN_CONTEXT "text" field) to improve tap precision. Keep "coordinates" as fallback.
 - Do NOT tap elements with "enabled": false.
 - ALWAYS include "coordinates" with "type" action to focus the correct field.
 - If SCREEN_CHANGE says "NOT changed", your last action had no effect — change strategy.
