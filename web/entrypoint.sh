@@ -2,7 +2,7 @@
 
 echo "==> Running Drizzle schema push (auto-migrate)..."
 bunx drizzle-kit push --force 2>&1 | while IFS= read -r line; do echo "  [drizzle] $line"; done
-PUSH_EXIT=${PIPESTATUS[0]:-$?}
+PUSH_EXIT=$?
 if [ "$PUSH_EXIT" -eq 0 ]; then
   echo "==> Schema push complete"
 else
