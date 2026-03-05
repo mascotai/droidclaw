@@ -277,11 +277,16 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
           sendToDevice({ type: "goal_started", goal: `Workflow: ${name}` });
         }
 
-        // Launch app on each attempt (fresh state for retries)
+        // Launch app on each attempt — go Home first to dismiss any
+        // overlays/keyboards, then launch the app fresh (the companion
+        // app uses FLAG_ACTIVITY_CLEAR_TASK so the app restarts from
+        // its main activity, preventing stale mid-flow states).
         if (step.app) {
           try {
+            await sessions.sendCommand(deviceId, { type: "home" });
+            await new Promise((r) => setTimeout(r, 500));
             await sessions.sendCommand(deviceId, { type: "launch", packageName: step.app });
-            await new Promise((r) => setTimeout(r, 2000));
+            await new Promise((r) => setTimeout(r, 2500));
           } catch (err) {
             console.warn(`[Workflow] Failed to launch ${step.app}: ${err}`);
           }

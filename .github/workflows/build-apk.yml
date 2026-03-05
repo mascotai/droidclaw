@@ -12,7 +12,7 @@ jobs:
 
   build:
     needs: test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest-xlarge
     steps:
       - uses: actions/checkout@v4
 
@@ -24,6 +24,11 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
 
       - name: Decode keystore
         run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/app/release.jks
@@ -37,7 +42,8 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
           VERSION_CODE: ${{ github.run_number }}
           VERSION_NAME: "1.0.${{ github.run_number }}"
-        run: ./gradlew assembleDebug
+          GRADLE_OPTS: "-Dorg.gradle.daemon=false"
+        run: ./gradlew assembleDebug --build-cache --parallel
 
       - name: Upload APK
         uses: actions/upload-artifact@v4

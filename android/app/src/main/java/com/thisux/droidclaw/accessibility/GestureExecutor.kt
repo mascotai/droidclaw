@@ -189,11 +189,12 @@ class GestureExecutor(private val service: DroidClawAccessibilityService) {
             }
         }
 
-        // Standard package launch
+        // Standard package launch — always clear the task stack so the app
+        // restarts from its main activity (prevents stale mid-flow states).
         if (packageName.isEmpty()) return ActionResult(false, "No package or URI provided")
         val intent = service.packageManager.getLaunchIntentForPackage(packageName)
             ?: return ActionResult(false, "Package not found: $packageName")
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
         extras?.forEach { (k, v) -> intent.putExtra(k, v) }
         service.startActivity(intent)
         return ActionResult(true)
