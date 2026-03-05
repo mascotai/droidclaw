@@ -59,20 +59,33 @@ class DroidClawAccessibilityService : AccessibilityService() {
         }
     }
 
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // Track the current Activity name from window state changes
-        if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
-            val className = event.className?.toString()
-            val pkgName = event.packageName?.toString()
-            Log.d(TAG, "TYPE_WINDOW_STATE_CHANGED: className=$className pkg=$pkgName")
+    /** Debounce: track last dismiss time to avoid spamming BACK */
+    private var lastDismissTimeMs = 0L
+    private val DISMISS_COOLDOWN_MS = 800L
 
-            // Auto-dismiss autofill / credential manager popups
-            if (isAutofillPopup(pkgName, className)) {
-                Log.i(TAG, "Dismissing autofill/credential popup: pkg=$pkgName class=$className")
-                performGlobalAction(GLOBAL_ACTION_BACK)
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        val eventType = event?.eventType ?: return
+        val pkgName = event.packageName?.toString()
+        val className = event.className?.toString()
+
+        // ── Auto-dismiss overlays on any relevant event type ──
+        if (eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED ||
+            eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) {
+
+            if (shouldDismissOverlay(pkgName, className, eventType)) {
+                val now = System.currentTimeMillis()
+                if (now - lastDismissTimeMs > DISMISS_COOLDOWN_MS) {
+                    Log.i(TAG, "Dismissing overlay: pkg=$pkgName class=$className event=${eventTypeName(eventType)}")
+                    lastDismissTimeMs = now
+                    // Try multiple dismiss strategies
+                    dismissOverlay(pkgName)
+                }
                 return
             }
+        }
 
+        // Track the current Activity name from window state changes
+        if (eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             // Only update if it looks like an Activity (contains a dot — package-qualified class name)
             // This filters out things like "android.widget.PopupWindow" from dialogs
             if (className != null && className.contains('.') && !className.startsWith("android.widget.") && !className.startsWith("android.view.")) {
@@ -82,10 +95,22 @@ class DroidClawAccessibilityService : AccessibilityService() {
         }
     }
 
-    /** Check if a window event comes from an autofill or credential manager popup */
-    private fun isAutofillPopup(pkgName: String?, className: String?): Boolean {
+    private fun eventTypeName(type: Int): String = when (type) {
+        AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> "STATE_CHANGED"
+        AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> "CONTENT_CHANGED"
+        AccessibilityEvent.TYPE_VIEW_FOCUSED -> "VIEW_FOCUSED"
+        else -> "type=$type"
+    }
+
+    /**
+     * Determine if a window event is from an overlay we should auto-dismiss.
+     * Covers: autofill popups, credential managers, Samsung clipboard panel,
+     * Samsung keyboard suggestions, and other half-sheet overlays.
+     */
+    private fun shouldDismissOverlay(pkgName: String?, className: String?, eventType: Int): Boolean {
         if (pkgName == null) return false
-        // Known autofill/credential manager packages
+
+        // ── 1. Autofill / Credential Manager packages ──
         val autofillPackages = setOf(
             "com.google.android.gms",           // Google Credential Manager / Autofill
             "com.samsung.android.autofill",      // Samsung Autofill
@@ -93,10 +118,12 @@ class DroidClawAccessibilityService : AccessibilityService() {
             "com.samsung.android.samsungpass",   // Samsung Pass
             "com.samsung.android.samsungpassautofill",
         )
-        // Match by package
+
         if (pkgName in autofillPackages) {
-            // Only dismiss if it looks like an autofill/credential UI, not regular GMS
-            val isAutofillClass = className?.let { cn ->
+            // For Samsung autofill-specific packages, always dismiss
+            if (pkgName != "com.google.android.gms") return true
+            // For Google GMS, only dismiss if it looks like an autofill/credential UI
+            return className?.let { cn ->
                 cn.contains("autofill", ignoreCase = true) ||
                 cn.contains("credential", ignoreCase = true) ||
                 cn.contains("password", ignoreCase = true) ||
@@ -106,11 +133,122 @@ class DroidClawAccessibilityService : AccessibilityService() {
                 cn.contains("HalfSheetActivity", ignoreCase = true) ||
                 cn.contains("BottomSheet", ignoreCase = true)
             } ?: false
-            // For Samsung autofill-specific packages, always dismiss
-            if (pkgName != "com.google.android.gms") return true
-            return isAutofillClass
+        }
+
+        // ── 2. Samsung Keyboard clipboard panel & suggestions ──
+        // Samsung Keyboard (Honeyboard) shows a clipboard popover when you tap a text field
+        // after a clipboard_set. It also shows autocomplete suggestions as an overlay.
+        if (pkgName == "com.samsung.android.honeyboard") {
+            // Only dismiss on STATE_CHANGED (new window/panel opened), not every content change
+            // (content changes happen constantly as you type — we don't want to dismiss the keyboard itself)
+            if (eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+                val isClipboardOrSuggestion = className?.let { cn ->
+                    cn.contains("Clipboard", ignoreCase = true) ||
+                    cn.contains("Suggestion", ignoreCase = true) ||
+                    cn.contains("PopupWindow", ignoreCase = true) ||
+                    cn.contains("BottomSheet", ignoreCase = true) ||
+                    cn.contains("FloatingToolbar", ignoreCase = true)
+                } ?: false
+                if (isClipboardOrSuggestion) return true
+            }
+        }
+
+        // ── 3. Samsung Clipboard edge panel ──
+        if (pkgName == "com.samsung.android.clipboarduiservice" ||
+            pkgName == "com.samsung.android.clipboardsaveservice") {
+            return true
+        }
+
+        // ── 4. Generic overlay class name patterns (any package) ──
+        // Some overlays appear from the app's own package (e.g. Instagram's autofill suggestion)
+        if (eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && className != null) {
+            // Credential/autofill-related class names from any package
+            val isCredentialOverlay =
+                className.contains("CredentialProviderHalfSheet", ignoreCase = true) ||
+                className.contains("CredentialAutofill", ignoreCase = true) ||
+                className.contains("AutofillPopup", ignoreCase = true)
+            if (isCredentialOverlay) return true
+        }
+
+        return false
+    }
+
+    /**
+     * Dismiss an overlay. Tries multiple strategies:
+     * 1. Walk the accessibility tree for dismiss/close buttons and click them
+     * 2. Fall back to GLOBAL_ACTION_BACK
+     */
+    private fun dismissOverlay(pkgName: String?) {
+        // Strategy 1: Try to find and click a dismiss button in the overlay window
+        if (tryClickDismissButton()) {
+            Log.i(TAG, "Dismissed overlay via button click")
+            return
+        }
+
+        // Strategy 2: Press Back
+        Log.i(TAG, "Dismissing overlay via BACK action")
+        performGlobalAction(GLOBAL_ACTION_BACK)
+    }
+
+    /**
+     * Search all windows for common dismiss/close buttons and click the first one found.
+     * Looks for buttons with text like "Not now", "Close", "Dismiss", "✕", etc.
+     */
+    private fun tryClickDismissButton(): Boolean {
+        try {
+            val allWindows = windows ?: return false
+            for (window in allWindows) {
+                // Only check overlay/popup windows, not the main app window
+                if (window.type == AccessibilityWindowInfo.TYPE_APPLICATION) continue
+                if (window.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD) continue
+                val root = window.root ?: continue
+                try {
+                    val dismissTexts = listOf("not now", "close", "dismiss", "cancel", "no thanks", "✕", "×")
+                    val button = findButtonByText(root, dismissTexts)
+                    if (button != null) {
+                        try {
+                            button.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                            Log.i(TAG, "Clicked dismiss button: '${button.text}'")
+                            return true
+                        } finally {
+                            button.recycle()
+                        }
+                    }
+                } finally {
+                    root.recycle()
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "tryClickDismissButton failed: ${e.message}")
         }
         return false
+    }
+
+    /**
+     * Recursively search for a clickable node whose text matches one of the dismiss labels.
+     */
+    private fun findButtonByText(node: AccessibilityNodeInfo, labels: List<String>): AccessibilityNodeInfo? {
+        val nodeText = node.text?.toString()?.lowercase()
+        val nodeDesc = node.contentDescription?.toString()?.lowercase()
+        for (label in labels) {
+            if ((nodeText != null && nodeText.contains(label)) ||
+                (nodeDesc != null && nodeDesc.contains(label))) {
+                if (node.isClickable) return node
+                // Try clicking the parent if this node itself isn't clickable
+                val parent = node.parent
+                if (parent != null && parent.isClickable) {
+                    node.recycle()
+                    return parent
+                }
+                parent?.recycle()
+            }
+        }
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            val found = findButtonByText(child, labels)
+            if (found != null) return found
+        }
+        return null
     }
 
     /**
@@ -232,6 +370,14 @@ class DroidClawAccessibilityService : AccessibilityService() {
                 // Capture application windows and system windows (nav bars)
                 // Skip input method windows (keyboard) to reduce noise
                 if (window.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD) continue
+
+                // Skip overlay windows from known popup/clipboard packages
+                val windowPkg = window.root?.packageName?.toString()
+                if (windowPkg != null && isOverlayPackage(windowPkg)) {
+                    Log.d(TAG, "captureAllWindows: skipping overlay window from $windowPkg")
+                    continue
+                }
+
                 val root = window.root ?: continue
                 try {
                     val windowElements = ScreenTreeBuilder.capture(root)
@@ -244,6 +390,19 @@ class DroidClawAccessibilityService : AccessibilityService() {
             Log.w(TAG, "captureAllWindows failed: ${e.message}")
         }
         return allElements
+    }
+
+    /** Packages whose overlay windows should be excluded from the screen tree */
+    private fun isOverlayPackage(pkgName: String): Boolean {
+        val overlayPackages = setOf(
+            "com.samsung.android.clipboarduiservice",
+            "com.samsung.android.clipboardsaveservice",
+            "com.samsung.android.autofill",
+            "com.samsung.android.vaultkeeper",
+            "com.samsung.android.samsungpass",
+            "com.samsung.android.samsungpassautofill",
+        )
+        return pkgName in overlayPackages
     }
 
     fun findNodeAt(x: Int, y: Int): AccessibilityNodeInfo? {

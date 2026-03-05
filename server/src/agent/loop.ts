@@ -627,9 +627,9 @@ export async function runAgentLoop(
       let structuredResult: StructuredResult | undefined;
       try {
         // ── 9a. Text-based tap resolution ──
-        // If the AI specified a target text for tap/longpress, resolve to exact element center
+        // If the AI specified a target text for tap/longpress/type, resolve to exact element center
         if (
-          (action.action === "tap" || action.action === "longpress") &&
+          (action.action === "tap" || action.action === "longpress" || action.action === "type") &&
           action.target
         ) {
           const originalCoords = action.coordinates ? [...action.coordinates] : undefined;
@@ -676,6 +676,17 @@ export async function runAgentLoop(
             skillResult.success ? undefined : "skill_error"
           );
         } else {
+          // ── 9b. Tap-to-focus before type ──
+          // If the AI wants to type into a field with coordinates, tap it first to focus
+          if (action.action === "type" && action.coordinates) {
+            const focusX = Math.max(0, Math.min(action.coordinates[0], screenWidth - 1));
+            const focusY = Math.max(0, Math.min(action.coordinates[1], screenHeight - 1));
+            console.log(`[Agent ${sessionId}] Type with coords: tapping [${focusX}, ${focusY}] to focus before typing`);
+            await sessions.sendCommand(deviceId, { type: "tap", x: focusX, y: focusY });
+            // Brief pause to let the keyboard appear and field focus
+            await new Promise(r => setTimeout(r, 400));
+          }
+
           // Regular action: map to WebSocket command and send to device
           const command = actionToCommand(action, screenWidth, screenHeight);
           const result = (await sessions.sendCommand(deviceId, command)) as {
