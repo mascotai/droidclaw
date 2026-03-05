@@ -9,3 +9,40 @@ const client = postgres(env.DATABASE_URL, {
   connect_timeout: 10,     // fail fast on connection issues
 });
 export const db = drizzle(client, { schema });
+
+/**
+ * Run lightweight migrations that ensure columns exist.
+ * Uses IF NOT EXISTS so it's safe to run on every startup.
+ * This runs on the server side because the server starts before
+ * the web container's drizzle-kit push.
+ */
+export async function ensureSchema() {
+  try {
+    await client`ALTER TABLE "agent_step" ADD COLUMN IF NOT EXISTS "duration_ms" integer`;
+
+    await client`
+      CREATE TABLE IF NOT EXISTS "cached_flow" (
+        "id" text PRIMARY KEY NOT NULL,
+        "user_id" text NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
+        "device_id" text NOT NULL REFERENCES "device"("id") ON DELETE CASCADE,
+        "goal_key" text NOT NULL,
+        "app_package" text,
+        "steps" jsonb NOT NULL,
+        "success_count" integer DEFAULT 0,
+        "fail_count" integer DEFAULT 0,
+        "source_session_id" text REFERENCES "agent_session"("id") ON DELETE SET NULL,
+        "created_at" timestamp DEFAULT now() NOT NULL,
+        "last_used_at" timestamp
+      )
+    `;
+
+    await client`
+      CREATE INDEX IF NOT EXISTS "cached_flow_lookup_idx"
+        ON "cached_flow" ("user_id", "device_id", "goal_key", "app_package")
+    `;
+
+    console.log("[db] Schema ensured (cached_flow table + agent_step.duration_ms)");
+  } catch (err) {
+    console.warn("[db] ensureSchema warning:", (err as Error).message);
+  }
+}

@@ -16,7 +16,7 @@ import { pairing } from "./routes/pairing.js";
 import { investigate } from "./routes/investigate.js";
 import { workflows } from "./routes/workflows.js";
 import { startTemporalWorker } from "./temporal/worker.js";
-import { db } from "./db.js";
+import { db, ensureSchema } from "./db.js";
 import { workflowRun } from "./schema.js";
 import { eq } from "drizzle-orm";
 
@@ -109,6 +109,9 @@ const server = Bun.serve<WebSocketData>({
 });
 
 console.log(`Server running on port ${server.port}`);
+
+// Ensure DB schema is up-to-date (adds missing columns/tables)
+ensureSchema();
 
 // Clean up stale "running" workflow rows from previous crashes/restarts
 db.update(workflowRun)
