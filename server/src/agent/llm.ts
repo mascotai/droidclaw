@@ -134,6 +134,8 @@ Multi-Step Actions (PREFER these over basic actions when applicable):
   {"action": "compose_email", "query": "recipient@email.com", "subject": "Hello", "text": "body text", "reason": "Open email compose with all fields filled"}
   NOTE: compose_email REQUIRES "query" = recipient email. "subject" and "text" are optional. After compose_email, use "submit_message" to tap the Send button.
   NOTE: find_and_tap is ONLY for tapping elements that ALREADY EXIST on screen (buttons, menu items, labels). It scrolls to find them. To INPUT text into a search bar or text field, use "type" action instead — NEVER use find_and_tap for typing.
+  {"action": "get_totp", "text": "BASE32SECRET", "reason": "Generate 6-digit 2FA code and copy to clipboard"}
+  NOTE: get_totp generates a TOTP code server-side from a base32 secret and puts it on the device clipboard. Use "paste" after to paste it into a 2FA input field. This is much faster than opening a browser to get the code.
 
 ═══════════════════════════════════════════
 ELEMENT PROPERTIES YOU WILL SEE

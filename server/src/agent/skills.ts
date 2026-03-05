@@ -13,9 +13,11 @@
  *   wait_for_content — Poll for new content to appear
  *   compose_email    — Launch mailto: intent, paste body
  *   download         — Download file from URL to device storage (130s timeout)
+ *   get_totp         — Generate TOTP code from secret, set clipboard
  */
 
 import { sessions } from "../ws/sessions.js";
+import { createHmac } from "crypto";
 import type { UIElement } from "@droidclaw/shared";
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -43,6 +45,7 @@ const SKILL_ACTIONS = new Set([
   "wait_for_content",
   "compose_email",
   "download",
+  "get_totp",
 ]);
 
 export function isSkillAction(action: string): boolean {
@@ -75,6 +78,8 @@ export async function executeSkill(
       return composeEmail(deviceId, action);
     case "download":
       return downloadFile(deviceId, action);
+    case "get_totp":
+      return getTotp(deviceId, action);
     default:
       return { success: false, message: `Unknown skill: ${action.action}` };
   }
@@ -516,4 +521,103 @@ async function downloadFile(
       message: `Download failed: ${(err as Error).message}`,
     };
   }
+}
+
+// ─── Skill: get_totp ──────────────────────────────────────────
+
+/**
+ * Generate a TOTP (RFC 6238) code from a base32-encoded secret
+ * and set it on the device clipboard, ready to paste.
+ *
+ * Usage: {"action": "get_totp", "text": "BASE32SECRET"}
+ *
+ * The secret is a base32-encoded string (e.g., from Google Authenticator setup).
+ * Returns the 6-digit code and sets it on the device clipboard.
+ */
+async function getTotp(
+  deviceId: string,
+  action: SkillAction
+): Promise<SkillResult> {
+  const secret = action.text;
+  if (!secret) {
+    return {
+      success: false,
+      message: 'get_totp requires "text" with the base32-encoded TOTP secret. Example: {"action": "get_totp", "text": "JBSWY3DPEHPK3PXP"}',
+    };
+  }
+
+  try {
+    const code = generateTOTP(secret);
+    console.log(`[Skill] get_totp: Generated code ${code}, setting clipboard`);
+    await clipboardSet(deviceId, code);
+
+    return {
+      success: true,
+      message: `TOTP code ${code} generated and copied to clipboard. Use "paste" to paste it into the input field.`,
+      data: code,
+    };
+  } catch (err) {
+    return {
+      success: false,
+      message: `TOTP generation failed: ${(err as Error).message}`,
+    };
+  }
+}
+
+/**
+ * Generate a 6-digit TOTP code per RFC 6238 / RFC 4226.
+ * Uses HMAC-SHA1 with a 30-second time step.
+ */
+function generateTOTP(base32Secret: string, digits = 6, period = 30): string {
+  // 1. Decode base32 secret to bytes
+  const key = base32Decode(base32Secret.replace(/\s+/g, "").toUpperCase());
+
+  // 2. Get current time counter (number of 30s intervals since epoch)
+  const counter = Math.floor(Date.now() / 1000 / period);
+
+  // 3. Convert counter to 8-byte big-endian buffer
+  const counterBuf = Buffer.alloc(8);
+  counterBuf.writeUInt32BE(Math.floor(counter / 0x100000000), 0);
+  counterBuf.writeUInt32BE(counter & 0xffffffff, 4);
+
+  // 4. HMAC-SHA1
+  const hmac = createHmac("sha1", key);
+  hmac.update(counterBuf);
+  const hash = hmac.digest();
+
+  // 5. Dynamic truncation (RFC 4226 §5.4)
+  const offset = hash[hash.length - 1] & 0x0f;
+  const binary =
+    ((hash[offset] & 0x7f) << 24) |
+    ((hash[offset + 1] & 0xff) << 16) |
+    ((hash[offset + 2] & 0xff) << 8) |
+    (hash[offset + 3] & 0xff);
+
+  // 6. Modulo to get desired digits
+  const otp = binary % Math.pow(10, digits);
+  return otp.toString().padStart(digits, "0");
+}
+
+/** Decode a base32 string (RFC 4648) to a Buffer */
+function base32Decode(input: string): Buffer {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  // Strip padding
+  const clean = input.replace(/=+$/, "");
+
+  let bits = 0;
+  let value = 0;
+  const output: number[] = [];
+
+  for (const char of clean) {
+    const idx = alphabet.indexOf(char);
+    if (idx === -1) throw new Error(`Invalid base32 character: ${char}`);
+    value = (value << 5) | idx;
+    bits += 5;
+    if (bits >= 8) {
+      output.push((value >>> (bits - 8)) & 0xff);
+      bits -= 8;
+    }
+  }
+
+  return Buffer.from(output);
 }
