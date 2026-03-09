@@ -1,60 +1,72 @@
 {
-  "name": "Instagram Login with TOTP 2FA",
+  "name": "Instagram Add Account with TOTP 2FA",
   "steps": [
     {
-      "id": "check_state",
+      "id": "add_account",
       "app": "com.instagram.android",
-      "goal": "Open Instagram. Observe the current screen state — are you on the home feed, login screen, or 2FA code screen? Just observe.",
-      "maxSteps": 8,
+      "forceStop": true,
+      "goal": "From the home feed, long-press the profile picture icon in the bottom-right corner of the navigation bar to open the account switcher popup. In the account switcher, tap the 'Add Instagram account' button. After tapping it, wait a few seconds for the next screen to load — do NOT scroll or use find_and_tap, just wait. Then: if you see a screen with 'Log into existing account' and 'Create new account', tap 'Log into existing account'. If you see a screen listing existing accounts with a 'Use another profile' button, tap 'Use another profile'. If you land directly on a login screen with username/password fields, you are done.",
+      "maxSteps": 20,
       "eval": {
         "states": {
-          "already_logged_in": {
-            "type": "boolean",
-            "description": "The home feed is visible with posts/stories and bottom nav bar"
-          },
           "on_login_screen": {
             "type": "boolean",
-            "description": "Username and password input fields are visible"
+            "description": "The Instagram login screen is visible with username and password input fields and a Log in button",
+            "expected": true
           },
-          "on_2fa_screen": {
-            "type": "boolean",
-            "description": "A security code / 2FA input field is visible"
+          "accounts_count": {
+            "type": "number",
+            "description": "The number of Instagram accounts currently signed in, as seen in the account switcher or account picker screen"
           }
         }
       }
     },
     {
       "id": "login",
-      "app": "com.instagram.android",
-      "goal": "Enter username '{{username}}' and password '{{password}}', then tap 'Log In'.",
-      "maxSteps": 10,
-      "when": { "check_state.on_login_screen": true },
+      "goal": "If a Google Password Manager popup appears, tap 'Cancel' to dismiss it. Clear any pre-filled username in the username field, then enter '{{username}}' and enter password '{{password}}', then tap 'Log in'.",
+      "maxSteps": 12,
       "eval": {
         "states": {
           "on_2fa_screen": {
             "type": "boolean",
-            "description": "The 2FA security code screen appeared after login",
+            "description": "A security code / 2FA input screen appeared after login",
             "expected": true
           }
         }
       }
     },
     {
-      "app": "com.instagram.android",
+      "id": "totp",
       "goal": "Use get_totp with text '{{totpSecret}}' to generate a 6-digit code. Tap the security code input field to focus it, then use paste to paste the code. Tap Continue or Next or Confirm. If you see 'Waiting for approval' or 'Choose a way to confirm', tap 'Try another way', then select 'Authentication app', then tap Continue to get to the code entry screen, then do the get_totp + paste.",
       "maxSteps": 15,
       "retries": 4,
-      "when": { "check_state.already_logged_in": false }
+      "eval": {
+        "states": {
+          "past_2fa": {
+            "type": "boolean",
+            "description": "The 2FA screen is no longer visible — moved on to onboarding, home feed, or any other screen",
+            "expected": true
+          }
+        }
+      }
     },
     {
-      "app": "com.instagram.android",
-      "goal": "Dismiss any onboarding screens (Save Login Info, Notifications) by tapping 'Not Now' or 'Skip'. Navigate to the home feed.",
+      "id": "onboarding",
+      "goal": "Dismiss any onboarding screens (Save Login Info, Notifications, 'Turn on Notifications', etc.) by tapping 'Not Now' or 'Skip' or 'Next'. Keep dismissing until you reach the home feed.",
       "maxSteps": 25,
-      "when": { "check_state.already_logged_in": false }
+      "eval": {
+        "states": {
+          "on_home_feed": {
+            "type": "boolean",
+            "description": "The Instagram home feed is visible with posts/stories and bottom navigation bar",
+            "expected": true
+          }
+        }
+      }
     },
     {
-      "app": "com.instagram.android",
-      "goal": "Verify the home feed is visible.",
+      "id": "verify",
+      "goal": "Verify the home feed is visible with the bottom navigation bar.",
       "maxSteps": 5,
       "eval": {
         "states": {
