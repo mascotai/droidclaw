@@ -220,6 +220,8 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
   const stepResults: Array<{ goal: string; success: boolean; stepsUsed: number; sessionId?: string; resolvedBy?: string; error?: string; observations?: ScreenObservation[]; evalJudgment?: EvalJudgment; skipped?: boolean; skipReason?: string; stepId?: string }> = [];
   const evalStateMap = new Map<string, Record<string, boolean | string | number>>();
 
+  wfLog(`[Workflow ${runId}] Starting: persistentDeviceId=${persistentDeviceId ?? "UNDEFINED"}, deviceId=${deviceId}, trackingKey=${trackingKey}`);
+
   /** Send a JSON message to the device WebSocket (if still connected) */
   const sendToDevice = (msg: Record<string, unknown>) => {
     const d = sessions.getDevice(deviceId) ?? sessions.getDeviceByPersistentId(persistentDeviceId ?? "");
