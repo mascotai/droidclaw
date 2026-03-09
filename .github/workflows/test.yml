@@ -9,7 +9,7 @@ on:
 
 jobs:
   android-download-test:
-    runs-on: ubuntu-latest-xlarge
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
