@@ -39,11 +39,16 @@ CURL_ARGS=(
   -X "$METHOD"
 )
 
-# Handle body: @file or inline JSON
+# Handle body: @file or inline JSON — replace DEVICE in both cases
 if [[ -n "$BODY" ]]; then
   if [[ "$BODY" == @* ]]; then
-    CURL_ARGS+=(-d "$BODY")
+    # Read file, replace DEVICE placeholder, pass as inline body
+    FILE_PATH="${BODY#@}"
+    FILE_CONTENT=$(cat "$FILE_PATH")
+    FILE_CONTENT="${FILE_CONTENT//DEVICE/$DEVICE_ID}"
+    CURL_ARGS+=(-d "$FILE_CONTENT")
   else
+    BODY="${BODY//DEVICE/$DEVICE_ID}"
     CURL_ARGS+=(-d "$BODY")
   fi
 fi
