@@ -36,6 +36,7 @@ export interface WorkflowStep {
   eval?: EvalDefinition; // state-based evaluation criteria
   id?: string; // stable identifier for referencing from `when` conditions
   when?: Record<string, boolean | string | number>; // condition: ALL must match (AND semantics)
+  forceStop?: boolean; // kill the app process before launching to ensure a clean start
   /** Preserved by resolveVariables() — the original goal text with {{placeholders}} intact */
   _goalTemplate?: string;
 }
@@ -357,8 +358,14 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
         // then launch the app. The companion app uses
         // FLAG_ACTIVITY_CLEAR_TASK so the entire task stack is cleared
         // and the app restarts from its main activity.
+        // If forceStop is set, kill the app process first to ensure
+        // a completely clean start (e.g., dismiss multi-account choosers).
         if (step.app) {
           try {
+            if (step.forceStop) {
+              await sessions.sendCommand(deviceId, { type: "kill_app", packageName: step.app });
+              await new Promise((r) => setTimeout(r, 500));
+            }
             await sessions.sendCommand(deviceId, { type: "home" });
             await new Promise((r) => setTimeout(r, 500));
             await sessions.sendCommand(deviceId, { type: "launch", packageName: step.app });

@@ -95,6 +95,7 @@ class GestureExecutor(private val service: DroidClawAccessibilityService) {
                 "download" -> executeDownload(msg)
                 "diagnose" -> executeDiagnose()
                 "shell" -> executeShell(msg.text ?: "")
+                "kill_app" -> executeKillApp(msg.packageName ?: "")
                 else -> ActionResult(false, "Unknown action: ${msg.type}")
             }
         } catch (e: Exception) {
@@ -739,6 +740,17 @@ class GestureExecutor(private val service: DroidClawAccessibilityService) {
             ActionResult(exitCode == 0, if (exitCode != 0) "exit code $exitCode" else null, data = output)
         } catch (e: Exception) {
             ActionResult(false, "Shell exec failed: ${e.message}")
+        }
+    }
+
+    private fun executeKillApp(packageName: String): ActionResult {
+        if (packageName.isBlank()) return ActionResult(false, "No package name provided")
+        return try {
+            val am = service.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+            am.killBackgroundProcesses(packageName)
+            ActionResult(true, data = "Killed background processes for $packageName")
+        } catch (e: Exception) {
+            ActionResult(false, "killBackgroundProcesses failed: ${e.message}")
         }
     }
 
