@@ -87,12 +87,31 @@ async function replayCachedFlow(
     try {
       const result = await executeFlowStepWs(deviceId, step, appId);
       if (!result.success) {
-        wfLog(`[Workflow] Cached flow replay failed at step ${i}: ${result.message}`);
-        return false;
+        // For tap/longpress that can't find the element, retry a few times
+        // because the previous action may have triggered a screen transition
+        const stepCmd = typeof step === "object" ? Object.keys(step)[0] : null;
+        if ((stepCmd === "tap" || stepCmd === "longpress") && result.message.includes("not found")) {
+          let retryResult = result;
+          for (let retry = 0; retry < 3; retry++) {
+            wfLog(`[Workflow] Cached flow step ${i}: element not found, waiting 2s and retrying (${retry + 1}/3)`);
+            await new Promise((r) => setTimeout(r, 2000));
+            retryResult = await executeFlowStepWs(deviceId, step, appId);
+            if (retryResult.success) break;
+          }
+          if (!retryResult.success) {
+            wfLog(`[Workflow] Cached flow replay failed at step ${i}: ${retryResult.message}`);
+            return false;
+          }
+        } else {
+          wfLog(`[Workflow] Cached flow replay failed at step ${i}: ${result.message}`);
+          return false;
+        }
       }
-      // Brief pause between steps for UI to settle
-      if (i < flowSteps.length - 1 && typeof step !== "string") {
-        await new Promise((r) => setTimeout(r, 800));
+      // Pause between steps for UI to settle — longer after tap/longpress (screen transitions)
+      if (i < flowSteps.length - 1) {
+        const stepCmd = typeof step === "object" ? Object.keys(step)[0] : step;
+        const delay = (stepCmd === "tap" || stepCmd === "longpress" || stepCmd === "launch") ? 2000 : 800;
+        await new Promise((r) => setTimeout(r, delay));
       }
     } catch (err) {
       wfLog(`[Workflow] Cached flow replay threw at step ${i}: ${err}`);
