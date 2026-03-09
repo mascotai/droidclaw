@@ -1,0 +1,4 @@
+[    3442ms] [ERROR] The script has an unsupported MIME type ('text/html'). @ :0
+[    4888ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://secure.gravatar.com/avatar/edfff1ec84c28e19b3b52981657d60db?d=404&s=64:0
+[    6545ms] [ERROR] Failed to load resource: the server responded with a status of 429 () @ https://o4507505357029376.ingest.us.sentry.io/api/4507507802767360/envelope/?sentry_key=05954bea17fd9faef4d4df2977ac0500&sentry_version=7&sentry_client=sentry.javascript.react%2F8.25.0:0
+[  133147ms] [ERROR] Failed to load resource: the server responded with a status of 429 () @ https://o4507505357029376.ingest.us.sentry.io/api/4507507802767360/envelope/?sentry_key=05954bea17fd9faef4d4df2977ac0500&sentry_version=7&sentry_client=sentry.javascript.react%2F8.25.0:0

@@ -1,0 +1,4 @@
+[    1891ms] [ERROR] Failed to load resource: the server responded with a status of 403 () @ https://auth.stack.mascott.ai/api/v3/core/users/me/:0
+[    1893ms] [WARNING] %c[WARN]%c (api/stack.mascott.ai):%c font-weight: 700; color: light-dark(#F1C21B, #F1C21B); font-weight: 600; color: CanvasText;  403 GET /api/v3/core/users/me/ @ https://auth.stack.mascott.ai/static/dist/chunks/4NB7U2YR.js:0
+[    3972ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://fonts.gstatic.com/s/nunito/v26/XRXI3I6Li01BKofiOc5wtlZ2di8HDIkhdQM3j6zbXWjgeg.woff2:0
+[   26451ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://fonts.gstatic.com/s/nunito/v26/XRXI3I6Li01BKofiOc5wtlZ2di8HDIkhdQM3j6zbXWjgeg.woff2:0

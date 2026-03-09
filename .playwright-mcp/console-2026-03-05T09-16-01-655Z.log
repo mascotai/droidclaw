@@ -1,0 +1,39 @@
+[  946456ms] [ERROR] WebSocket connection to 'wss://droidclaw.stack.mascott.ai/ws/dashboard' failed: Error during WebSocket handshake: Unexpected response code: 404 @ https://droidclaw-app.stack.mascott.ai/_app/immutable/chunks/B-o6Ibxd.js:0
+[  949962ms] [ERROR] WebSocket connection to 'wss://droidclaw.stack.mascott.ai/ws/dashboard' failed: Error during WebSocket handshake: Unexpected response code: 404 @ https://droidclaw-app.stack.mascott.ai/_app/immutable/chunks/B-o6Ibxd.js:0
+[  953378ms] [ERROR] WebSocket connection to 'wss://droidclaw.stack.mascott.ai/ws/dashboard' failed: Error during WebSocket handshake: Unexpected response code: 404 @ https://droidclaw-app.stack.mascott.ai/_app/immutable/chunks/B-o6Ibxd.js:0
+[  956787ms] [ERROR] WebSocket connection to 'wss://droidclaw.stack.mascott.ai/ws/dashboard' failed: Error during WebSocket handshake: Unexpected response code: 404 @ https://droidclaw-app.stack.mascott.ai/_app/immutable/chunks/B-o6Ibxd.js:0
+[ 1595112ms] [ERROR] WebSocket connection to 'wss://droidclaw.stack.mascott.ai/ws/dashboard' failed: Error during WebSocket handshake: Unexpected response code: 404 @ https://droidclaw-app.stack.mascott.ai/_app/immutable/chunks/B-o6Ibxd.js:0
+[ 1752682ms] TypeError: Cannot read properties of undefined (reading 'f')
+    at _e (https://droidclaw-app.stack.mascott.ai/_app/immutable/chunks/SpDE6rzz.js:1:21997)
+    at https://droidclaw-app.stack.mascott.ai/_app/immutable/nodes/7.BJwhyr5H.js:13:2246
+    at https://droidclaw-app.stack.mascott.ai/_app/immutable/chunks/BtVrY6k-.js:1:500
+    at Bt (https://droidclaw-app.stack.mascott.ai/_app/immutable/chunks/SpDE6rzz.js:1:20654)
+    at pe (https://droidclaw-app.stack.mascott.ai/_app/immutable/chunks/SpDE6rzz.js:1:21723)
+    at L (https://droidclaw-app.stack.mascott.ai/_app/immutable/chunks/SpDE6rzz.js:1:17093)
+    at ss (https://droidclaw-app.stack.mascott.ai/_app/immutable/chunks/SpDE6rzz.js:1:17983)
+    at ae (https://droidclaw-app.stack.mascott.ai/_app/immutable/chunks/BtVrY6k-.js:1:484)
+    at https://droidclaw-app.stack.mascott.ai/_app/immutable/nodes/7.BJwhyr5H.js:13:2228
+    at https://droidclaw-app.stack.mascott.ai/_app/immutable/chunks/CoEZsgAR.js:1:295
+[ 1752684ms] TypeError: Cannot read properties of undefined (reading 'f')
+    at _e (https://droidclaw-app.stack.mascott.ai/_app/immutable/chunks/SpDE6rzz.js:1:21997)
+    at https://droidclaw-app.stack.mascott.ai/_app/immutable/nodes/7.BJwhyr5H.js:13:2246
+    at https://droidclaw-app.stack.mascott.ai/_app/immutable/chunks/BtVrY6k-.js:1:500
+    at Bt (https://droidclaw-app.stack.mascott.ai/_app/immutable/chunks/SpDE6rzz.js:1:20654)
+    at pe (https://droidclaw-app.stack.mascott.ai/_app/immutable/chunks/SpDE6rzz.js:1:21723)
+    at L (https://droidclaw-app.stack.mascott.ai/_app/immutable/chunks/SpDE6rzz.js:1:17093)
+    at ss (https://droidclaw-app.stack.mascott.ai/_app/immutable/chunks/SpDE6rzz.js:1:17983)
+    at ae (https://droidclaw-app.stack.mascott.ai/_app/immutable/chunks/BtVrY6k-.js:1:484)
+    at https://droidclaw-app.stack.mascott.ai/_app/immutable/nodes/7.BJwhyr5H.js:13:2228
+    at https://droidclaw-app.stack.mascott.ai/_app/immutable/chunks/CoEZsgAR.js:1:295
+[ 1752684ms] TypeError: Cannot read properties of undefined (reading 'f')
+    at _e (https://droidclaw-app.stack.mascott.ai/_app/immutable/chunks/SpDE6rzz.js:1:21997)
+    at https://droidclaw-app.stack.mascott.ai/_app/immutable/nodes/7.BJwhyr5H.js:13:2246
+    at https://droidclaw-app.stack.mascott.ai/_app/immutable/chunks/BtVrY6k-.js:1:500
+    at Bt (https://droidclaw-app.stack.mascott.ai/_app/immutable/chunks/SpDE6rzz.js:1:20654)
+    at pe (https://droidclaw-app.stack.mascott.ai/_app/immutable/chunks/SpDE6rzz.js:1:21723)
+    at L (https://droidclaw-app.stack.mascott.ai/_app/immutable/chunks/SpDE6rzz.js:1:17093)
+    at ss (https://droidclaw-app.stack.mascott.ai/_app/immutable/chunks/SpDE6rzz.js:1:17983)
+    at ae (https://droidclaw-app.stack.mascott.ai/_app/immutable/chunks/BtVrY6k-.js:1:484)
+    at https://droidclaw-app.stack.mascott.ai/_app/immutable/nodes/7.BJwhyr5H.js:13:2228
+    at https://droidclaw-app.stack.mascott.ai/_app/immutable/chunks/CoEZsgAR.js:1:295
+[ 2983371ms] [ERROR] WebSocket connection to 'wss://droidclaw.stack.mascott.ai/ws/dashboard' failed: Error during WebSocket handshake: Unexpected response code: 404 @ https://droidclaw-app.stack.mascott.ai/_app/immutable/chunks/B-o6Ibxd.js:0

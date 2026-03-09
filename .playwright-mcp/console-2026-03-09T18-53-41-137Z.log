@@ -1,0 +1,2 @@
+[    3500ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://fonts.gstatic.com/s/nunito/v26/XRXI3I6Li01BKofiOc5wtlZ2di8HDIkhdQM3j6zbXWjgeg.woff2:0
+[ 1351338ms] [WARNING] %c[WARN]%c (ws):%c font-weight: 700; color: light-dark(#F1C21B, #F1C21B); font-weight: 600; color: CanvasText;  Connection closed CloseEvent @ https://auth.stack.mascott.ai/static/dist/chunks/E5VKHKDN.js:0

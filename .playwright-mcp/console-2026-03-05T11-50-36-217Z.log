@@ -1,0 +1,5 @@
+[  513587ms] [WARNING] %c[WARN]%c (ws):%c font-weight: 700; color: light-dark(#F1C21B, #F1C21B); font-weight: 600; color: CanvasText;  Connection closed CloseEvent @ https://auth.stack.mascott.ai/static/dist/chunks/E5VKHKDN.js:0
+[  514245ms] [ERROR] WebSocket connection to 'wss://auth.stack.mascott.ai/ws/client/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ https://auth.stack.mascott.ai/static/dist/chunks/E5VKHKDN.js:0
+[  514247ms] [WARNING] %c[WARN]%c (ws):%c font-weight: 700; color: light-dark(#F1C21B, #F1C21B); font-weight: 600; color: CanvasText;  Connection closed CloseEvent @ https://auth.stack.mascott.ai/static/dist/chunks/E5VKHKDN.js:0
+[  514981ms] [ERROR] WebSocket connection to 'wss://auth.stack.mascott.ai/ws/client/' failed: Error in connection establishment: net::ERR_CERT_AUTHORITY_INVALID @ https://auth.stack.mascott.ai/static/dist/chunks/E5VKHKDN.js:0
+[  514981ms] [WARNING] %c[WARN]%c (ws):%c font-weight: 700; color: light-dark(#F1C21B, #F1C21B); font-weight: 600; color: CanvasText;  Connection closed CloseEvent @ https://auth.stack.mascott.ai/static/dist/chunks/E5VKHKDN.js:0

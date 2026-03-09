@@ -1,0 +1,57 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl:*)",
+      "WebSearch",
+      "mcp__firecrawl__firecrawl_search",
+      "mcp__firecrawl__firecrawl_scrape",
+      "Bash(bun install:*)",
+      "Bash(bunx tsc:*)",
+      "Bash(git push:*)",
+      "mcp__jina__search_web",
+      "mcp__jina__read_url",
+      "Bash(python3:*)",
+      "mcp__fetch__fetch_json",
+      "Bash(ls:*)",
+      "mcp__gitmcp-droidclaw__fetch_droidclaw_documentation",
+      "mcp__gitmcp-droidclaw__search_droidclaw_code",
+      "mcp__github__get_file_contents",
+      "mcp__gitmcp-droidclaw__fetch_generic_url_content",
+      "Bash(./e2e/api.sh GET /devices 2>&1 | head -30)",
+      "mcp__infisical__list-projects",
+      "mcp__infisical__list-secrets",
+      "Bash(git add examples/workflows/social/instagram-login-totp.json server/src/agent/workflow-runner.ts server/src/agent/eval-judge.ts server/src/agent/eval-runner.ts server/src/routes/evals.ts server/src/routes/workflows.ts server/src/schema.ts server/src/db.ts server/src/index.ts)",
+      "Bash(git commit -m \"$\\(cat <<'EOF'\nfeat: add eval judge, when conditions, and update login workflow\n\n- Add LLM-based eval judge for per-step state evaluation\n- Add `when` conditions for conditional step execution\n- Add eval runner for standalone eval testing\n- Add evals API routes\n- Update Instagram login workflow to use get_totp skill with\n  eval-based state detection and conditional branching\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(gh run list --repo mascotai/droidclaw --limit 3)",
+      "Bash(gh run watch 22852607849 --repo mascotai/droidclaw --exit-status 2>&1 | tail -5)",
+      "Bash(gh run list --repo mascotai/mascotai-stack --limit 3)",
+      "Bash(gh run watch 22852677358 --repo mascotai/mascotai-stack --exit-status 2>&1 | tail -5)",
+      "Bash(gh run view 22852677358 --repo mascotai/mascotai-stack --log-failed 2>&1 | tail -30)",
+      "Bash(./e2e/api.sh GET /health 2>&1)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post-deploy.sh",
+            "timeout": 15
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post-workflow.sh",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}

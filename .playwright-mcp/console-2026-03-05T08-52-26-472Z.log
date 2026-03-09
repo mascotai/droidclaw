@@ -1,0 +1,6 @@
+[    5121ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://fonts.gstatic.com/s/nunito/v26/XRXI3I6Li01BKofiOc5wtlZ2di8HDIkhdQM3j6zbXWjgeg.woff2:0
+[  134759ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://fonts.gstatic.com/s/nunito/v26/XRXI3I6Li01BKofiOc5wtlZ2di8HDIkhdQM3j6zbXWjgeg.woff2:0
+[  202046ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://fonts.gstatic.com/s/nunito/v26/XRXI3I6Li01BKofiOc5wtlZ2di8HDIkhdQM3j6zbXWjgeg.woff2:0
+[  212537ms] [ERROR] Failed to load resource: the server responded with a status of 500 () @ https://droidclaw-app.stack.mascott.ai/dashboard/devices/a65b6cfe-cedd-4faf-a39c-b1290c6b249a:0
+[  212688ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://droidclaw-app.stack.mascott.ai/favicon.ico:0
+[  215968ms] [WARNING] The resource https://droidclaw-app.stack.mascott.ai/_app/immutable/assets/0.CDrzdH7M.css was preloaded using link preload but not used within a few seconds from the window's load event. Please make sure it has an appropriate `as` value and it is preloaded intentionally. @ https://droidclaw-app.stack.mascott.ai/dashboard/devices/a65b6cfe-cedd-4faf-a39c-b1290c6b249a:0

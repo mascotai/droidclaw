@@ -379,7 +379,8 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
 
         // ── Cache lookup: try to replay a cached deterministic flow ──
         const stepCacheable = isCacheable(step);
-        wfLog(`[Workflow ${runId}] Step ${i}: cache lookup check: stepCacheable=${stepCacheable}, persistentDeviceId=${persistentDeviceId ?? "UNDEFINED"}`);
+        const pdevId = persistentDeviceId ?? "UNDEFINED";
+        wfLog(`[Workflow ${runId}] Step ${i}: cache lookup check: stepCacheable=${stepCacheable}, persistentDeviceId=${pdevId}, userId=${userId}`);
         if (stepCacheable && persistentDeviceId) {
           const goalKey = normalizeGoalKey(step._goalTemplate ?? step.goal);
           const appPackage = step.app ?? null;
