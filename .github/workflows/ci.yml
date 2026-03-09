@@ -44,3 +44,21 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.service }}:latest
             ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.service }}:sha-${{ github.sha }}
+
+  trigger-deploy:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger service deploy
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.INFRA_DEPLOY_TOKEN }}
+          repository: ${{ github.repository_owner }}/mascotai-stack
+          event-type: deploy-service
+          client-payload: |
+            {
+              "services": "droidclaw",
+              "triggered_by": "${{ github.repository }}",
+              "commit_sha": "${{ github.sha }}"
+            }
