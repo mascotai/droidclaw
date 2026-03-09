@@ -75,20 +75,37 @@ type FlowStep = string | { [key: string]: string | number | [number, number] };
 /**
  * Replay a cached deterministic flow on the device.
  *
+ * Uses the recorded timeline (delays between steps from the original AI session)
+ * to pace actions at the same rhythm the agent originally used. This naturally
+ * accounts for screen transition times since the original session had to wait
+ * for the LLM to "think" between actions, giving the UI time to settle.
+ *
+ * @param deviceId - The device to execute on
+ * @param flowSteps - Deterministic flow steps
+ * @param timeline - Delay in ms before each step (from original session timing)
+ * @param appId - Optional app identifier
  * @returns `true` if all steps succeeded, `false` if any step failed.
  */
 async function replayCachedFlow(
   deviceId: string,
   flowSteps: FlowStep[],
+  timeline?: number[],
   appId?: string,
 ): Promise<boolean> {
   for (let i = 0; i < flowSteps.length; i++) {
     const step = flowSteps[i];
     try {
+      // Wait according to the recorded timeline before executing this step
+      const delay = timeline?.[i] ?? (i === 0 ? 0 : 2000);
+      if (delay > 0) {
+        wfLog(`[Workflow] Cached flow: waiting ${delay}ms before step ${i} (timeline)`);
+        await new Promise((r) => setTimeout(r, delay));
+      }
+
       const result = await executeFlowStepWs(deviceId, step, appId);
       if (!result.success) {
         // For tap/longpress that can't find the element, retry a few times
-        // because the previous action may have triggered a screen transition
+        // because the UI may still be transitioning
         const stepCmd = typeof step === "object" ? Object.keys(step)[0] : null;
         if ((stepCmd === "tap" || stepCmd === "longpress") && result.message.includes("not found")) {
           let retryResult = result;
@@ -106,12 +123,6 @@ async function replayCachedFlow(
           wfLog(`[Workflow] Cached flow replay failed at step ${i}: ${result.message}`);
           return false;
         }
-      }
-      // Pause between steps for UI to settle — longer after tap/longpress (screen transitions)
-      if (i < flowSteps.length - 1) {
-        const stepCmd = typeof step === "object" ? Object.keys(step)[0] : step;
-        const delay = (stepCmd === "tap" || stepCmd === "longpress" || stepCmd === "launch") ? 2000 : 800;
-        await new Promise((r) => setTimeout(r, delay));
       }
     } catch (err) {
       wfLog(`[Workflow] Cached flow replay threw at step ${i}: ${err}`);
@@ -421,11 +432,12 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
             if (cached.length > 0) {
               const cachedEntry = cached[0];
               const rawFlowSteps = cachedEntry.steps as FlowStep[];
+              const cachedTimeline = cachedEntry.timeline as number[] | null;
               const resolvedFlowSteps = resolveFlowVariables(rawFlowSteps, resolvedValues ?? {});
 
-              wfLog(`[Workflow ${runId}] Step ${i}: replaying cached flow (${resolvedFlowSteps.length} steps, success=${cachedEntry.successCount}, fail=${cachedEntry.failCount})`);
+              wfLog(`[Workflow ${runId}] Step ${i}: replaying cached flow (${resolvedFlowSteps.length} steps, timeline=${cachedTimeline ? "yes" : "no"}, success=${cachedEntry.successCount}, fail=${cachedEntry.failCount})`);
 
-              const replayOk = await replayCachedFlow(deviceId, resolvedFlowSteps, step.app);
+              const replayOk = await replayCachedFlow(deviceId, resolvedFlowSteps, cachedTimeline ?? undefined, step.app);
               if (replayOk) {
                 // Cache hit success — update stats and move on
                 await db
@@ -542,18 +554,18 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
             if (stepCacheable && persistentDeviceId && result.sessionId) {
               try {
                 const sessionSteps = await db
-                  .select({ action: agentStep.action, result: agentStep.result })
+                  .select({ action: agentStep.action, result: agentStep.result, timestamp: agentStep.timestamp })
                   .from(agentStep)
                   .where(eq(agentStep.sessionId, result.sessionId))
                   .orderBy(agentStep.stepNumber);
 
                 const compiled = compileSessionToFlow(
-                  sessionSteps as Array<{ action: Record<string, unknown> | null; result: string | null }>,
+                  sessionSteps as Array<{ action: Record<string, unknown> | null; result: string | null; timestamp?: Date | null }>,
                   step.app,
                   resolvedValues,
                 );
 
-                wfLog(`[Workflow ${runId}] Step ${i}: compileSessionToFlow returned ${compiled ? compiled.length + " steps" : "NULL"} (from ${sessionSteps.length} raw steps)`);
+                wfLog(`[Workflow ${runId}] Step ${i}: compileSessionToFlow returned ${compiled ? compiled.steps.length + " steps" : "NULL"} (from ${sessionSteps.length} raw steps)`);
 
                 if (compiled) {
                   const goalKey = normalizeGoalKey(step._goalTemplate ?? step.goal);
@@ -563,10 +575,11 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
                     deviceId: persistentDeviceId,
                     goalKey,
                     appPackage: step.app ?? null,
-                    steps: compiled as any,
+                    steps: compiled.steps as any,
+                    timeline: compiled.timeline as any,
                     sourceSessionId: result.sessionId,
                   }).onConflictDoNothing();
-                  wfLog(`[Workflow ${runId}] Step ${i}: compiled and cached deterministic flow (${compiled.length} steps)`);
+                  wfLog(`[Workflow ${runId}] Step ${i}: compiled and cached deterministic flow (${compiled.steps.length} steps, timeline: [${compiled.timeline.join(", ")}]ms)`);
                 }
               } catch (cacheErr) {
                 // Cache save error — non-fatal, just log

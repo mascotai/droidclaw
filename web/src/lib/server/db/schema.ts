@@ -220,6 +220,7 @@ export const cachedFlow = pgTable('cached_flow', {
 	goalKey: text('goal_key').notNull(),
 	appPackage: text('app_package'),
 	steps: jsonb('steps').notNull(),
+	timeline: jsonb('timeline'),
 	successCount: integer('success_count').default(0),
 	failCount: integer('fail_count').default(0),
 	sourceSessionId: text('source_session_id').references(() => agentSession.id, { onDelete: 'set null' }),

@@ -65,19 +65,43 @@ const SKIP_ACTIONS = new Set([
  * @returns An array of FlowStep objects ready for the flow-runner, or `null`
  *   if the session is too short, too unstable, or has no reliable tap targets.
  */
+/** Result of compiling a session into a cacheable flow */
+export interface CompiledFlow {
+  steps: FlowStep[];
+  /** Delay in ms to wait BEFORE executing each step (based on original session timing) */
+  timeline: number[];
+}
+
+/**
+ * Minimum delay between steps during replay (ms).
+ * Even if the original session had a very fast transition, we never go below this
+ * to give the UI time to settle after an action.
+ */
+const MIN_STEP_DELAY_MS = 800;
+
+/**
+ * Maximum delay between steps during replay (ms).
+ * Caps extremely long gaps (e.g. user paused, LLM was slow) to a reasonable wait.
+ */
+const MAX_STEP_DELAY_MS = 8_000;
+
 export function compileSessionToFlow(
   steps: Array<{
     action: Record<string, unknown> | null;
     result: string | null;
+    timestamp?: Date | string | null;
   }>,
   appPackage?: string,
   resolvedVariables?: Record<string, string>,
-): FlowStep[] | null {
+): CompiledFlow | null {
   const flow: FlowStep[] = [];
+  /** Timestamps of each compiled flow step (from the original session) */
+  const compiledTimestamps: (number | null)[] = [];
 
   // Prepend launch step if an app package is provided
   if (appPackage) {
     flow.push({ launch: appPackage });
+    compiledTimestamps.push(null); // no original timestamp for synthetic launch step
   }
 
   // Build reverse lookup: resolved value → placeholder name
@@ -91,7 +115,7 @@ export function compileSessionToFlow(
   }
 
   for (let i = 0; i < steps.length; i++) {
-    const { action, result } = steps[i];
+    const { action, result, timestamp } = steps[i];
 
     // Only include steps that succeeded
     if (!result || !action) continue;
@@ -107,6 +131,7 @@ export function compileSessionToFlow(
     const compiled = compileAction(actionType, action, i, steps, valueToPlaceholder);
     if (compiled !== null) {
       flow.push(compiled);
+      compiledTimestamps.push(timestamp ? new Date(timestamp).getTime() : null);
     }
   }
 
@@ -133,7 +158,46 @@ export function compileSessionToFlow(
   );
   if (!hasTapWithTarget) return null;
 
-  return flow;
+  // ── Build timeline: delay in ms before each step ──
+  const timeline = buildTimeline(compiledTimestamps);
+
+  return { steps: flow, timeline };
+}
+
+/**
+ * Build a timeline of delays (ms) from the original session timestamps.
+ *
+ * For each step, the delay is the gap between this step's timestamp and the
+ * previous step's timestamp, clamped to [MIN_STEP_DELAY_MS, MAX_STEP_DELAY_MS].
+ *
+ * The first step always gets 0 delay (no waiting before the very first action).
+ * Steps without timestamps get a default delay of 2000ms.
+ */
+function buildTimeline(timestamps: (number | null)[]): number[] {
+  const DEFAULT_DELAY_MS = 2000;
+  const timeline: number[] = [];
+
+  for (let i = 0; i < timestamps.length; i++) {
+    if (i === 0) {
+      // No delay before the first step
+      timeline.push(0);
+      continue;
+    }
+
+    const curr = timestamps[i];
+    const prev = timestamps[i - 1];
+
+    if (curr != null && prev != null) {
+      const gap = curr - prev;
+      // Clamp to sensible range
+      timeline.push(Math.max(MIN_STEP_DELAY_MS, Math.min(MAX_STEP_DELAY_MS, gap)));
+    } else {
+      // No timestamp data — use a safe default
+      timeline.push(DEFAULT_DELAY_MS);
+    }
+  }
+
+  return timeline;
 }
 
 /**

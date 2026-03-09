@@ -221,6 +221,8 @@ export const cachedFlow = pgTable("cached_flow", {
   appPackage: text("app_package"),
   /** Deterministic flow steps in flow-runner format */
   steps: jsonb("steps").notNull(),
+  /** Delay in ms before each step — recorded from original session timing */
+  timeline: jsonb("timeline"),
   /** How many times this flow has been replayed successfully */
   successCount: integer("success_count").default(0),
   /** How many times replay failed (triggers re-discovery) */

@@ -47,6 +47,11 @@ function failStepJson(action: Record<string, unknown>): { action: Record<string,
   return { action, result: JSON.stringify({ success: false, action: sig, details: "element not found", errorType: "device_error" }) };
 }
 
+/** Shorthand for building a timestamped agent step (for timeline tests) */
+function okStepAt(action: Record<string, unknown>, ts: Date) {
+  return { ...okStep(action), timestamp: ts };
+}
+
 /** Shorthand for building a UI element */
 function el(text: string, center: [number, number] = [100, 200], extras?: { hint?: string; id?: string }) {
   return { text, center, hint: extras?.hint, id: extras?.id };
@@ -65,13 +70,14 @@ describe("compileSessionToFlow", () => {
         okStep({ action: "tap", target: "Submit" }),
       ];
 
-      const flow = compileSessionToFlow(steps);
-      expect(flow).not.toBeNull();
-      expect(flow).toEqual([
+      const result = compileSessionToFlow(steps);
+      expect(result).not.toBeNull();
+      expect(result!.steps).toEqual([
         { tap: "Search" },
         { type: "hello world" },
         { tap: "Submit" },
       ]);
+      expect(result!.timeline).toHaveLength(3);
     });
 
     it("prepends a launch step when appPackage is provided", () => {
@@ -80,10 +86,10 @@ describe("compileSessionToFlow", () => {
         okStep({ action: "tap", target: "Settings" }),
       ];
 
-      const flow = compileSessionToFlow(steps, "com.example.app");
-      expect(flow).not.toBeNull();
-      expect(flow![0]).toEqual({ launch: "com.example.app" });
-      expect(flow!.length).toBe(3); // launch + 2 taps
+      const result = compileSessionToFlow(steps, "com.example.app");
+      expect(result).not.toBeNull();
+      expect(result!.steps[0]).toEqual({ launch: "com.example.app" });
+      expect(result!.steps).toHaveLength(3); // launch + 2 taps
     });
 
     it("compiles scroll and swipe actions", () => {
@@ -94,8 +100,8 @@ describe("compileSessionToFlow", () => {
         okStep({ action: "tap", target: "Item" }),
       ];
 
-      const flow = compileSessionToFlow(steps);
-      expect(flow).toEqual([
+      const result = compileSessionToFlow(steps);
+      expect(result!.steps).toEqual([
         { tap: "Search" },
         { scroll: "down" },
         { swipe: "up" },
@@ -110,8 +116,8 @@ describe("compileSessionToFlow", () => {
         okStep({ action: "enter" }),
       ];
 
-      const flow = compileSessionToFlow(steps);
-      expect(flow).toEqual([
+      const result = compileSessionToFlow(steps);
+      expect(result!.steps).toEqual([
         { tap: "Email" },
         { type: "test@example.com" },
         "enter",
@@ -125,8 +131,8 @@ describe("compileSessionToFlow", () => {
         okStep({ action: "tap", target: "OK" }),
       ];
 
-      const flow = compileSessionToFlow(steps);
-      expect(flow).toEqual([
+      const result = compileSessionToFlow(steps);
+      expect(result!.steps).toEqual([
         { tap: "Menu" },
         { longpress: "Copy" },
         { tap: "OK" },
@@ -142,9 +148,9 @@ describe("compileSessionToFlow", () => {
         okStepJson({ action: "tap", target: "Use another profile", coordinates: [540, 1404] }),
       ];
 
-      const flow = compileSessionToFlow(steps, "com.instagram.android");
-      expect(flow).not.toBeNull();
-      expect(flow).toEqual([
+      const result = compileSessionToFlow(steps, "com.instagram.android");
+      expect(result).not.toBeNull();
+      expect(result!.steps).toEqual([
         { launch: "com.instagram.android" },
         { longpress: "Profile" },
         { tap: "Add Instagram account" },
@@ -160,8 +166,8 @@ describe("compileSessionToFlow", () => {
         okStepJson({ action: "tap", target: "Submit", coordinates: [300, 400] }),
       ];
 
-      const flow = compileSessionToFlow(steps);
-      expect(flow).toEqual([
+      const result = compileSessionToFlow(steps);
+      expect(result!.steps).toEqual([
         { tap: "Correct" },
         { tap: "Submit" },
       ]);
@@ -176,8 +182,8 @@ describe("compileSessionToFlow", () => {
         okStep({ action: "tap", target: "Submit" }),
       ];
 
-      const flow = compileSessionToFlow(steps);
-      expect(flow).toEqual([
+      const result = compileSessionToFlow(steps);
+      expect(result!.steps).toEqual([
         { tap: "Correct" },
         { tap: "Submit" },
       ]);
@@ -193,8 +199,8 @@ describe("compileSessionToFlow", () => {
         okStep({ action: "tap", target: "Confirm" }),
       ];
 
-      const flow = compileSessionToFlow(steps);
-      expect(flow).toEqual([
+      const result = compileSessionToFlow(steps);
+      expect(result!.steps).toEqual([
         { tap: "Start" },
         { tap: "Confirm" },
       ]);
@@ -207,8 +213,8 @@ describe("compileSessionToFlow", () => {
         okStep({ action: "tap", target: "OK" }),
       ];
 
-      const flow = compileSessionToFlow(steps);
-      expect(flow).toEqual([
+      const result = compileSessionToFlow(steps);
+      expect(result!.steps).toEqual([
         { tap: "Button" },
         { tap: "OK" },
       ]);
@@ -224,10 +230,10 @@ describe("compileSessionToFlow", () => {
         okStep({ action: "tap", target: "Correct" }),
       ];
 
-      const flow = compileSessionToFlow(steps);
+      const result = compileSessionToFlow(steps);
       // back should be excluded (error recovery)
       // the failed tap is also excluded (result != OK)
-      expect(flow).toEqual([
+      expect(result!.steps).toEqual([
         { scroll: "down" },
         { tap: "Correct" },
       ]);
@@ -241,8 +247,8 @@ describe("compileSessionToFlow", () => {
         okStep({ action: "tap", target: "Bluetooth" }),
       ];
 
-      const flow = compileSessionToFlow(steps);
-      expect(flow).toEqual([
+      const result = compileSessionToFlow(steps);
+      expect(result!.steps).toEqual([
         { tap: "Settings" },
         { tap: "Wi-Fi" },
         "back",
@@ -259,8 +265,8 @@ describe("compileSessionToFlow", () => {
         okStep({ action: "tap", target: "Go" }),
       ];
 
-      const flow = compileSessionToFlow(steps, undefined, { query: "lofi beats" });
-      expect(flow).toEqual([
+      const result = compileSessionToFlow(steps, undefined, { query: "lofi beats" });
+      expect(result!.steps).toEqual([
         { tap: "Search" },
         { type: "{{query}}" },
         { tap: "Go" },
@@ -274,8 +280,8 @@ describe("compileSessionToFlow", () => {
         okStep({ action: "tap", target: "Go" }),
       ];
 
-      const flow = compileSessionToFlow(steps, undefined, { query: "lofi beats" });
-      expect(flow).toEqual([
+      const result = compileSessionToFlow(steps, undefined, { query: "lofi beats" });
+      expect(result!.steps).toEqual([
         { tap: "Search" },
         { type: "some random text" },
         { tap: "Go" },
@@ -291,12 +297,12 @@ describe("compileSessionToFlow", () => {
         okStep({ action: "tap", target: "Login" }),
       ];
 
-      const flow = compileSessionToFlow(steps, undefined, {
+      const result = compileSessionToFlow(steps, undefined, {
         username: "john",
         password: "secret123",
       });
 
-      expect(flow).toEqual([
+      expect(result!.steps).toEqual([
         { tap: "Username" },
         { type: "{{username}}" },
         { tap: "Password" },
@@ -351,9 +357,80 @@ describe("compileSessionToFlow", () => {
         okStep({ action: "tap", target: "Second" }),
       ];
 
-      const flow = compileSessionToFlow(steps);
-      expect(flow).not.toBeNull();
-      expect(flow!.length).toBe(2);
+      const result = compileSessionToFlow(steps);
+      expect(result).not.toBeNull();
+      expect(result!.steps).toHaveLength(2);
+    });
+  });
+
+  // ── Timeline tests ──
+
+  describe("timeline", () => {
+    it("builds a timeline from timestamps with correct delays", () => {
+      const t0 = new Date("2026-01-01T00:00:00Z");
+      const steps = [
+        okStepAt({ action: "tap", target: "Search" }, t0),
+        okStepAt({ action: "type", text: "hello" }, new Date(t0.getTime() + 3500)),
+        okStepAt({ action: "tap", target: "Submit" }, new Date(t0.getTime() + 6000)),
+      ];
+
+      const result = compileSessionToFlow(steps);
+      expect(result).not.toBeNull();
+      expect(result!.timeline).toEqual([0, 3500, 2500]);
+    });
+
+    it("clamps delays to MIN (800ms) and MAX (8000ms)", () => {
+      const t0 = new Date("2026-01-01T00:00:00Z");
+      const steps = [
+        okStepAt({ action: "tap", target: "A" }, t0),
+        okStepAt({ action: "tap", target: "B" }, new Date(t0.getTime() + 100)),   // 100ms gap → clamped to 800
+        okStepAt({ action: "tap", target: "C" }, new Date(t0.getTime() + 30100)), // 30000ms gap → clamped to 8000
+      ];
+
+      const result = compileSessionToFlow(steps);
+      expect(result).not.toBeNull();
+      expect(result!.timeline).toEqual([0, 800, 8000]);
+    });
+
+    it("uses default delay (2000ms) when timestamps are missing", () => {
+      const steps = [
+        okStep({ action: "tap", target: "Search" }),
+        okStep({ action: "type", text: "hello" }),
+        okStep({ action: "tap", target: "Submit" }),
+      ];
+
+      const result = compileSessionToFlow(steps);
+      expect(result).not.toBeNull();
+      // No timestamps → defaults: [0, 2000, 2000]
+      expect(result!.timeline).toEqual([0, 2000, 2000]);
+    });
+
+    it("includes launch step delay of 0 and default for subsequent", () => {
+      const steps = [
+        okStep({ action: "tap", target: "Search" }),
+        okStep({ action: "tap", target: "Go" }),
+      ];
+
+      const result = compileSessionToFlow(steps, "com.app");
+      expect(result).not.toBeNull();
+      // launch (0) + search (default 2000) + go (default 2000)
+      expect(result!.timeline).toEqual([0, 2000, 2000]);
+    });
+
+    it("handles skipped steps — timeline follows compiled steps only", () => {
+      const t0 = new Date("2026-01-01T00:00:00Z");
+      const steps = [
+        okStepAt({ action: "tap", target: "Search" }, t0),
+        okStepAt({ action: "wait" }, new Date(t0.getTime() + 1000)),         // skipped
+        okStepAt({ action: "screenshot" }, new Date(t0.getTime() + 2000)),   // skipped
+        okStepAt({ action: "tap", target: "Submit" }, new Date(t0.getTime() + 5000)),
+      ];
+
+      const result = compileSessionToFlow(steps);
+      expect(result).not.toBeNull();
+      expect(result!.steps).toHaveLength(2);
+      // Gap is from Search (t0) to Submit (t0+5000) = 5000ms
+      expect(result!.timeline).toEqual([0, 5000]);
     });
   });
 });
@@ -648,7 +725,7 @@ describe("end-to-end: compile → resolve cycle", () => {
     );
 
     expect(compiled).not.toBeNull();
-    expect(compiled).toEqual([
+    expect(compiled!.steps).toEqual([
       { launch: "com.google.maps" },
       { tap: "Search" },
       { type: "{{query}}" },
@@ -657,7 +734,7 @@ describe("end-to-end: compile → resolve cycle", () => {
     ]);
 
     // Step 2: On a later run with different variable value, resolve placeholders
-    const resolved = resolveFlowVariables(compiled!, { query: "pizza" });
+    const resolved = resolveFlowVariables(compiled!.steps, { query: "pizza" });
     expect(resolved).toEqual([
       { launch: "com.google.maps" },
       { tap: "Search" },
@@ -690,18 +767,20 @@ describe("end-to-end: compile → resolve cycle", () => {
       okStep({ action: "done" }),          // skipped
     ];
 
-    const flow = compileSessionToFlow(sessionSteps, "com.instagram.android");
-    expect(flow).not.toBeNull();
+    const result = compileSessionToFlow(sessionSteps, "com.instagram.android");
+    expect(result).not.toBeNull();
     // Should contain: launch, tap, type, tap, scroll, tap, tap
     // Should NOT contain: wait, screenshot, done
-    expect(flow!.length).toBe(7);
-    expect(flow![0]).toEqual({ launch: "com.instagram.android" });
-    expect(flow!.find((s) => typeof s === "object" && "scroll" in s)).toBeTruthy();
+    expect(result!.steps).toHaveLength(7);
+    expect(result!.steps[0]).toEqual({ launch: "com.instagram.android" });
+    expect(result!.steps.find((s) => typeof s === "object" && "scroll" in s)).toBeTruthy();
     // No observation steps
-    expect(flow!.every((s) =>
+    expect(result!.steps.every((s) =>
       typeof s === "string"
         ? !["wait", "screenshot", "done"].includes(s)
         : !Object.keys(s).some((k) => ["wait", "screenshot", "done"].includes(k))
     )).toBe(true);
+    // Timeline has same length as steps
+    expect(result!.timeline).toHaveLength(7);
   });
 });
