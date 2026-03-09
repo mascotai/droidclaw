@@ -38,6 +38,7 @@ health.get("/debug", async (c) => {
         successCount: cachedFlow.successCount,
         failCount: cachedFlow.failCount,
         stepsCount: cachedFlow.steps,
+        timeline: cachedFlow.timeline,
         createdAt: cachedFlow.createdAt,
         lastUsedAt: cachedFlow.lastUsedAt,
       })
