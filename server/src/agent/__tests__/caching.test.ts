@@ -25,14 +25,26 @@ import type { CacheableWorkflowStep, FlowStep } from "../session-to-flow.js";
 
 // ─── Helpers ────────────────────────────────────────────────
 
-/** Shorthand for building an agent step that succeeded */
+/** Shorthand for building an agent step that succeeded (legacy format) */
 function okStep(action: Record<string, unknown>): { action: Record<string, unknown>; result: string } {
   return { action, result: "-> OK" };
+}
+
+/** Shorthand for building an agent step that succeeded (structured JSON format from DB) */
+function okStepJson(action: Record<string, unknown>): { action: Record<string, unknown>; result: string } {
+  const sig = `${action.action}(${(action.coordinates as number[])?.join(",") ?? ""})`;
+  return { action, result: JSON.stringify({ success: true, action: sig, details: "completed", durationMs: 1000 }) };
 }
 
 /** Shorthand for building an agent step that failed */
 function failStep(action: Record<string, unknown>): { action: Record<string, unknown>; result: string } {
   return { action, result: "-> FAIL: element not found" };
+}
+
+/** Shorthand for building an agent step that failed (structured JSON format) */
+function failStepJson(action: Record<string, unknown>): { action: Record<string, unknown>; result: string } {
+  const sig = `${action.action}(${(action.coordinates as number[])?.join(",") ?? ""})`;
+  return { action, result: JSON.stringify({ success: false, action: sig, details: "element not found", errorType: "device_error" }) };
 }
 
 /** Shorthand for building a UI element */
@@ -118,6 +130,40 @@ describe("compileSessionToFlow", () => {
         { tap: "Menu" },
         { longpress: "Copy" },
         { tap: "OK" },
+      ]);
+    });
+
+    it("compiles steps with structured JSON results (DB format)", () => {
+      // This is the format actually stored in the database by the agent loop
+      const steps = [
+        okStepJson({ action: "longpress", target: "Profile", coordinates: [972, 2137] }),
+        okStepJson({ action: "tap", target: "Add Instagram account", coordinates: [540, 1490] }),
+        okStepJson({ action: "tap", target: "Log into existing account", coordinates: [540, 1929] }),
+        okStepJson({ action: "tap", target: "Use another profile", coordinates: [540, 1404] }),
+      ];
+
+      const flow = compileSessionToFlow(steps, "com.instagram.android");
+      expect(flow).not.toBeNull();
+      expect(flow).toEqual([
+        { launch: "com.instagram.android" },
+        { longpress: "Profile" },
+        { tap: "Add Instagram account" },
+        { tap: "Log into existing account" },
+        { tap: "Use another profile" },
+      ]);
+    });
+
+    it("skips failed steps with structured JSON results", () => {
+      const steps = [
+        failStepJson({ action: "tap", target: "Wrong", coordinates: [100, 200] }),
+        okStepJson({ action: "tap", target: "Correct", coordinates: [200, 300] }),
+        okStepJson({ action: "tap", target: "Submit", coordinates: [300, 400] }),
+      ];
+
+      const flow = compileSessionToFlow(steps);
+      expect(flow).toEqual([
+        { tap: "Correct" },
+        { tap: "Submit" },
       ]);
     });
   });

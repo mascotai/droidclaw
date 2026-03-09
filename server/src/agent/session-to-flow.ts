@@ -94,8 +94,10 @@ export function compileSessionToFlow(
     const { action, result } = steps[i];
 
     // Only include steps that succeeded
-    if (!result || !result.includes("-> OK")) continue;
-    if (!action) continue;
+    if (!result || !action) continue;
+    // Support both formats: structured JSON ({"success":true,...}) and legacy ("-> OK")
+    const isSuccess = result.includes('"success":true') || result.includes("-> OK");
+    if (!isSuccess) continue;
 
     const actionType = String(action.action ?? "").toLowerCase();
 
@@ -223,7 +225,9 @@ function isIntentionalBack(
   // If the action before back failed and the action after back is a different type,
   // this looks like error recovery: agent tried something, it failed, pressed back,
   // and tried a different approach.
-  const prevFailed = prevStep.result != null && !prevStep.result.includes("-> OK");
+  const prevSucceeded = prevStep.result != null &&
+    (prevStep.result.includes('"success":true') || prevStep.result.includes("-> OK"));
+  const prevFailed = prevStep.result != null && !prevSucceeded;
   if (prevFailed && prevType !== nextType) return false;
 
   return true;
