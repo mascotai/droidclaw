@@ -26,14 +26,34 @@ function resolveVariables(
   const resolvedValues: Record<string, string> = {};
   for (const [k, v] of Object.entries(resolved)) resolvedValues[k] = String(v);
 
+  const replacer = (_: string, key: string) =>
+    resolved[key] !== undefined ? String(resolved[key]) : `{{${key}}}`;
+
   return {
-    steps: steps.map(step => ({
-      ...step,
-      _goalTemplate: step.goal, // preserve original template for cache key
-      goal: step.goal.replace(/\{\{(\w+)\}\}/g, (_: string, key: string) =>
-        resolved[key] !== undefined ? String(resolved[key]) : `{{${key}}}`
-      ),
-    })),
+    steps: steps.map(step => {
+      const resolvedStep = {
+        ...step,
+        _goalTemplate: step.goal, // preserve original template for cache key
+        goal: step.goal.replace(/\{\{(\w+)\}\}/g, replacer),
+      };
+
+      // Also resolve eval expected values
+      if (resolvedStep.eval?.states) {
+        const resolvedStates = { ...resolvedStep.eval.states };
+        for (const [stateKey, stateDef] of Object.entries(resolvedStates)) {
+          const sd = stateDef as any;
+          if (typeof sd.expected === "string") {
+            resolvedStates[stateKey] = {
+              ...sd,
+              expected: sd.expected.replace(/\{\{(\w+)\}\}/g, replacer),
+            };
+          }
+        }
+        resolvedStep.eval = { states: resolvedStates };
+      }
+
+      return resolvedStep;
+    }),
     resolvedValues,
   };
 }

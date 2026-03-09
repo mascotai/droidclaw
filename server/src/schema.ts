@@ -174,6 +174,21 @@ export const appHint = pgTable("app_hint", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// ── Eval Run Tracking ──
+
+export const evalRun = pgTable("eval_run", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  deviceId: text("device_id").notNull().references(() => device.id, { onDelete: "cascade" }),
+  name: text("name"),
+  status: text("status").notNull().default("running"),  // running | completed | stopped
+  runsPerWorkflow: integer("runs_per_workflow").notNull(),
+  workflowDefs: jsonb("workflow_defs").notNull(),         // Workflow[] with eval fields
+  results: jsonb("results"),                               // EvalResults
+  startedAt: timestamp("started_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+});
+
 // ── Workflow Execution Tracking ──
 
 export const workflowRun = pgTable("workflow_run", {
@@ -191,6 +206,7 @@ export const workflowRun = pgTable("workflow_run", {
   completedAt: timestamp("completed_at"),
   qstashMessageId: text("qstash_message_id"),
   scheduledFor: timestamp("scheduled_for"),
+  evalRunId: text("eval_run_id").references(() => evalRun.id, { onDelete: "set null" }),
 });
 
 // ── Cached Deterministic Flows ──

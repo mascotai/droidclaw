@@ -1,21 +1,70 @@
 {
-  "name": "Instagram Login - Chrome TOTP 2FA",
+  "name": "Instagram Login with TOTP 2FA",
   "steps": [
     {
+      "id": "check_state",
       "app": "com.instagram.android",
-      "goal": "Open Instagram. If already logged in, skip this workflow. Otherwise, tap 'Log in', enter username 'your_username' and password 'your_password', then tap 'Log In'. Wait for the 2FA screen to appear.",
-      "maxSteps": 10
+      "goal": "Open Instagram. Observe the current screen state — are you on the home feed, login screen, or 2FA code screen? Just observe.",
+      "maxSteps": 8,
+      "eval": {
+        "states": {
+          "already_logged_in": {
+            "type": "boolean",
+            "description": "The home feed is visible with posts/stories and bottom nav bar"
+          },
+          "on_login_screen": {
+            "type": "boolean",
+            "description": "Username and password input fields are visible"
+          },
+          "on_2fa_screen": {
+            "type": "boolean",
+            "description": "A security code / 2FA input field is visible"
+          }
+        }
+      }
     },
     {
-      "app": "com.android.chrome",
-      "goal": "Open Chrome. Navigate to https://totp.danhersam.com/?key=YOUR_TOTP_SECRET_KEY — Use copy_visible_text to copy the 6-digit code. Then switch to Instagram using switch_app with package com.instagram.android. Tap the security code input field. Use paste to paste the code. Use find_and_tap with query Continue to submit.",
+      "id": "login",
+      "app": "com.instagram.android",
+      "goal": "Enter username '{{username}}' and password '{{password}}', then tap 'Log In'.",
+      "maxSteps": 10,
+      "when": { "check_state.on_login_screen": true },
+      "eval": {
+        "states": {
+          "on_2fa_screen": {
+            "type": "boolean",
+            "description": "The 2FA security code screen appeared after login",
+            "expected": true
+          }
+        }
+      }
+    },
+    {
+      "app": "com.instagram.android",
+      "goal": "Use get_totp with text '{{totpSecret}}' to generate a 6-digit code. Tap the security code input field to focus it, then use paste to paste the code. Tap Continue or Next or Confirm. If you see 'Waiting for approval' or 'Choose a way to confirm', tap 'Try another way', then select 'Authentication app', then tap Continue to get to the code entry screen, then do the get_totp + paste.",
       "maxSteps": 15,
-      "retries": 4
+      "retries": 4,
+      "when": { "check_state.already_logged_in": false }
     },
     {
       "app": "com.instagram.android",
-      "goal": "If there are any onboarding screens (Save Login Info, Turn on Notifications, etc.), dismiss them by tapping 'Not Now' or 'Skip'. Navigate to the home feed. Confirm login was successful by checking for the home feed icons.",
-      "maxSteps": 25
+      "goal": "Dismiss any onboarding screens (Save Login Info, Notifications) by tapping 'Not Now' or 'Skip'. Navigate to the home feed.",
+      "maxSteps": 25,
+      "when": { "check_state.already_logged_in": false }
+    },
+    {
+      "app": "com.instagram.android",
+      "goal": "Verify the home feed is visible.",
+      "maxSteps": 5,
+      "eval": {
+        "states": {
+          "on_home_feed": {
+            "type": "boolean",
+            "description": "The Instagram home feed is visible with bottom navigation",
+            "expected": true
+          }
+        }
+      }
     }
   ]
 }

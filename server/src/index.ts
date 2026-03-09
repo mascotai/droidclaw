@@ -15,9 +15,10 @@ import { license } from "./routes/license.js";
 import { pairing } from "./routes/pairing.js";
 import { investigate } from "./routes/investigate.js";
 import { workflows } from "./routes/workflows.js";
+import { evals } from "./routes/evals.js";
 import { startTemporalWorker } from "./temporal/worker.js";
 import { db, ensureSchema } from "./db.js";
-import { workflowRun } from "./schema.js";
+import { workflowRun, evalRun } from "./schema.js";
 import { eq } from "drizzle-orm";
 
 const app = new Hono();
@@ -46,6 +47,7 @@ app.route("/license", license);
 app.route("/pairing", pairing);
 app.route("/investigate", investigate);
 app.route("/workflows", workflows);
+app.route("/evals", evals);
 
 // Start server with WebSocket support
 const server = Bun.serve<WebSocketData>({
@@ -122,6 +124,17 @@ db.update(workflowRun)
   })
   .catch((err) => {
     console.error("[Startup] Failed to clean stale workflows:", err);
+  });
+
+// Clean up stale "running" eval runs from previous crashes/restarts
+db.update(evalRun)
+  .set({ status: "stopped", completedAt: new Date() })
+  .where(eq(evalRun.status, "running"))
+  .then(() => {
+    console.log(`[Startup] Marked stale running evals as stopped`);
+  })
+  .catch((err) => {
+    console.error("[Startup] Failed to clean stale evals:", err);
   });
 
 // Start embedded Temporal worker (non-blocking — runs in background)

@@ -41,7 +41,24 @@ export async function ensureSchema() {
         ON "cached_flow" ("user_id", "device_id", "goal_key", "app_package")
     `;
 
-    console.log("[db] Schema ensured (cached_flow table + agent_step.duration_ms)");
+    await client`
+      CREATE TABLE IF NOT EXISTS "eval_run" (
+        "id" text PRIMARY KEY NOT NULL,
+        "user_id" text NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
+        "device_id" text NOT NULL REFERENCES "device"("id") ON DELETE CASCADE,
+        "name" text,
+        "status" text NOT NULL DEFAULT 'running',
+        "runs_per_workflow" integer NOT NULL,
+        "workflow_defs" jsonb NOT NULL,
+        "results" jsonb,
+        "started_at" timestamp DEFAULT now() NOT NULL,
+        "completed_at" timestamp
+      )
+    `;
+
+    await client`ALTER TABLE "workflow_run" ADD COLUMN IF NOT EXISTS "eval_run_id" text REFERENCES "eval_run"("id") ON DELETE SET NULL`;
+
+    console.log("[db] Schema ensured (cached_flow, eval_run, agent_step.duration_ms)");
   } catch (err) {
     console.warn("[db] ensureSchema warning:", (err as Error).message);
   }

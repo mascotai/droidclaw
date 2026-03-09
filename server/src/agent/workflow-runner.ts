@@ -1,11 +1,12 @@
 import { sessions } from "../ws/sessions.js";
 import { db } from "../db.js";
 import { workflowRun, cachedFlow, agentStep } from "../schema.js";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, asc, sql } from "drizzle-orm";
 import { runPipeline } from "./pipeline.js";
 import { executeFlowStepWs } from "./flow-runner.js";
 import { compileSessionToFlow, normalizeGoalKey, isCacheable, resolveFlowVariables } from "./session-to-flow.js";
 import { activeSessions } from "./active-sessions.js";
+import { evaluateStep, type EvalJudgment, type StateDefinition, type AgentStepRecord } from "./eval-judge.js";
 import type { LLMConfig } from "./llm.js";
 import type { ScreenObservation } from "./loop.js";
 
@@ -20,6 +21,10 @@ function wfLog(msg: string) {
 }
 export function getWorkflowDebugLog(): string[] { return _debugLog; }
 
+export interface EvalDefinition {
+  states: Record<string, StateDefinition>;
+}
+
 export interface WorkflowStep {
   goal: string;
   app?: string;
@@ -28,6 +33,9 @@ export interface WorkflowStep {
   retries?: number; // max retry attempts on failure (default: 0 = no retry)
   exhaustIsSuccess?: boolean; // treat maxSteps exhaustion as success (for open-ended browsing)
   cache?: boolean; // explicit opt-in/out for deterministic flow caching (default: true for cacheable steps)
+  eval?: EvalDefinition; // state-based evaluation criteria
+  id?: string; // stable identifier for referencing from `when` conditions
+  when?: Record<string, boolean | string | number>; // condition: ALL must match (AND semantics)
   /** Preserved by resolveVariables() — the original goal text with {{placeholders}} intact */
   _goalTemplate?: string;
 }
@@ -174,11 +182,42 @@ function isUserStop(trackingKey: string): boolean {
   return active.abort.signal.aborted && !active.deviceDisconnected;
 }
 
+/**
+ * Evaluate a `when` condition against collected eval states from previous steps.
+ * ALL entries must match (AND semantics). Missing states = condition not met.
+ */
+function evaluateWhenCondition(
+  when: Record<string, boolean | string | number>,
+  evalStateMap: Map<string, Record<string, boolean | string | number>>
+): { met: boolean; reason?: string } {
+  for (const [key, expectedValue] of Object.entries(when)) {
+    const dotIndex = key.indexOf(".");
+    if (dotIndex === -1) {
+      return { met: false, reason: `Invalid when key "${key}" — expected "stepId.stateName" format` };
+    }
+    const stepId = key.slice(0, dotIndex);
+    const stateName = key.slice(dotIndex + 1);
+
+    const stepStates = evalStateMap.get(stepId);
+    if (!stepStates) {
+      return { met: false, reason: `Step "${stepId}" has no eval states (not run or was skipped)` };
+    }
+    if (!(stateName in stepStates)) {
+      return { met: false, reason: `State "${stateName}" not found in step "${stepId}"` };
+    }
+    if (stepStates[stateName] !== expectedValue) {
+      return { met: false, reason: `${key}: expected ${JSON.stringify(expectedValue)}, got ${JSON.stringify(stepStates[stateName])}` };
+    }
+  }
+  return { met: true };
+}
+
 export async function runWorkflowServer(options: RunWorkflowOptions): Promise<void> {
   const { runId, persistentDeviceId, userId, name, steps, llmConfig, resolvedValues } = options;
   let { deviceId } = options;
   const trackingKey = persistentDeviceId ?? deviceId;
-  const stepResults: Array<{ goal: string; success: boolean; stepsUsed: number; sessionId?: string; resolvedBy?: string; error?: string; observations?: ScreenObservation[] }> = [];
+  const stepResults: Array<{ goal: string; success: boolean; stepsUsed: number; sessionId?: string; resolvedBy?: string; error?: string; observations?: ScreenObservation[]; evalJudgment?: EvalJudgment; skipped?: boolean; skipReason?: string; stepId?: string }> = [];
+  const evalStateMap = new Map<string, Record<string, boolean | string | number>>();
 
   /** Send a JSON message to the device WebSocket (if still connected) */
   const sendToDevice = (msg: Record<string, unknown>) => {
@@ -238,6 +277,43 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
       }
 
       const step = steps[i];
+
+      // ── Evaluate `when` condition — skip step if not met ──
+      if (step.when) {
+        const { met, reason } = evaluateWhenCondition(step.when, evalStateMap);
+        if (!met) {
+          const skipReason = reason ?? "when condition not met";
+          wfLog(`[Workflow ${runId}] Step ${i} skipped: ${skipReason}`);
+
+          stepResults.push({
+            goal: step.goal,
+            success: true,
+            stepsUsed: 0,
+            skipped: true,
+            skipReason,
+            stepId: step.id,
+          });
+
+          // Update DB and notify dashboard
+          await db.update(workflowRun).set({
+            currentStep: i + 1,
+            stepResults: stepResults,
+          }).where(eq(workflowRun.id, runId));
+
+          sessions.notifyDashboard(userId, {
+            type: "workflow_step_done",
+            runId,
+            stepIndex: i,
+            success: true,
+            stepsUsed: 0,
+            skipped: true,
+            skipReason,
+          } as any);
+
+          continue;
+        }
+      }
+
       const effectiveGoal = buildGoal(step);
 
       sessions.notifyDashboard(userId, {
@@ -382,9 +458,54 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
 
           const isSuccess = result.success ||
             (step.exhaustIsSuccess && result.stepsUsed >= (step.maxSteps ?? 30));
-          if (isSuccess) {
-            stepResults.push({ goal: step.goal, success: true, stepsUsed: result.stepsUsed, sessionId: result.sessionId, resolvedBy: result.resolvedBy, observations: result.observations });
+
+          // ── Eval judge: evaluate step state if eval definition is present ──
+          let evalJudgment: EvalJudgment | undefined;
+          let evalSuccess = isSuccess;
+
+          if (step.eval && step.eval.states && Object.keys(step.eval.states).length > 0) {
+            try {
+              // Fetch agent step records for this session's transcript
+              const agentSteps = await db
+                .select()
+                .from(agentStep)
+                .where(eq(agentStep.sessionId, result.sessionId))
+                .orderBy(asc(agentStep.stepNumber));
+
+              const transcript: AgentStepRecord[] = agentSteps.map((s) => ({
+                stepNumber: s.stepNumber,
+                action: s.action as Record<string, unknown> | null,
+                reasoning: s.reasoning,
+                result: s.result,
+                packageName: s.packageName,
+              }));
+
+              evalJudgment = await evaluateStep(
+                step.goal,
+                result.observations,
+                transcript,
+                step.eval.states,
+                llmConfig,
+              );
+
+              // Eval success overrides agent success
+              evalSuccess = evalJudgment.success;
+              wfLog(`[Workflow ${runId}] Step ${i} eval: ${evalJudgment.success ? "PASS" : "FAIL"} (agent said: ${isSuccess}, mismatches: ${evalJudgment.mismatches.length})`);
+            } catch (err) {
+              wfLog(`[Workflow ${runId}] Eval judge failed for step ${i}: ${err}`);
+              // On eval failure, fall back to agent's success
+              evalSuccess = isSuccess;
+            }
+          }
+
+          if (evalSuccess) {
+            stepResults.push({ goal: step.goal, success: true, stepsUsed: result.stepsUsed, sessionId: result.sessionId, resolvedBy: result.resolvedBy, observations: result.observations, evalJudgment, stepId: step.id });
             stepSuccess = true;
+
+            // ── Populate evalStateMap for `when` condition resolution ──
+            if (step.id && evalJudgment?.stateValues) {
+              evalStateMap.set(step.id, evalJudgment.stateValues);
+            }
 
             // ── Cache save: compile the successful AI session into a deterministic flow ──
             if (stepCacheable && persistentDeviceId && result.sessionId) {
@@ -435,7 +556,7 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
             } as any);
           } else {
             // All retries exhausted
-            stepResults.push({ goal: step.goal, success: false, stepsUsed: result.stepsUsed, sessionId: result.sessionId, resolvedBy: result.resolvedBy, observations: result.observations });
+            stepResults.push({ goal: step.goal, success: false, stepsUsed: result.stepsUsed, sessionId: result.sessionId, resolvedBy: result.resolvedBy, observations: result.observations, evalJudgment });
           }
         } catch (err) {
           wfLog(`[Workflow ${runId}] Step ${i} attempt ${attempt}: pipeline THREW: ${err}`);
