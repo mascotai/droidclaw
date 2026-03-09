@@ -4,7 +4,7 @@ import { getWorkflowDebugLog } from "../agent/workflow-runner.js";
 import { activeSessions } from "../agent/active-sessions.js";
 import { db } from "../db.js";
 import { cachedFlow } from "../schema.js";
-import { desc } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 
 const health = new Hono();
 
@@ -52,6 +52,12 @@ health.get("/debug", async (c) => {
     debugLog: getWorkflowDebugLog(),
     cachedFlows,
   });
+});
+
+health.delete("/debug/cached-flows/:id", async (c) => {
+  const id = c.req.param("id");
+  await db.delete(cachedFlow).where(eq(cachedFlow.id, id));
+  return c.json({ deleted: id });
 });
 
 export { health };
