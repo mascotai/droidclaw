@@ -377,6 +377,7 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
 
         // ── Cache lookup: try to replay a cached deterministic flow ──
         const stepCacheable = isCacheable(step);
+        wfLog(`[Workflow ${runId}] Step ${i}: cache lookup check: stepCacheable=${stepCacheable}, persistentDeviceId=${persistentDeviceId ?? "UNDEFINED"}`);
         if (stepCacheable && persistentDeviceId) {
           const goalKey = normalizeGoalKey(step._goalTemplate ?? step.goal);
           const appPackage = step.app ?? null;
@@ -515,6 +516,7 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
             }
 
             // ── Cache save: compile the successful AI session into a deterministic flow ──
+            wfLog(`[Workflow ${runId}] Step ${i}: cache save check: stepCacheable=${stepCacheable}, persistentDeviceId=${persistentDeviceId ?? "UNDEFINED"}, sessionId=${result.sessionId ?? "UNDEFINED"}`);
             if (stepCacheable && persistentDeviceId && result.sessionId) {
               try {
                 const sessionSteps = await db
@@ -528,6 +530,8 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
                   step.app,
                   resolvedValues,
                 );
+
+                wfLog(`[Workflow ${runId}] Step ${i}: compileSessionToFlow returned ${compiled ? compiled.length + " steps" : "NULL"} (from ${sessionSteps.length} raw steps)`);
 
                 if (compiled) {
                   const goalKey = normalizeGoalKey(step._goalTemplate ?? step.goal);
