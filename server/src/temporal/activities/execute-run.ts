@@ -8,7 +8,7 @@
  * Heartbeats every 30s so Temporal knows we're still alive.
  */
 
-import { heartbeat, activityInfo } from "@temporalio/activity";
+import { heartbeat } from "@temporalio/activity";
 import { db } from "../../db.js";
 import { workflowRun, llmConfig as llmConfigTable } from "../../schema.js";
 import { eq } from "drizzle-orm";
@@ -42,7 +42,8 @@ export async function executeWorkflowRun(input: ExecuteRunInput): Promise<void> 
   } = input;
 
   // ── Check device is online ──
-  const device = sessions.getDeviceByPersistentId(deviceId);
+  // Try persistent ID first, then fall back to ephemeral device ID
+  const device = sessions.getDeviceByPersistentId(deviceId) ?? sessions.getDevice(deviceId);
   if (!device) {
     // Temporal will retry with backoff — device might come back online
     throw new Error(`Device ${deviceId} not connected`);
