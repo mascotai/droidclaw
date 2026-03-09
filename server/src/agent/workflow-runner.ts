@@ -439,11 +439,12 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
 
               const replayOk = await replayCachedFlow(deviceId, resolvedFlowSteps, cachedTimeline ?? undefined, step.app);
               if (replayOk) {
-                // Cache hit success — update stats and move on
+                // Cache hit success — update stats (reset failCount on success)
                 await db
                   .update(cachedFlow)
                   .set({
                     successCount: sql`${cachedFlow.successCount} + 1`,
+                    failCount: 0,
                     lastUsedAt: new Date(),
                   })
                   .where(eq(cachedFlow.id, cachedEntry.id));
@@ -458,13 +459,20 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
                 wfLog(`[Workflow ${runId}] Step ${i}: cached flow replay SUCCESS`);
                 break; // Success — move to next step
               } else {
-                // Cache replay failed — delete stale cache entry and fall through to AI
-                wfLog(`[Workflow ${runId}] Step ${i}: cached flow replay FAILED, deleting cache entry and falling through to AI`);
-                await db
-                  .update(cachedFlow)
-                  .set({ failCount: sql`${cachedFlow.failCount} + 1` })
-                  .where(eq(cachedFlow.id, cachedEntry.id));
-                await db.delete(cachedFlow).where(eq(cachedFlow.id, cachedEntry.id));
+                // Cache replay failed — increment failCount, delete only after 3 consecutive failures
+                const newFailCount = (cachedEntry.failCount ?? 0) + 1;
+                const MAX_CONSECUTIVE_FAILS = 3;
+
+                if (newFailCount >= MAX_CONSECUTIVE_FAILS) {
+                  wfLog(`[Workflow ${runId}] Step ${i}: cached flow replay FAILED (${newFailCount}/${MAX_CONSECUTIVE_FAILS} consecutive), deleting stale cache`);
+                  await db.delete(cachedFlow).where(eq(cachedFlow.id, cachedEntry.id));
+                } else {
+                  wfLog(`[Workflow ${runId}] Step ${i}: cached flow replay FAILED (${newFailCount}/${MAX_CONSECUTIVE_FAILS} consecutive), keeping cache, falling through to AI`);
+                  await db
+                    .update(cachedFlow)
+                    .set({ failCount: newFailCount })
+                    .where(eq(cachedFlow.id, cachedEntry.id));
+                }
 
                 // Re-launch app since cached flow may have left UI in a bad state
                 if (step.app) {
@@ -569,6 +577,15 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
 
                 if (compiled) {
                   const goalKey = normalizeGoalKey(step._goalTemplate ?? step.goal);
+                  // Remove any existing cache entry for this goal (handles re-discovery after failure)
+                  await db.delete(cachedFlow).where(
+                    and(
+                      eq(cachedFlow.userId, userId),
+                      eq(cachedFlow.deviceId, persistentDeviceId),
+                      eq(cachedFlow.goalKey, goalKey),
+                      step.app ? eq(cachedFlow.appPackage, step.app) : sql`${cachedFlow.appPackage} IS NULL`,
+                    )
+                  );
                   await db.insert(cachedFlow).values({
                     id: crypto.randomUUID(),
                     userId,
@@ -578,7 +595,7 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
                     steps: compiled.steps as any,
                     timeline: compiled.timeline as any,
                     sourceSessionId: result.sessionId,
-                  }).onConflictDoNothing();
+                  });
                   wfLog(`[Workflow ${runId}] Step ${i}: compiled and cached deterministic flow (${compiled.steps.length} steps, timeline: [${compiled.timeline.join(", ")}]ms)`);
                 }
               } catch (cacheErr) {
