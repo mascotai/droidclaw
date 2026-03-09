@@ -19,7 +19,6 @@ export interface WorkflowStep {
   goal: string;
   app?: string;
   maxSteps?: number;
-  formData?: Record<string, string>;
 }
 
 export interface Workflow {
@@ -50,19 +49,9 @@ const APP_LAUNCH_DELAY_MS = 2000;
 
 /**
  * Builds the effective goal string for a workflow step.
- * Appends structured form data if present.
  */
 function buildGoal(step: WorkflowStep): string {
-  let goal = step.goal;
-
-  if (step.formData && Object.keys(step.formData).length > 0) {
-    const lines = Object.entries(step.formData)
-      .map(([key, value]) => `- ${key}: ${value}`)
-      .join("\n");
-    goal += `\n\nFORM DATA TO FILL:\n${lines}\n\nFind each field on screen and enter the corresponding value.`;
-  }
-
-  return goal;
+  return step.goal;
 }
 
 /**

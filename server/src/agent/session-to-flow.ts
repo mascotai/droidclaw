@@ -320,9 +320,7 @@ export interface CacheableWorkflowStep {
   goal: string;
   app?: string;
   maxSteps?: number;
-  formData?: Record<string, string>;
   retries?: number;
-  exhaustIsSuccess?: boolean;
   cache?: boolean;
   _goalTemplate?: string;
 }
@@ -331,14 +329,10 @@ export interface CacheableWorkflowStep {
  * Determine if a workflow step is eligible for deterministic flow caching.
  *
  * Returns false for:
- * - Steps with `exhaustIsSuccess` (open-ended browsing — no stable "done" state)
  * - Steps with `cache: false` (explicit opt-out)
- * - Steps with formData (dynamic input that changes each run)
  */
 export function isCacheable(step: CacheableWorkflowStep): boolean {
   if (step.cache === false) return false;
-  if (step.exhaustIsSuccess) return false;
-  if (step.formData && Object.keys(step.formData).length > 0) return false;
   return true;
 }
 

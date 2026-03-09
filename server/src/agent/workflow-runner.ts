@@ -29,9 +29,7 @@ export interface WorkflowStep {
   goal: string;
   app?: string;
   maxSteps?: number;
-  formData?: Record<string, string>;
   retries?: number; // max retry attempts on failure (default: 0 = no retry)
-  exhaustIsSuccess?: boolean; // treat maxSteps exhaustion as success (for open-ended browsing)
   cache?: boolean; // explicit opt-in/out for deterministic flow caching (default: true for cacheable steps)
   eval?: EvalDefinition; // state-based evaluation criteria
   id?: string; // stable identifier for referencing from `when` conditions
@@ -60,14 +58,7 @@ const RECONNECT_TIMEOUT = 60_000; // 60 seconds
 const RECONNECT_POLL_INTERVAL = 3_000; // 3 seconds
 
 function buildGoal(step: WorkflowStep): string {
-  let goal = step.goal;
-  if (step.formData && Object.keys(step.formData).length > 0) {
-    const lines = Object.entries(step.formData)
-      .map(([key, value]) => `- ${key}: ${value}`)
-      .join("\n");
-    goal += `\n\nFORM DATA TO FILL:\n${lines}\n\nFind each field on screen and enter the corresponding value.`;
-  }
-  return goal;
+  return step.goal;
 }
 
 type FlowStep = string | { [key: string]: string | number | [number, number] };
@@ -506,8 +497,7 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
 
           wfLog(`[Workflow ${runId}] Step ${i} attempt ${attempt}: pipeline returned success=${result.success}, stepsUsed=${result.stepsUsed}, resolvedBy=${result.resolvedBy}`);
 
-          const isSuccess = result.success ||
-            (step.exhaustIsSuccess && result.stepsUsed >= (step.maxSteps ?? 30));
+          const isSuccess = result.success;
 
           // ── Eval judge: evaluate step state if eval definition is present ──
           let evalJudgment: EvalJudgment | undefined;

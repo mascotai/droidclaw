@@ -683,24 +683,6 @@ describe("isCacheable", () => {
     const step: CacheableWorkflowStep = { goal: "Open settings", cache: true };
     expect(isCacheable(step)).toBe(true);
   });
-
-  it("returns false for exhaustIsSuccess steps (open-ended browsing)", () => {
-    const step: CacheableWorkflowStep = { goal: "Browse feed", exhaustIsSuccess: true, maxSteps: 20 };
-    expect(isCacheable(step)).toBe(false);
-  });
-
-  it("returns false for steps with formData", () => {
-    const step: CacheableWorkflowStep = {
-      goal: "Fill registration form",
-      formData: { name: "John", email: "john@test.com" },
-    };
-    expect(isCacheable(step)).toBe(false);
-  });
-
-  it("returns true for steps with empty formData", () => {
-    const step: CacheableWorkflowStep = { goal: "Open form", formData: {} };
-    expect(isCacheable(step)).toBe(true);
-  });
 });
 
 // ═══════════════════════════════════════════════════════════

@@ -14,20 +14,26 @@ import {
 const workflows = new Hono<AuthEnv>();
 
 // ── Helper: resolve workflow variables ──
+// Accepts both string values and numeric ranges:
+//   { "username": "alice", "password": "s3cret", "scrollCount": { "min": 3, "max": 7 } }
+type VariableValue = string | { min: number; max: number };
+
 function resolveVariables(
   steps: any[],
-  variables?: Record<string, { min: number; max: number }>
+  variables?: Record<string, VariableValue>
 ): { steps: any[]; resolvedValues: Record<string, string> } {
   if (!variables) return { steps, resolvedValues: {} };
-  const resolved: Record<string, number> = {};
-  for (const [key, range] of Object.entries(variables)) {
-    resolved[key] = Math.floor(Math.random() * (range.max - range.min + 1)) + range.min;
-  }
   const resolvedValues: Record<string, string> = {};
-  for (const [k, v] of Object.entries(resolved)) resolvedValues[k] = String(v);
+  for (const [key, value] of Object.entries(variables)) {
+    if (typeof value === "string") {
+      resolvedValues[key] = value;
+    } else if (value && typeof value === "object" && "min" in value && "max" in value) {
+      resolvedValues[key] = String(Math.floor(Math.random() * (value.max - value.min + 1)) + value.min);
+    }
+  }
 
   const replacer = (_: string, key: string) =>
-    resolved[key] !== undefined ? String(resolved[key]) : `{{${key}}}`;
+    resolvedValues[key] !== undefined ? resolvedValues[key] : `{{${key}}}`;
 
   return {
     steps: steps.map(step => {
@@ -72,7 +78,7 @@ workflows.post("/run", sessionMiddleware, async (c) => {
     name?: string;
     type?: "workflow" | "flow";
     steps: unknown[];
-    variables?: Record<string, { min: number; max: number }>;
+    variables?: Record<string, string | { min: number; max: number }>;
     appId?: string;
     llmModel?: string;
   }>();
@@ -158,7 +164,7 @@ workflows.post("/schedule", sessionMiddleware, async (c) => {
     name?: string;
     type?: "workflow" | "flow";
     steps: unknown[];
-    variables?: Record<string, { min: number; max: number }>;
+    variables?: Record<string, string | { min: number; max: number }>;
     llmModel?: string;
   }>();
 
