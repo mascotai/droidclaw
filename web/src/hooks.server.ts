@@ -26,16 +26,19 @@ async function proxyAuthLogin(
 		.limit(1);
 
 	let userId: string;
+	let userName: string;
 
 	if (existing.length > 0) {
 		userId = existing[0].id;
+		userName = existing[0].name ?? email.split('@')[0];
 	} else {
 		// Auto-create user from proxy-auth headers
 		userId = crypto.randomUUID();
+		userName = displayName || username || email.split('@')[0];
 		await db.insert(userTable).values({
 			id: userId,
 			email,
-			name: displayName || username || email.split('@')[0],
+			name: userName,
 			emailVerified: true,
 			createdAt: new Date(),
 			updatedAt: new Date()
@@ -65,14 +68,10 @@ async function proxyAuthLogin(
 		expires: expiresAt
 	});
 
-	// Re-fetch session so locals are populated
-	const session = await auth.api.getSession({
-		headers: event.request.headers
-	});
-	if (session) {
-		event.locals.session = session.session;
-		event.locals.user = session.user;
-	}
+	// Populate locals directly — getSession() won't work here because
+	// the cookie was just set on the response, not on the incoming request headers
+	event.locals.session = { id: sessionId, token: sessionToken, userId, expiresAt } as any;
+	event.locals.user = { id: userId, email, name: userName, emailVerified: true } as any;
 }
 
 export const handle: Handle = async ({ event, resolve }) => {
