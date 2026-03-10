@@ -113,6 +113,7 @@ class DroidClawAccessibilityService : AccessibilityService() {
         // ── 1. Autofill / Credential Manager packages ──
         val autofillPackages = setOf(
             "com.google.android.gms",           // Google Credential Manager / Autofill
+            "com.android.credentialmanager",     // Android system Credential Manager (CredentialSelectorActivity)
             "com.samsung.android.autofill",      // Samsung Autofill
             "com.samsung.android.vaultkeeper",   // Samsung Pass / Vault
             "com.samsung.android.samsungpass",   // Samsung Pass
