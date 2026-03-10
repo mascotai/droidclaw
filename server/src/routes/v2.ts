@@ -497,7 +497,8 @@ v2.get("/devices/:deviceId/workflows/runs/:runId/goals/:goalId", async (c) => {
   });
 });
 
-// ── GET .../goals/:goalId/steps — all agent actions (compact, no screens) ──
+// ── GET .../goals/:goalId/steps — agent actions with pagination ──
+// Supports: ?from=3&to=8 (step numbers, 1-based). Defaults to all steps.
 // Works for both completed goals (from stepResults) and running goals (from activeSessions)
 v2.get("/devices/:deviceId/workflows/runs/:runId/goals/:goalId/steps", async (c) => {
   const user = c.get("user");
@@ -532,6 +533,7 @@ v2.get("/devices/:deviceId/workflows/runs/:runId/goals/:goalId/steps", async (c)
       goal: idx,
       goalId: sr?.stepId ?? def?.id ?? null,
       stepsUsed: sr?.stepsUsed ?? 0,
+      totalSteps: sr?.stepsUsed ?? 0,
       steps: [],
       note: sr?.resolvedBy === "cached_flow"
         ? "Resolved by cached flow replay — no agent steps recorded"
@@ -541,18 +543,35 @@ v2.get("/devices/:deviceId/workflows/runs/:runId/goals/:goalId/steps", async (c)
     });
   }
 
+  // Pagination: ?from=3&to=8 (1-based step numbers)
+  const fromStep = parseInt(c.req.query("from") ?? "0", 10);
+  const toStep = parseInt(c.req.query("to") ?? "0", 10);
+
+  const conditions = [eq(agentStep.sessionId, sessionId)];
+  if (fromStep > 0) conditions.push(sql`${agentStep.stepNumber} >= ${fromStep}`);
+  if (toStep > 0) conditions.push(sql`${agentStep.stepNumber} <= ${toStep}`);
+
+  // Get total count (before pagination) for context
+  const totalResult = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(agentStep)
+    .where(eq(agentStep.sessionId, sessionId));
+  const totalSteps = Number(totalResult[0]?.count ?? 0);
+
   const agentSteps = await db
     .select()
     .from(agentStep)
-    .where(eq(agentStep.sessionId, sessionId))
+    .where(and(...conditions))
     .orderBy(asc(agentStep.stepNumber));
 
   return c.json({
     goal: idx,
     goalId: sr?.stepId ?? def?.id ?? null,
     status: isLive ? "running" : (sr?.success ? "completed" : "failed"),
-    stepsUsed: isLive ? agentSteps.length : (sr?.stepsUsed ?? 0),
+    stepsUsed: isLive ? totalSteps : (sr?.stepsUsed ?? 0),
+    totalSteps,
     maxSteps: def?.maxSteps ?? null,
+    ...(fromStep > 0 || toStep > 0 ? { from: fromStep || 1, to: toStep || totalSteps } : {}),
     steps: agentSteps.map((s) => ({
       step: s.stepNumber,
       action: s.action,
