@@ -226,7 +226,7 @@
 		</a>
 		<button
 			onclick={openPairingModal}
-			class="inline-flex items-center gap-1.5 rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-800"
+			class="inline-flex items-center gap-1.5 rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white transition-transform hover:bg-stone-800 active:scale-[0.98]"
 		>
 			<Icon icon="solar:link-round-bold-duotone" class="h-4 w-4" />
 			Pair Device
@@ -262,7 +262,7 @@
 		</p>
 		<button
 			onclick={openPairingModal}
-			class="mt-5 inline-flex items-center gap-1.5 rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-800"
+			class="mt-5 inline-flex items-center gap-1.5 rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white transition-transform hover:bg-stone-800 active:scale-[0.98]"
 		>
 			<Icon icon="solar:link-round-bold-duotone" class="h-4 w-4" />
 			Pair Device
@@ -323,9 +323,21 @@
 						</div>
 
 						<!-- Countdown -->
-						<p class="mb-4 text-sm text-stone-400">
+						<p class="mb-2 text-sm text-stone-400">
 							Expires in {formatTime(secondsLeft)}
 						</p>
+
+						<!-- Copy code button -->
+						<button
+							onclick={() => {
+								navigator.clipboard.writeText(pairingCode);
+								toast.success('Code copied to clipboard');
+							}}
+							class="mb-4 inline-flex items-center gap-1.5 rounded-lg border border-stone-200 px-3 py-1.5 text-sm text-stone-600 transition-all hover:bg-stone-50 active:scale-[0.98]"
+						>
+							<Icon icon="solar:copy-bold-duotone" class="h-4 w-4" />
+							Copy code
+						</button>
 
 						<!-- Waiting indicator -->
 						<div class="flex items-center gap-2 text-sm text-stone-500">
@@ -342,7 +354,7 @@
 						<p class="font-medium text-stone-600">Code expired</p>
 						<button
 							onclick={regenerateCode}
-							class="inline-flex items-center gap-1.5 rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-800"
+							class="inline-flex items-center gap-1.5 rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white transition-transform hover:bg-stone-800 active:scale-[0.98]"
 						>
 							<Icon icon="solar:refresh-bold-duotone" class="h-4 w-4" />
 							Generate new code
@@ -358,7 +370,7 @@
 						<p class="text-sm text-stone-500">Your device is now connected and ready to use.</p>
 						<button
 							onclick={closeModal}
-							class="inline-flex items-center gap-1.5 rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-800"
+							class="inline-flex items-center gap-1.5 rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white transition-transform hover:bg-stone-800 active:scale-[0.98]"
 						>
 							Done
 						</button>

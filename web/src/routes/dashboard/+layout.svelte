@@ -93,7 +93,7 @@
 					: 'text-stone-400'}"
 			>
 				<Icon icon={item.icon} class="h-6 w-6" />
-				<span class="text-[10px] font-medium">{item.label}</span>
+				<span class="text-[11px] font-medium">{item.label}</span>
 			</a>
 		{/each}
 	</nav>

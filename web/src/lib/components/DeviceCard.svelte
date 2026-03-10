@@ -47,17 +47,28 @@
 		if (level === null || level < 0) return 'solar:battery-charge-bold-duotone';
 		if (charging) return 'solar:battery-charge-bold-duotone';
 		if (level > 75) return 'solar:battery-full-bold-duotone';
-		if (level > 50) return 'solar:battery-full-bold-duotone';
+		if (level > 50) return 'solar:battery-half-bold-duotone';
 		if (level > 25) return 'solar:battery-low-bold-duotone';
 		return 'solar:battery-low-bold-duotone';
+	}
+
+	/** Sanitize goal text: truncate and strip potential credentials */
+	function sanitizeGoalText(text: string): string {
+		// Strip anything after credential-like keywords
+		const credentialPatterns = /\b(type\s*'|password|secret|token|credential|api.?key)\b.*/gi;
+		let safe = text.replace(credentialPatterns, '***');
+		// Truncate to 60 chars
+		if (safe.length > 60) safe = safe.slice(0, 60) + '…';
+		return safe;
 	}
 </script>
 
 <a
 	href="/dashboard/devices/{deviceId}"
+	aria-label="{model ?? name}"
 	data-umami-event={DEVICE_CARD_CLICK}
 	data-umami-event-device={model ?? name}
-	class="group flex min-h-[280px] flex-col rounded-[1.75rem] bg-white p-5 transition-all hover:bg-stone-50"
+	class="group flex min-h-[280px] flex-col rounded-[1.75rem] bg-white p-5 transition-all hover:bg-stone-50 active:scale-[0.98]"
 >
 	<!-- Header: status + battery -->
 	<div class="mb-4 flex items-center justify-between">
@@ -112,7 +123,7 @@
 	<!-- Last goal -->
 	<div class="mt-auto border-t border-stone-100 pt-3">
 		{#if lastGoal}
-			<p class="truncate text-xs text-stone-500">{lastGoal.goal}</p>
+			<p class="truncate text-xs text-stone-500">{sanitizeGoalText(lastGoal.goal)}</p>
 			<div class="mt-1 flex items-center justify-between">
 				<span
 					class="flex items-center gap-1 text-xs font-medium

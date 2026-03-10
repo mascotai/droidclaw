@@ -92,7 +92,7 @@
 <div class="mb-8 rounded-2xl bg-white">
 	<div class="flex items-center justify-between px-4 md:px-6 py-4">
 		<span class="text-sm text-stone-500">Email</span>
-		<span class="text-sm font-medium text-stone-900 blur-sm transition-all duration-200 hover:blur-none">{layoutData.user.email}</span>
+		<span class="text-sm font-medium text-stone-900">{layoutData.user.email}</span>
 	</div>
 	{#if layoutData.plan}
 		<div class="flex items-center justify-between border-t border-stone-100 px-4 md:px-6 py-4">
@@ -188,7 +188,7 @@
 
 		<button
 			type="submit"
-			class="flex items-center gap-2 rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-800"
+			class="flex items-center gap-2 rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white transition-transform hover:bg-stone-800 active:scale-[0.98]"
 		>
 			<Icon icon="solar:diskette-bold-duotone" class="h-4 w-4" />
 			Save
@@ -198,7 +198,7 @@
 	{#if config}
 		<div class="mt-4 flex items-center gap-2 rounded-lg bg-stone-50 px-3 py-2 text-sm text-stone-500">
 			<Icon icon="solar:info-circle-bold-duotone" class="h-4 w-4 shrink-0 text-stone-400" />
-			Current: {config.provider} &middot; Key: {config.apiKey}
+			Current: {config.provider} &middot; Key: configured ✓
 			{#if config.model} &middot; Model: {config.model}{/if}
 		</div>
 	{/if}

@@ -8,6 +8,7 @@
 	let newKeyValue = $state<string | null>(null);
 	let keysPromise = $state(listKeys());
 	let showUsage = $state(false);
+	let confirmingDelete = $state<string | null>(null);
 </script>
 
 <h2 class="mb-2 text-xl md:text-2xl font-bold">API Keys</h2>
@@ -60,7 +61,7 @@
 		</label>
 		<button
 			type="submit"
-			class="flex w-full sm:w-auto items-center justify-center gap-2 rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-800"
+			class="flex w-full sm:w-auto items-center justify-center gap-2 rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white transition-transform hover:bg-stone-800 active:scale-[0.98]"
 		>
 			<Icon icon="solar:add-circle-bold-duotone" class="h-4 w-4" />
 			Create
@@ -167,23 +168,42 @@
 							</div>
 						</div>
 					</div>
-					<form
-						{...deleteKey.enhance(async ({ submit }) => {
-							await submit().updates(listKeys());
-							keysPromise = listKeys();
-							toast.success('API key deleted');
-							track(APIKEY_DELETE);
-						})}
-					>
-						<input type="hidden" name="keyId" value={key.id} />
-						<button
-							type="submit"
-							class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-red-500 hover:bg-red-50"
-						>
-							<Icon icon="solar:trash-bin-trash-bold-duotone" class="h-4 w-4" />
-							<span class="hidden sm:inline">Delete</span>
-						</button>
-					</form>
+					<div class="flex items-center gap-2">
+						{#if confirmingDelete === key.id}
+							<span class="text-xs text-stone-500">Delete?</span>
+							<form
+								{...deleteKey.enhance(async ({ submit }) => {
+									await submit().updates(listKeys());
+									keysPromise = listKeys();
+									confirmingDelete = null;
+									toast.success('API key deleted');
+									track(APIKEY_DELETE);
+								})}
+							>
+								<input type="hidden" name="keyId" value={key.id} />
+								<button
+									type="submit"
+									class="rounded-lg px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
+								>
+									Yes
+								</button>
+							</form>
+							<button
+								onclick={() => (confirmingDelete = null)}
+								class="rounded-lg px-2 py-1 text-xs font-medium text-stone-500 hover:bg-stone-100"
+							>
+								No
+							</button>
+						{:else}
+							<button
+								onclick={() => (confirmingDelete = key.id)}
+								class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-red-500 hover:bg-red-50"
+							>
+								<Icon icon="solar:trash-bin-trash-bold-duotone" class="h-4 w-4" />
+								<span class="hidden sm:inline">Delete</span>
+							</button>
+						{/if}
+					</div>
 				</div>
 			{/each}
 		{:else}

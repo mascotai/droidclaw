@@ -13,3 +13,9 @@ body {
 a, button, [role="button"], input[type="submit"], select, summary {
 	cursor: pointer;
 }
+
+/* P1 #3 — Global focus-visible rings for accessibility */
+:focus-visible {
+	outline: 2px solid var(--color-violet-400);
+	outline-offset: 2px;
+}
