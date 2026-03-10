@@ -176,12 +176,10 @@ class DroidClawAccessibilityService : AccessibilityService() {
 
     /**
      * Dismiss an overlay by force-stopping its package.
-     * This is more reliable than trying to find dismiss buttons or pressing BACK,
-     * which can have side effects (e.g. navigating the underlying app or opening
-     * the notification shade).
+     * This cleanly removes the overlay activity from the window stack without
+     * side effects (no BACK navigation, no notification shade).
      *
-     * `am force-stop` works without root on Esper-managed devices and cleanly
-     * removes the overlay activity from the window stack.
+     * `am force-stop` works without root on Esper-managed devices.
      */
     private fun dismissOverlay(pkgName: String?) {
         if (pkgName == null) return
@@ -189,8 +187,7 @@ class DroidClawAccessibilityService : AccessibilityService() {
             Runtime.getRuntime().exec(arrayOf("am", "force-stop", pkgName))
             Log.i(TAG, "Force-stopped overlay package: $pkgName")
         } catch (e: Exception) {
-            Log.w(TAG, "force-stop failed for $pkgName, falling back to BACK: ${e.message}")
-            performGlobalAction(GLOBAL_ACTION_BACK)
+            Log.w(TAG, "force-stop failed for $pkgName: ${e.message}")
         }
     }
 
