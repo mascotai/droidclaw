@@ -55,6 +55,7 @@ class DroidClawAccessibilityService : AccessibilityService() {
      * - Credential manager for Samsung: Samsung-specific credential service
      */
     private fun disableSystemPopups() {
+        // 1. Disable system settings for autofill and credential manager
         val settings = mapOf(
             "autofill_service" to "",                   // Disable autofill popups
             "credential_service" to "",                 // Disable Android Credential Manager
@@ -63,17 +64,34 @@ class DroidClawAccessibilityService : AccessibilityService() {
         for ((key, value) in settings) {
             try {
                 Runtime.getRuntime().exec(arrayOf("settings", "put", "secure", key, value))
-                Log.i(TAG, "Disabled system popup: $key")
+                Log.i(TAG, "Disabled setting: $key")
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to disable $key: ${e.message}")
             }
         }
 
-        // Also force-stop the credential manager package to clear any existing state
+        // 2. Disable Google Password Manager / Credential Provider components in GMS
+        //    This prevents the "Sign in with your saved password?" popup from appearing.
+        val componentsToDisable = listOf(
+            "com.google.android.gms/.auth.credentials.credman.service.CredentialManagerService",
+            "com.google.android.gms/.auth.credentials.credman.CredentialManagerUi",
+            "com.google.android.gms/.auth.api.credentials.CredentialsApiService",
+            "com.google.android.gms/.auth.api.credentials.CredentialPickerActivity",
+            "com.google.android.gms/.auth.api.credentials.CredentialSavingActivity",
+        )
+        for (component in componentsToDisable) {
+            try {
+                Runtime.getRuntime().exec(arrayOf("pm", "disable", component))
+                Log.i(TAG, "Disabled component: $component")
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to disable $component: ${e.message}")
+            }
+        }
+
+        // 3. Force-stop credential manager packages to clear any existing state
         try {
             Runtime.getRuntime().exec(arrayOf("am", "force-stop", "com.android.credentialmanager"))
-            Runtime.getRuntime().exec(arrayOf("am", "force-stop", "com.google.android.gms"))
-            Log.i(TAG, "Force-stopped credential manager packages on startup")
+            Log.i(TAG, "Force-stopped com.android.credentialmanager")
         } catch (e: Exception) {
             Log.w(TAG, "Failed to force-stop credential packages: ${e.message}")
         }
