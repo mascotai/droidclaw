@@ -80,7 +80,8 @@
 	let workflowsLoaded = $state(false);
 	let workflowsPage = $state(initialPage);
 	let workflowsTotalPages = $state(1);
-	let workflowPageCache = $state<Map<number, { items: WorkflowRun[]; total: number }>>(new Map());
+	// Plain (non-reactive) cache — not rendered in template, only used internally
+	const workflowPageCache = new Map<number, { items: WorkflowRun[]; total: number }>();
 	let cachedFlows = $state<CachedFlowEntry[]>([]);
 	let cachedFlowsLoaded = $state(false);
 

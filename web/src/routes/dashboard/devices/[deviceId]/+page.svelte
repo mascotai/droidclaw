@@ -13,14 +13,20 @@
 		showBuilder = false;
 		ctx.handleWorkflowSubmit(steps, variables);
 	}
+
+	function handleKeydown(e: KeyboardEvent) {
+		if (e.key === 'Escape') showBuilder = false;
+	}
 </script>
+
+<svelte:window onkeydown={handleKeydown} />
 
 <div class="space-y-6">
 	<!-- Run a task button -->
 	<button
 		onclick={() => (showBuilder = true)}
 		disabled={ctx.liveWorkflowRun?.status === 'running'}
-		class="flex items-center gap-2 rounded-xl bg-stone-900 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-stone-800 disabled:opacity-40"
+		class="inline-flex items-center gap-2 rounded-xl bg-stone-900 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-stone-800 disabled:opacity-40"
 	>
 		<Icon icon="solar:play-bold" class="h-3.5 w-3.5" />
 		Run a task

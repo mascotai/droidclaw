@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Icon from '@iconify/svelte';
+	import { untrack } from 'svelte';
 	import type { CachedFlowEntry } from './types';
 
 	interface Props {
@@ -19,9 +20,11 @@
 
 	$effect(() => {
 		const currentIds = new Set(flows.map((f) => f.id));
+		// Read knownFlowIds without creating a reactive dependency (avoids infinite loop)
+		const known = untrack(() => knownFlowIds);
 		const freshIds = new Set<string>();
 		for (const id of currentIds) {
-			if (!knownFlowIds.has(id)) {
+			if (!known.has(id)) {
 				freshIds.add(id);
 			}
 		}
