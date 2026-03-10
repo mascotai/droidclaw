@@ -1,0 +1,19 @@
+meta {
+  name: Get Step
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{baseUrl}}/v2/devices/{{deviceId}}/workflows/runs/{{runId}}/goals/{{goalId}}/steps/{{step}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{apiKey}}
+}
+
+docs {
+  Get everything about a single agent step: what action was taken, why (reasoning), what happened (result), and the full screen element tree at that moment.
+}

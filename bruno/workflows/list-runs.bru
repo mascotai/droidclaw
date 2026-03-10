@@ -1,0 +1,19 @@
+meta {
+  name: List Runs
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/v2/devices/{{deviceId}}/workflows/runs?limit=5
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{apiKey}}
+}
+
+docs {
+  List workflow runs for a device. Use ?status=running to see what's active (replaces the old /queue endpoint). Returns lean summaries without steps or screens.
+}

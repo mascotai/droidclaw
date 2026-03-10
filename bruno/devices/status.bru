@@ -1,0 +1,19 @@
+meta {
+  name: Device Status
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/v2/devices/{{deviceId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{apiKey}}
+}
+
+docs {
+  Check if a device is online, what app version it runs, whether an agent is active, and see recent debug logs.
+}

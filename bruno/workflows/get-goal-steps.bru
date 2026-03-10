@@ -1,0 +1,19 @@
+meta {
+  name: Get Goal Steps
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/v2/devices/{{deviceId}}/workflows/runs/{{runId}}/goals/{{goalId}}/steps
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{apiKey}}
+}
+
+docs {
+  Get all agent actions for a goal. Each step has: action (tap/type/scroll/done), reasoning (why the agent did it), result, and duration. No screen trees — use get-step for that.
+}

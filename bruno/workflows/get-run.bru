@@ -1,0 +1,19 @@
+meta {
+  name: Get Run
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/v2/devices/{{deviceId}}/workflows/runs/{{runId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{apiKey}}
+}
+
+docs {
+  Get run summary with per-goal results. Shows each goal's success, stepsUsed, resolvedBy, and evalPassed. Drill into /goals/:goalId for details.
+}

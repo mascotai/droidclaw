@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "bruno": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "bruno-mcp-tools",
+        "--collection",
+        "/Users/yohairosen/Workspace/Projects/mascotai/stack/droidclaw/bruno",
+        "--env",
+        "production",
+        "--prefix",
+        "droidclaw"
+      ],
+      "env": {
+        "DROIDCLAW_API_KEY": "droidclaw_ba98a706eb83ac81ac36998f6679481bbe24baaaec112b7591fdcd5c8ee418ba"
+      }
+    }
+  }
+}

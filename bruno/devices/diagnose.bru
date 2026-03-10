@@ -1,0 +1,19 @@
+meta {
+  name: Diagnose Device
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/v2/devices/{{deviceId}}/diagnose
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{apiKey}}
+}
+
+docs {
+  Run full device diagnostics including download speed test. 120 second timeout. Use to troubleshoot connectivity or performance issues.
+}

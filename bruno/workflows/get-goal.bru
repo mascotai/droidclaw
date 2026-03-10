@@ -1,0 +1,19 @@
+meta {
+  name: Get Goal
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/v2/devices/{{deviceId}}/workflows/runs/{{runId}}/goals/{{goalId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{apiKey}}
+}
+
+docs {
+  Get a single goal's config (app, maxSteps) and result (success, resolvedBy, evalPassed). Includes discovery hints: hasSteps, hasEval, availableScreens. goalId can be a string like "add_account" or numeric index.
+}

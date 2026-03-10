@@ -1,0 +1,19 @@
+meta {
+  name: Stop Workflow
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/v2/devices/{{deviceId}}/workflows/runs/{{runId}}/stop
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{apiKey}}
+}
+
+docs {
+  Stop a running workflow or cancel a queued one.
+}

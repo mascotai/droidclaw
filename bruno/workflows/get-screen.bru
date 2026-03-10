@@ -1,0 +1,19 @@
+meta {
+  name: Get Screen
+  type: http
+  seq: 8
+}
+
+get {
+  url: {{baseUrl}}/v2/devices/{{deviceId}}/workflows/runs/{{runId}}/goals/{{goalId}}/steps/{{step}}/screen
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{apiKey}}
+}
+
+docs {
+  Get just the screen UI element tree at a specific step. Use when you only need what was on screen, not the agent's action or reasoning.
+}

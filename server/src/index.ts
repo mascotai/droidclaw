@@ -8,14 +8,10 @@ import {
   handleDashboardClose,
 } from "./ws/dashboard.js";
 import type { WebSocketData } from "./ws/sessions.js";
-import { devices } from "./routes/devices.js";
-import { goals } from "./routes/goals.js";
 import { health } from "./routes/health.js";
 import { license } from "./routes/license.js";
 import { pairing } from "./routes/pairing.js";
-import { investigate } from "./routes/investigate.js";
-import { workflows } from "./routes/workflows.js";
-import { evals } from "./routes/evals.js";
+import { v2 } from "./routes/v2.js";
 import { startTemporalWorker } from "./temporal/worker.js";
 import { db, ensureSchema } from "./db.js";
 import { workflowRun, evalRun } from "./schema.js";
@@ -40,14 +36,10 @@ app.on(["POST", "GET"], "/api/auth/*", (c) => {
 });
 
 // REST routes
-app.route("/devices", devices);
-app.route("/goals", goals);
 app.route("/health", health);
 app.route("/license", license);
 app.route("/pairing", pairing);
-app.route("/investigate", investigate);
-app.route("/workflows", workflows);
-app.route("/evals", evals);
+app.route("/v2", v2);
 
 // Start server with WebSocket support
 const server = Bun.serve<WebSocketData>({

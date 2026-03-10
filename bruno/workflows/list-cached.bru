@@ -1,0 +1,19 @@
+meta {
+  name: List Cached Flows
+  type: http
+  seq: 10
+}
+
+get {
+  url: {{baseUrl}}/v2/devices/{{deviceId}}/workflows/cached
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{apiKey}}
+}
+
+docs {
+  List cached deterministic flows for a device. These are compiled from successful AI sessions and replayed for speed on repeat runs.
+}

@@ -1,0 +1,25 @@
+meta {
+  name: Shell Command
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/v2/devices/{{deviceId}}/shell
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{apiKey}}
+}
+
+body:json {
+  {
+    "command": "dumpsys package com.instagram.android | grep versionName"
+  }
+}
+
+docs {
+  Run an ADB shell command on the device. 30 second timeout. Useful for checking app versions, dumping state, or debugging.
+}

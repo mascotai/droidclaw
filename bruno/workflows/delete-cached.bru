@@ -1,0 +1,19 @@
+meta {
+  name: Delete Cached Flow
+  type: http
+  seq: 11
+}
+
+delete {
+  url: {{baseUrl}}/v2/devices/{{deviceId}}/workflows/cached/{{cachedFlowId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{apiKey}}
+}
+
+docs {
+  Delete a cached flow. The agent will re-discover the optimal path on the next run instead of replaying the cached one.
+}

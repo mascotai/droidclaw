@@ -1,0 +1,19 @@
+meta {
+  name: Get Eval
+  type: http
+  seq: 9
+}
+
+get {
+  url: {{baseUrl}}/v2/devices/{{deviceId}}/workflows/runs/{{runId}}/goals/{{goalId}}/eval
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{apiKey}}
+}
+
+docs {
+  Get eval results for a goal: what was checked (definition with expected values) and what was found (judgment with actual values and any mismatches).
+}
