@@ -179,15 +179,6 @@ class DroidClawAccessibilityService : AccessibilityService() {
                 // Skip input method windows (keyboard) to reduce noise
                 if (window.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD) continue
 
-                // Skip noisy overlay windows (clipboard toasts, etc.)
-                // but keep password manager / credential popups visible
-                // so the agent can see and dismiss_popup them
-                val windowPkg = window.root?.packageName?.toString()
-                if (windowPkg != null && isNoisyOverlay(windowPkg)) {
-                    Log.d(TAG, "captureAllWindows: skipping noisy overlay from $windowPkg")
-                    continue
-                }
-
                 val root = window.root ?: continue
                 try {
                     val windowElements = ScreenTreeBuilder.capture(root)
@@ -200,22 +191,6 @@ class DroidClawAccessibilityService : AccessibilityService() {
             Log.w(TAG, "captureAllWindows failed: ${e.message}")
         }
         return allElements
-    }
-
-    /**
-     * Noisy overlay packages that should be excluded from the screen tree.
-     * These are transient UI elements (clipboard toasts, vault popups) that
-     * add noise and interfere with element matching.
-     *
-     * NOTE: Password manager / credential manager popups are NOT excluded —
-     * the agent needs to see them to call dismiss_popup.
-     */
-    private fun isNoisyOverlay(pkgName: String): Boolean {
-        return pkgName in setOf(
-            "com.samsung.android.clipboarduiservice",
-            "com.samsung.android.clipboardsaveservice",
-            "com.samsung.android.vaultkeeper",
-        )
     }
 
     fun findNodeAt(x: Int, y: Int): AccessibilityNodeInfo? {
