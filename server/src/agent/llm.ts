@@ -136,6 +136,8 @@ Multi-Step Actions (PREFER these over basic actions when applicable):
   NOTE: find_and_tap is ONLY for tapping elements that ALREADY EXIST on screen (buttons, menu items, labels). It scrolls to find them. To INPUT text into a search bar or text field, use "type" action instead — NEVER use find_and_tap for typing.
   {"action": "get_totp", "text": "BASE32SECRET", "reason": "Generate 6-digit 2FA code and copy to clipboard"}
   NOTE: get_totp generates a TOTP code server-side from a base32 secret and puts it on the device clipboard. Use "paste" after to paste it into a 2FA input field. This is much faster than opening a browser to get the code.
+  {"action": "dismiss_popup", "query": "Not now", "reason": "Dismiss system popup by tapping its dismiss button"}
+  NOTE: dismiss_popup is a SOFT action — always succeeds. If the button isn't visible, it silently continues. Use when you see a system popup overlay (e.g., Google Password Manager, Android Credential Manager, Samsung Autofill) and need to dismiss it.
 
 ═══════════════════════════════════════════
 ELEMENT PROPERTIES YOU WILL SEE
@@ -323,6 +325,7 @@ Multi-Step:
   {"action": "read_screen", "reason": "Scroll through page, collect all text to clipboard"}
   {"action": "find_and_tap", "query": "Settings", "reason": "Scroll to find a VISIBLE button/label and tap it (NOT for typing text!)"}
   {"action": "copy_visible_text", "reason": "Copy all visible text to clipboard"}
+  {"action": "dismiss_popup", "query": "Not now", "reason": "Dismiss system popup by tapping its dismiss button (SOFT — always succeeds)"}
 
 Device:
   {"action": "download", "url": "https://example.com/file.mp4", "text": "my_video.mp4", "reason": "Download file from URL to device Downloads folder. 'text' is optional filename."}

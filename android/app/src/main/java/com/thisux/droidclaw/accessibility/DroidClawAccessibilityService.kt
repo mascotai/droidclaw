@@ -20,7 +20,6 @@ class DroidClawAccessibilityService : AccessibilityService() {
 
     companion object {
         private const val TAG = "DroidClawA11y"
-        private const val DISMISS_COOLDOWN_MS = 2000L
         val isRunning = MutableStateFlow(false)
         val lastScreenTree = MutableStateFlow<List<UIElement>>(emptyList())
         var instance: DroidClawAccessibilityService? = null
@@ -37,9 +36,6 @@ class DroidClawAccessibilityService : AccessibilityService() {
                 }}
         }
     }
-
-    /** Timestamp of last popup dismiss attempt (for debouncing) */
-    private var lastDismissTimeMs = 0L
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -59,17 +55,6 @@ class DroidClawAccessibilityService : AccessibilityService() {
             if (className != null && className.contains('.') && !className.startsWith("android.widget.") && !className.startsWith("android.view.")) {
                 currentActivityName = className
                 Log.i(TAG, "Activity updated (event): $currentActivityName")
-            }
-
-            // Auto-dismiss popups from known system packages (e.g., Google Password Manager)
-            val pkg = event.packageName?.toString()
-            if (pkg != null && isPopupPackage(pkg)) {
-                val now = System.currentTimeMillis()
-                if (now - lastDismissTimeMs > DISMISS_COOLDOWN_MS) {
-                    lastDismissTimeMs = now
-                    Log.i(TAG, "Popup detected from $pkg — attempting dismiss")
-                    dismissOverlayPopup(pkg)
-                }
             }
         }
     }
@@ -194,13 +179,6 @@ class DroidClawAccessibilityService : AccessibilityService() {
                 // Skip input method windows (keyboard) to reduce noise
                 if (window.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD) continue
 
-                // Skip overlay windows from known popup/clipboard packages
-                val windowPkg = window.root?.packageName?.toString()
-                if (windowPkg != null && isOverlayPackage(windowPkg)) {
-                    Log.d(TAG, "captureAllWindows: skipping overlay window from $windowPkg")
-                    continue
-                }
-
                 val root = window.root ?: continue
                 try {
                     val windowElements = ScreenTreeBuilder.capture(root)
@@ -213,82 +191,6 @@ class DroidClawAccessibilityService : AccessibilityService() {
             Log.w(TAG, "captureAllWindows failed: ${e.message}")
         }
         return allElements
-    }
-
-    /** Packages whose popup windows should be auto-dismissed */
-    private fun isPopupPackage(pkgName: String): Boolean {
-        return pkgName in setOf(
-            "com.google.android.gms",                  // Google Password Manager / Smart Lock
-            "com.android.credentialmanager",            // Android Credential Manager
-            "com.samsung.android.autofill",             // Samsung Autofill
-            "com.samsung.android.samsungpass",          // Samsung Pass
-            "com.samsung.android.samsungpassautofill",  // Samsung Pass Autofill
-        )
-    }
-
-    /** Find and click a dismiss button in the popup's accessibility tree */
-    private fun dismissOverlayPopup(targetPackage: String) {
-        val dismissTexts = listOf("Not now", "Cancel", "None of the above", "No thanks", "Dismiss", "Close")
-
-        try {
-            val allWindows = windows ?: return
-            for (window in allWindows) {
-                val root = window.root ?: continue
-                val pkg = root.packageName?.toString()
-                if (pkg != targetPackage) {
-                    root.recycle()
-                    continue
-                }
-
-                // Search for dismiss buttons
-                for (text in dismissTexts) {
-                    val nodes = root.findAccessibilityNodeInfosByText(text)
-                    for (node in nodes) {
-                        if (node.isClickable) {
-                            Log.i(TAG, "Clicking dismiss button: '${node.text}' in $pkg")
-                            node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                            node.recycle()
-                            root.recycle()
-                            return
-                        }
-                        // If the node itself isn't clickable, check its parent
-                        val parent = node.parent
-                        if (parent != null && parent.isClickable) {
-                            Log.i(TAG, "Clicking dismiss button parent: '${node.text}' in $pkg")
-                            parent.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                            parent.recycle()
-                            node.recycle()
-                            root.recycle()
-                            return
-                        }
-                        parent?.recycle()
-                        node.recycle()
-                    }
-                }
-                root.recycle()
-            }
-
-            // No dismiss button found — log only, do NOT press BACK
-            // (BACK can close the underlying app's screen instead of just the popup)
-            Log.w(TAG, "No dismiss button found in $targetPackage — ignoring popup")
-        } catch (e: Exception) {
-            Log.e(TAG, "dismissOverlayPopup failed: ${e.message}")
-        }
-    }
-
-    /** Packages whose overlay windows should be excluded from the screen tree */
-    private fun isOverlayPackage(pkgName: String): Boolean {
-        val overlayPackages = setOf(
-            "com.google.android.gms",                  // Google Password Manager / Smart Lock
-            "com.android.credentialmanager",            // Android Credential Manager
-            "com.samsung.android.clipboarduiservice",
-            "com.samsung.android.clipboardsaveservice",
-            "com.samsung.android.autofill",
-            "com.samsung.android.vaultkeeper",
-            "com.samsung.android.samsungpass",
-            "com.samsung.android.samsungpassautofill",
-        )
-        return pkgName in overlayPackages
     }
 
     fun findNodeAt(x: Int, y: Int): AccessibilityNodeInfo? {

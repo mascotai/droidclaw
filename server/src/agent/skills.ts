@@ -14,6 +14,7 @@
  *   compose_email    — Launch mailto: intent, paste body
  *   download         — Download file from URL to device storage (130s timeout)
  *   get_totp         — Generate TOTP code from secret, set clipboard
+ *   dismiss_popup    — Tap a dismiss button on a system popup (soft — always succeeds)
  */
 
 import { sessions } from "../ws/sessions.js";
@@ -46,6 +47,7 @@ const SKILL_ACTIONS = new Set([
   "compose_email",
   "download",
   "get_totp",
+  "dismiss_popup",
 ]);
 
 export function isSkillAction(action: string): boolean {
@@ -80,6 +82,8 @@ export async function executeSkill(
       return downloadFile(deviceId, action);
     case "get_totp":
       return getTotp(deviceId, action);
+    case "dismiss_popup":
+      return dismissPopup(deviceId, action, currentElements);
     default:
       return { success: false, message: `Unknown skill: ${action.action}` };
   }
@@ -620,4 +624,64 @@ function base32Decode(input: string): Buffer {
   }
 
   return Buffer.from(output);
+}
+
+// ─── Skill: dismiss_popup ──────────────────────────────────────
+
+/**
+ * Dismiss a system popup by tapping its dismiss button.
+ * This is a SOFT action — it always succeeds.
+ * If the button isn't found, it silently continues.
+ *
+ * Usage: {"action": "dismiss_popup", "query": "Not now"}
+ *
+ * The agent sees the popup in the screen tree and identifies the
+ * dismiss button text (e.g., "Not now", "None of the above").
+ */
+async function dismissPopup(
+  deviceId: string,
+  action: SkillAction,
+  elements: UIElement[]
+): Promise<SkillResult> {
+  const buttonText = action.query;
+  if (!buttonText) {
+    return {
+      success: true,
+      message:
+        "No dismiss button text provided, continuing",
+    };
+  }
+
+  const queryLower = buttonText.toLowerCase();
+
+  // Search for a matching clickable element (case-insensitive)
+  const match = elements.find(
+    (el) =>
+      el.text &&
+      el.text.toLowerCase().includes(queryLower) &&
+      (el.clickable || el.action === "tap")
+  );
+
+  if (match) {
+    const [x, y] = match.center;
+    console.log(
+      `[Skill] dismiss_popup: Tapping "${match.text}" at (${x}, ${y})`
+    );
+    await tap(deviceId, x, y);
+    await sleep(500);
+
+    return {
+      success: true,
+      message: `Dismissed popup by tapping '${match.text}' at (${x}, ${y})`,
+    };
+  }
+
+  // No matching button found — soft success
+  console.log(
+    `[Skill] dismiss_popup: No button matching "${buttonText}" found, continuing`
+  );
+  return {
+    success: true,
+    message: "No popup dismiss button found, continuing",
+  };
 }
