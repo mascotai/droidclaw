@@ -42,20 +42,40 @@ class DroidClawAccessibilityService : AccessibilityService() {
         Log.i(TAG, "Accessibility service connected")
         instance = this
         isRunning.value = true
-        disableAutofill()
+        disableSystemPopups()
     }
 
     /**
-     * Disable the system autofill service to prevent credential manager / autofill
-     * popups from appearing when the agent types into text fields.
+     * Disable system services that produce popups interfering with automation.
      * Uses 'settings put' which works without root on managed devices (Esper).
+     *
+     * Disables:
+     * - Autofill service: prevents autofill/password popups on text fields
+     * - Credential manager: prevents Google/Samsung credential selector half-sheets
+     * - Credential manager for Samsung: Samsung-specific credential service
      */
-    private fun disableAutofill() {
+    private fun disableSystemPopups() {
+        val settings = mapOf(
+            "autofill_service" to "",                   // Disable autofill popups
+            "credential_service" to "",                 // Disable Android Credential Manager
+            "credential_service_primary" to "",         // Disable primary credential provider
+        )
+        for ((key, value) in settings) {
+            try {
+                Runtime.getRuntime().exec(arrayOf("settings", "put", "secure", key, value))
+                Log.i(TAG, "Disabled system popup: $key")
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to disable $key: ${e.message}")
+            }
+        }
+
+        // Also force-stop the credential manager package to clear any existing state
         try {
-            Runtime.getRuntime().exec(arrayOf("settings", "put", "secure", "autofill_service", ""))
-            Log.i(TAG, "Autofill service disabled via settings")
+            Runtime.getRuntime().exec(arrayOf("am", "force-stop", "com.android.credentialmanager"))
+            Runtime.getRuntime().exec(arrayOf("am", "force-stop", "com.google.android.gms"))
+            Log.i(TAG, "Force-stopped credential manager packages on startup")
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to disable autofill: ${e.message}")
+            Log.w(TAG, "Failed to force-stop credential packages: ${e.message}")
         }
     }
 
