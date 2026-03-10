@@ -16,4 +16,15 @@ auth:bearer {
 
 docs {
   Get run summary with per-goal results. Shows each goal's success, stepsUsed, resolvedBy, and evalPassed. Drill into /goals/:goalId for details.
+
+  Works for both completed and running workflows. When running, the current goal appears in the goals array with status "running", including latestStep (last action/reasoning/result) and stepsUsed so far.
+
+  ## Workflow monitoring pattern
+  1. Fire a workflow with run_add_account, run_login, or run_full_login → get back a runId
+  2. Poll this endpoint (get_run) every 5-10 seconds to watch progress
+  3. Each goal in the goals array has a status: "completed", "failed", "running", or "pending"
+  4. For a running goal, latestStep shows what the agent just did
+  5. To see all steps so far, use get_goal_steps with the goalId
+  6. To see what's on screen right now, use the live screen endpoint
+  7. When status is "completed" or "failed", the workflow is done
 }

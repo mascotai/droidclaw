@@ -10,10 +10,24 @@ get {
   auth: bearer
 }
 
+params:query {
+  ~from:
+  ~to:
+}
+
 auth:bearer {
   token: {{apiKey}}
 }
 
 docs {
   Get all agent actions for a goal. Each step has: action (tap/type/scroll/done), reasoning (why the agent did it), result, and duration. No screen trees — use get-step for that.
+
+  Works for running goals too — returns all steps completed so far, updating in real-time.
+
+  Supports pagination with ?from=N&to=N (1-based step numbers). Examples:
+  - ?from=5&to=10 → steps 5 through 10
+  - ?from=15 → steps 15 onwards
+  - ?to=3 → first 3 steps only
+
+  Response includes totalSteps count so you know how many steps exist.
 }

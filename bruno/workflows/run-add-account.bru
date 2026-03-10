@@ -44,4 +44,10 @@ body:json {
 
 docs {
   Run just the add_account step — navigates to the Instagram login screen. Use to test caching or as a prerequisite before login/totp.
+
+  Returns a runId immediately (fire-and-forget). To monitor progress:
+  1. Poll get_run with the runId every 5-10 seconds
+  2. Check goals[0].status — "running" means in progress, "completed" means done
+  3. While running, goals[0].latestStep shows the last action taken
+  4. Use get_goal_steps to see all steps so far
 }

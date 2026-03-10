@@ -45,7 +45,7 @@ body:json {
       },
       {
         "id": "login",
-        "goal": "First: if the foreground app is a system popup (e.g., com.android.credentialmanager, Google Password Manager, Samsung Autofill), use dismiss_popup to close it — pass the visible dismiss/cancel button text as the query (e.g., 'Cancel', 'Not now', 'None of the above'). ALWAYS use dismiss_popup for popups — never use back directly. Then: tap the 'Username, email or mobile number' input field to focus it, then use clear to remove any pre-filled text, then type '{{username}}'. Tap the 'Password' input field to focus it, then type '{{password}}'. Tap 'Log in'. After tapping Log in, wait for the response. If you see 'Waiting for approval', tap 'Try another way', then select 'Authentication app', then tap 'Continue'. STOP immediately and call done as soon as you see the security code input screen — do NOT type any code into it.",
+        "goal": "Tap the 'Username, email or mobile number' input field to focus it, then use clear to remove any pre-filled text, then type '{{username}}'. Tap the 'Password' input field to focus it, then type '{{password}}'. Tap 'Log in'. After tapping Log in, wait for the response. If you see 'Waiting for approval', tap 'Try another way', then select 'Authentication app', then tap 'Continue'. STOP immediately and call done as soon as you see the security code input screen — do NOT type any code into it.",
         "maxSteps": 22,
         "eval": {
           "states": {
@@ -78,4 +78,11 @@ body:json {
 
 docs {
   Run the full Instagram login flow: add_account → login → TOTP 2FA. The totp step has 4 retries since TOTP codes expire quickly.
+
+  Returns a runId immediately (fire-and-forget). To monitor progress:
+  1. Poll get_run with the runId every 5-10 seconds
+  2. goals array shows completed, running, and pending goals
+  3. While a goal is running, latestStep shows the last action taken
+  4. Use get_goal_steps with ?from=N&to=N to see specific steps
+  5. Use the live screen endpoint to see what's on device right now
 }

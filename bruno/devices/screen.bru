@@ -1,0 +1,19 @@
+meta {
+  name: Live Screen
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/v2/devices/{{deviceId}}/screen
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{apiKey}}
+}
+
+docs {
+  Get the current live screen from the device. Returns package, activity, elementCount, textElements (compact list of visible text), and full elements array. Use this to see what's on screen right now — especially useful during a running workflow to understand what the agent sees.
+}

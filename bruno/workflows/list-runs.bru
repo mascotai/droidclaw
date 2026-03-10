@@ -22,4 +22,6 @@ auth:bearer {
 
 docs {
   List workflow runs for a device. Use status=running to see what's active. Supports limit, offset, and status filtering.
+
+  Each run shows: runId, name, status, currentStep/totalSteps, timing. Use get_run with a specific runId to see goal-level details.
 }
