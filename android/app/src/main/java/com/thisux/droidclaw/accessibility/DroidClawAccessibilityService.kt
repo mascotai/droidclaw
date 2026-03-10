@@ -268,12 +268,11 @@ class DroidClawAccessibilityService : AccessibilityService() {
                 root.recycle()
             }
 
-            // Fallback: no dismiss button found — press BACK
-            Log.w(TAG, "No dismiss button found in $targetPackage — falling back to BACK")
-            performGlobalAction(GLOBAL_ACTION_BACK)
+            // No dismiss button found — log only, do NOT press BACK
+            // (BACK can close the underlying app's screen instead of just the popup)
+            Log.w(TAG, "No dismiss button found in $targetPackage — ignoring popup")
         } catch (e: Exception) {
             Log.e(TAG, "dismissOverlayPopup failed: ${e.message}")
-            performGlobalAction(GLOBAL_ACTION_BACK)
         }
     }
 
