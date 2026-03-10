@@ -65,7 +65,7 @@ jobs:
               "services": "${{ github.ref == 'refs/heads/main' && 'droidclaw' || 'droidclaw-dev' }}",
               "compose_file": "${{ github.ref == 'refs/heads/main' && 'docker-compose.yml' || 'docker-compose.dev.yml' }}",
               "project": "${{ github.ref == 'refs/heads/main' && 'mascotai-stack' || 'mascotai-dev' }}",
-              "infisical_env": "${{ github.ref == 'refs/heads/main' && '' || 'dev' }}",
+              "infisical_env": "${{ github.ref != 'refs/heads/main' && 'dev' || '' }}",
               "triggered_by": "${{ github.repository }}",
               "commit_sha": "${{ github.sha }}"
             }
