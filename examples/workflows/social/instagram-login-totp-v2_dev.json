@@ -19,28 +19,9 @@
             "description": "The Instagram login screen is visible with username and password input fields and a Log in button",
             "expected": true
           },
-          "google_password_popup": {
-            "type": "boolean",
-            "description": "A Google Password Manager or Credential Manager popup is visible on top of the login screen"
-          },
           "accounts_count": {
             "type": "number",
             "description": "The number of Instagram accounts currently signed in, as seen in the account switcher or account picker screen"
-          }
-        }
-      }
-    },
-    {
-      "id": "dismiss_popup",
-      "when": { "add_account.google_password_popup": true },
-      "goal": "A Google Password Manager or Credential Manager popup is visible. Press back to dismiss it and return to the Instagram login screen.",
-      "maxSteps": 3,
-      "eval": {
-        "states": {
-          "on_login_screen": {
-            "type": "boolean",
-            "description": "The Instagram login screen is visible with username and password input fields",
-            "expected": true
           }
         }
       }

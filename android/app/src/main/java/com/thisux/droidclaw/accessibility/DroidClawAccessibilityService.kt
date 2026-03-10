@@ -175,81 +175,23 @@ class DroidClawAccessibilityService : AccessibilityService() {
     }
 
     /**
-     * Dismiss an overlay. Tries multiple strategies:
-     * 1. Walk the accessibility tree for dismiss/close buttons and click them
-     * 2. Fall back to GLOBAL_ACTION_BACK
+     * Dismiss an overlay by force-stopping its package.
+     * This is more reliable than trying to find dismiss buttons or pressing BACK,
+     * which can have side effects (e.g. navigating the underlying app or opening
+     * the notification shade).
+     *
+     * `am force-stop` works without root on Esper-managed devices and cleanly
+     * removes the overlay activity from the window stack.
      */
     private fun dismissOverlay(pkgName: String?) {
-        // Strategy 1: Try to find and click a dismiss button in the overlay window
-        if (tryClickDismissButton()) {
-            Log.i(TAG, "Dismissed overlay via button click")
-            return
-        }
-
-        // Strategy 2: Press Back
-        Log.i(TAG, "Dismissing overlay via BACK action")
-        performGlobalAction(GLOBAL_ACTION_BACK)
-    }
-
-    /**
-     * Search all windows for common dismiss/close buttons and click the first one found.
-     * Looks for buttons with text like "Not now", "Close", "Dismiss", "✕", etc.
-     */
-    private fun tryClickDismissButton(): Boolean {
+        if (pkgName == null) return
         try {
-            val allWindows = windows ?: return false
-            for (window in allWindows) {
-                // Only check overlay/popup windows, not the main app window
-                if (window.type == AccessibilityWindowInfo.TYPE_APPLICATION) continue
-                if (window.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD) continue
-                val root = window.root ?: continue
-                try {
-                    val dismissTexts = listOf("not now", "close", "dismiss", "cancel", "no thanks", "✕", "×")
-                    val button = findButtonByText(root, dismissTexts)
-                    if (button != null) {
-                        try {
-                            button.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                            Log.i(TAG, "Clicked dismiss button: '${button.text}'")
-                            return true
-                        } finally {
-                            button.recycle()
-                        }
-                    }
-                } finally {
-                    root.recycle()
-                }
-            }
+            Runtime.getRuntime().exec(arrayOf("am", "force-stop", pkgName))
+            Log.i(TAG, "Force-stopped overlay package: $pkgName")
         } catch (e: Exception) {
-            Log.w(TAG, "tryClickDismissButton failed: ${e.message}")
+            Log.w(TAG, "force-stop failed for $pkgName, falling back to BACK: ${e.message}")
+            performGlobalAction(GLOBAL_ACTION_BACK)
         }
-        return false
-    }
-
-    /**
-     * Recursively search for a clickable node whose text matches one of the dismiss labels.
-     */
-    private fun findButtonByText(node: AccessibilityNodeInfo, labels: List<String>): AccessibilityNodeInfo? {
-        val nodeText = node.text?.toString()?.lowercase()
-        val nodeDesc = node.contentDescription?.toString()?.lowercase()
-        for (label in labels) {
-            if ((nodeText != null && nodeText.contains(label)) ||
-                (nodeDesc != null && nodeDesc.contains(label))) {
-                if (node.isClickable) return node
-                // Try clicking the parent if this node itself isn't clickable
-                val parent = node.parent
-                if (parent != null && parent.isClickable) {
-                    node.recycle()
-                    return parent
-                }
-                parent?.recycle()
-            }
-        }
-        for (i in 0 until node.childCount) {
-            val child = node.getChild(i) ?: continue
-            val found = findButtonByText(child, labels)
-            if (found != null) return found
-        }
-        return null
     }
 
     /**
