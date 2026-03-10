@@ -29,6 +29,11 @@ export const DEVICE_GOAL_STOP = 'device-goal-stop';
 export const DEVICE_GOAL_COMPLETE = 'device-goal-complete';
 export const DEVICE_SESSION_EXPAND = 'device-session-expand';
 export const DEVICE_WORKFLOW_EXPAND = 'device-workflow-expand';
+export const DEVICE_WORKFLOW_SUBMIT = 'device-workflow-submit';
+export const DEVICE_WORKFLOW_STOP = 'device-workflow-stop';
+export const DEVICE_CACHED_FLOW_RUN = 'device-cached-flow-run';
+export const DEVICE_CACHED_FLOW_DELETE = 'device-cached-flow-delete';
+export const DEVICE_CACHED_FLOW_COMPILED = 'device-cached-flow-compiled';
 
 // ─── API Keys ────────────────────────────────────────
 export const APIKEY_CREATE = 'apikey-create';
