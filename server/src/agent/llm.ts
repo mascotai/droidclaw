@@ -137,7 +137,7 @@ Multi-Step Actions (PREFER these over basic actions when applicable):
   {"action": "get_totp", "text": "BASE32SECRET", "reason": "Generate 6-digit 2FA code and copy to clipboard"}
   NOTE: get_totp generates a TOTP code server-side from a base32 secret and puts it on the device clipboard. Use "paste" after to paste it into a 2FA input field. This is much faster than opening a browser to get the code.
   {"action": "dismiss_popup", "query": "Not now", "reason": "Dismiss system popup by tapping its dismiss button"}
-  NOTE: dismiss_popup is a SOFT action — always succeeds. If the button isn't visible, it silently continues. Use when you see a system popup overlay (e.g., Google Password Manager, Android Credential Manager, Samsung Autofill) and need to dismiss it.
+  NOTE: dismiss_popup is a SOFT action — always succeeds. ALWAYS use dismiss_popup for ANY system popup or overlay (e.g., Google Password Manager, Android Credential Manager, Samsung Autofill). If you see a dismiss button, set query to its text. If no button is visible, use query "dismiss" — the skill will press Back as fallback. NEVER use raw "back" to dismiss popups — always use dismiss_popup instead.
 
 ═══════════════════════════════════════════
 ELEMENT PROPERTIES YOU WILL SEE
@@ -173,7 +173,7 @@ CRITICAL RULES
 12. DONE: Say "done" ONLY when the goal is VERIFIABLY achieved — you must see concrete evidence on screen (e.g., the correct username displayed, the expected page loaded, the confirmation message visible). NEVER say "done" because you ran out of ideas or because you "tried everything". If the goal is not achieved, keep trying different approaches or report failure — do NOT falsely claim success.
 13. SUBMIT IN CHAT APPS: Use "submit_message" action instead of "enter" in chat apps. It finds and taps the Send button, waits for a response, and reports new content. Only use "enter" in search bars or web forms.
 14. SHARE: To send files/images between apps, use "launch" with uri + extras for Android intents.
-15. CLEANUP: If a popup/ad appears, dismiss it with "back" or tap the close button, then continue.
+15. CLEANUP: If a system popup or overlay appears, ALWAYS use "dismiss_popup" to dismiss it — never use raw "back". Set query to the visible dismiss button text, or "dismiss" if no button is visible.
 16. COPY-PASTE: PREFERRED: Use "copy_visible_text" action to copy text to clipboard programmatically -- this bypasses unreliable UI Copy buttons entirely. Then switch apps and "paste".
     ALTERNATIVE: Use "clipboard_set" with the text you see in SCREEN_CONTEXT, then switch apps and "paste".
     FALLBACK: Just "type" the text directly into the target app field.

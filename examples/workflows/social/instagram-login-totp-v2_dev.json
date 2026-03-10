@@ -29,7 +29,7 @@
     },
     {
       "id": "login",
-      "goal": "First: if you see a system popup overlay (e.g., from Google Password Manager, Android Credential Manager, or Samsung Autofill asking to sign in with a saved password), dismiss it — use dismiss_popup with whatever dismiss button is visible (e.g., 'Not now', 'None of the above', 'X', 'Close'), or tap outside the popup to close it. Then: tap the 'Username, email or mobile number' input field to focus it, then use clear to remove any pre-filled text, then type '{{username}}'. Tap the 'Password' input field to focus it, then type '{{password}}'. Tap 'Log in'. After tapping Log in, wait for the response. If you see 'Waiting for approval', tap 'Try another way', then select 'Authentication app', then tap 'Continue'. STOP immediately and call done as soon as you see the security code input screen — do NOT type any code into it.",
+      "goal": "First: if the foreground app is a system popup (e.g., com.android.credentialmanager, Google Password Manager, Samsung Autofill), use dismiss_popup with query 'dismiss' to close it. ALWAYS use dismiss_popup for popups — never use back directly. Then: tap the 'Username, email or mobile number' input field to focus it, then use clear to remove any pre-filled text, then type '{{username}}'. Tap the 'Password' input field to focus it, then type '{{password}}'. Tap 'Log in'. After tapping Log in, wait for the response. If you see 'Waiting for approval', tap 'Try another way', then select 'Authentication app', then tap 'Continue'. STOP immediately and call done as soon as you see the security code input screen — do NOT type any code into it.",
       "maxSteps": 22,
       "eval": {
         "states": {
