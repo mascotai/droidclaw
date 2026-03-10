@@ -700,15 +700,6 @@ export async function runAgentLoop(
           const resultSuccess = result.success !== false;
           lastActionFeedback = `${actionSig} -> ${resultSuccess ? "OK" : "FAILED"}: ${result.error ?? result.data ?? "completed"}`;
 
-          // ── 9c. Dismiss keyboard after type ──
-          // After typing text, press Back to dismiss the keyboard so subsequent
-          // taps hit the actual UI elements (buttons etc.) instead of the keyboard
-          if (action.action === "type" && resultSuccess) {
-            console.log(`[Agent ${sessionId}] Dismissing keyboard after type`);
-            await sessions.sendCommand(deviceId, { type: "back" });
-            await new Promise(r => setTimeout(r, 300));
-          }
-
           structuredResult = buildStepResult(
             actionSig,
             resultSuccess,

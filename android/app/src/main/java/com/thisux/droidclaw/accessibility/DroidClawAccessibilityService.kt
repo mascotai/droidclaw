@@ -42,30 +42,6 @@ class DroidClawAccessibilityService : AccessibilityService() {
         Log.i(TAG, "Accessibility service connected")
         instance = this
         isRunning.value = true
-        disableAutofill()
-    }
-
-    /**
-     * Disable system autofill and credential services to prevent popups
-     * (Google Password Manager, Samsung Autofill, etc.) from appearing
-     * when text fields are focused.
-     *
-     * These `settings put` commands work without special permissions.
-     */
-    private fun disableAutofill() {
-        val settings = mapOf(
-            "autofill_service" to "",
-            "credential_service" to "",
-            "credential_service_primary" to "",
-        )
-        for ((key, value) in settings) {
-            try {
-                Runtime.getRuntime().exec(arrayOf("settings", "put", "secure", key, value))
-                Log.i(TAG, "Disabled $key")
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to disable $key: ${e.message}")
-            }
-        }
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
@@ -199,10 +175,6 @@ class DroidClawAccessibilityService : AccessibilityService() {
         try {
             val allWindows = windows ?: return emptyList()
             for (window in allWindows) {
-                // Capture application windows and system windows (nav bars)
-                // Skip input method windows (keyboard) to reduce noise
-                if (window.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD) continue
-
                 val root = window.root ?: continue
                 try {
                     val windowElements = ScreenTreeBuilder.capture(root)
@@ -228,7 +200,6 @@ class DroidClawAccessibilityService : AccessibilityService() {
                 val focused = mutableListOf<AccessibilityWindowInfo>()
                 val background = mutableListOf<AccessibilityWindowInfo>()
                 for (window in allWindows) {
-                    if (window.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD) continue
                     if (window.isFocused || window.isActive) {
                         focused.add(window)
                     } else {
