@@ -385,6 +385,13 @@ export const listCachedFlows = query(v.string(), async (deviceId) => {
 	}));
 });
 
+export const getWorkflowRun = query(
+	v.object({ deviceId: v.string(), runId: v.string() }),
+	async ({ deviceId, runId }) => {
+		return serverGet(`/workflows/runs/${deviceId}/${runId}?expand=steps`);
+	}
+);
+
 export const deleteCachedFlow = command(
 	v.object({ flowId: v.string() }),
 	async ({ flowId }) => {

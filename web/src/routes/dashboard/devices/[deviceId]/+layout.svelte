@@ -8,6 +8,7 @@
 		getDeviceStats,
 		listWorkflowRuns,
 		listCachedFlows,
+		getWorkflowRun,
 		deleteCachedFlow as deleteCachedFlowCmd,
 		submitWorkflow,
 		stopWorkflow,
@@ -106,6 +107,68 @@
 	let liveCharging = $state(false);
 	const battery = $derived(liveBattery ?? (deviceData?.batteryLevel as number | null));
 	const charging = $derived(liveCharging || (deviceData?.isCharging as boolean));
+
+	// ─── Selected run state (Home tab detail panel) ─────────────
+	let selectedRunId = $state<string | null>(null);
+	let selectedRunDetail = $state<WorkflowRun | null>(null);
+	let selectedRunLoading = $state(false);
+
+	async function selectRun(runId: string | null) {
+		if (runId === selectedRunId) return;
+		selectedRunId = runId;
+		selectedRunDetail = null;
+
+		if (!runId) return;
+
+		// If this is the live run, no need to fetch — it's already in liveWorkflowRun
+		if (liveWorkflowRun && liveWorkflowRun.runId === runId) return;
+
+		// Fetch full run detail with expanded agent steps
+		selectedRunLoading = true;
+		try {
+			const result = await getWorkflowRun({ deviceId, runId });
+			// Only apply if still selected (user may have changed selection)
+			if (selectedRunId === runId) {
+				selectedRunDetail = result as WorkflowRun;
+			}
+		} catch (err) {
+			console.error('[selectRun] Failed to load run detail:', err);
+		} finally {
+			if (selectedRunId === runId) {
+				selectedRunLoading = false;
+			}
+		}
+	}
+
+	// ─── SessionStorage persistence for live workflow run ────────
+	const LIVE_RUN_KEY = `droidclaw:liveRun:${deviceId}`;
+
+	function saveLiveRun(run: LiveWorkflowRun | null) {
+		try {
+			if (run) {
+				sessionStorage.setItem(LIVE_RUN_KEY, JSON.stringify(run));
+			} else {
+				sessionStorage.removeItem(LIVE_RUN_KEY);
+			}
+		} catch {
+			// sessionStorage might be unavailable
+		}
+	}
+
+	function restoreLiveRun(): LiveWorkflowRun | null {
+		try {
+			const saved = sessionStorage.getItem(LIVE_RUN_KEY);
+			if (!saved) return null;
+			return JSON.parse(saved) as LiveWorkflowRun;
+		} catch {
+			return null;
+		}
+	}
+
+	// Persist liveWorkflowRun on every change
+	$effect(() => {
+		saveLiveRun(liveWorkflowRun);
+	});
 
 	// ─── Data operations ────────────────────────────────────────
 
@@ -221,6 +284,14 @@
 	// ─── WebSocket events + data loading ────────────────────────
 
 	onMount(() => {
+		// Restore live run from sessionStorage on page load
+		const restored = restoreLiveRun();
+		if (restored && restored.status === 'running') {
+			liveWorkflowRun = restored;
+			// Auto-select the restored live run
+			selectedRunId = restored.runId;
+		}
+
 		// Load initial data (inside onMount to avoid SSR issues and effect loops)
 		getDevice(deviceId).then((r) => { deviceData = r as DeviceData | null; }).catch(() => {});
 		getDeviceStats(deviceId).then((s) => { stats = s as typeof stats; }).catch(() => {});
@@ -229,6 +300,24 @@
 			workflowsTotalPages = Math.ceil(wf.total / 20) || 1;
 			workflowsLoaded = true;
 			workflowPageCache.set(initialPage, { items: workflowRuns, total: wf.total });
+
+			// If we restored a live run, check if the server still shows it as running
+			if (liveWorkflowRun && liveWorkflowRun.status === 'running') {
+				const serverRun = workflowRuns.find((r) => r.id === liveWorkflowRun!.runId);
+				if (serverRun && serverRun.status !== 'running') {
+					// Server says it's done — update local state
+					liveWorkflowRun = {
+						...liveWorkflowRun!,
+						status: serverRun.status === 'completed' ? 'completed' : serverRun.status === 'stopped' ? 'stopped' : 'failed',
+						activeStepIndex: -1,
+					};
+				}
+			}
+
+			// If no run is selected yet but we have runs, auto-select the most recent
+			if (!selectedRunId && workflowRuns.length > 0 && !liveWorkflowRun) {
+				selectRun(workflowRuns[0].id);
+			}
 		}).catch(() => { workflowsLoaded = true; });
 		loadCachedFlows().catch(() => {});
 
@@ -285,6 +374,9 @@
 						totalAttempts: 1,
 						liveSteps: [],
 					};
+					// Auto-select the new live run
+					selectedRunId = msg.runId as string;
+					selectedRunDetail = null;
 					break;
 				}
 				case 'workflow_step_start': {
@@ -387,6 +479,8 @@
 							status: wfSuccess ? 'completed' : 'failed',
 							activeStepIndex: -1,
 						};
+						// Clear sessionStorage for completed runs
+						saveLiveRun(null);
 					}
 					// Clear card-lift state and refresh cached flows (stats may have changed)
 					if (runningCachedFlowId) {
@@ -405,6 +499,8 @@
 					if (workflowsLoaded) loadWorkflowRuns(undefined, true);
 					if (liveWorkflowRun && liveWorkflowRun.runId === stoppedRunId) {
 						liveWorkflowRun = { ...liveWorkflowRun, status: 'stopped', activeStepIndex: -1 };
+						// Clear sessionStorage for stopped runs
+						saveLiveRun(null);
 					}
 					if (runningCachedFlowId) {
 						runningCachedFlowId = null;
@@ -446,6 +542,9 @@
 		get workflowsLoaded() { return workflowsLoaded; },
 		get workflowsPage() { return workflowsPage; },
 		get workflowsTotalPages() { return workflowsTotalPages; },
+		get selectedRunId() { return selectedRunId; },
+		get selectedRunDetail() { return selectedRunDetail; },
+		get selectedRunLoading() { return selectedRunLoading; },
 		handleWorkflowSubmit,
 		handleWorkflowStop,
 		handleCachedFlowRun,
@@ -453,6 +552,7 @@
 		handleQueueCancel,
 		handleLogPageChange,
 		loadSessionSteps,
+		selectRun,
 	});
 </script>
 

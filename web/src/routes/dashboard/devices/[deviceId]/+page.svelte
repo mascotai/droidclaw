@@ -1,8 +1,9 @@
 <script lang="ts">
 	import Icon from '@iconify/svelte';
 	import WorkflowBuilder from '$lib/components/device/WorkflowBuilder.svelte';
-	import ExecutionPipeline from '$lib/components/device/ExecutionPipeline.svelte';
 	import ActiveWorkflows from '$lib/components/device/ActiveWorkflows.svelte';
+	import RunsList from '$lib/components/device/RunsList.svelte';
+	import RunDetail from '$lib/components/device/RunDetail.svelte';
 	import { getDeviceContext } from '$lib/components/device/context';
 
 	const ctx = getDeviceContext();
@@ -17,38 +18,71 @@
 	function handleKeydown(e: KeyboardEvent) {
 		if (e.key === 'Escape') showBuilder = false;
 	}
+
+	// Determine if the selected run is the live run
+	const isLiveSelected = $derived(
+		ctx.liveWorkflowRun && ctx.selectedRunId === ctx.liveWorkflowRun.runId
+	);
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
 
-<div class="space-y-6">
-	<!-- Run a task button -->
-	<button
-		onclick={() => (showBuilder = true)}
-		disabled={ctx.liveWorkflowRun?.status === 'running'}
-		class="inline-flex items-center gap-2 rounded-xl bg-stone-900 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-stone-800 disabled:opacity-40"
-	>
-		<Icon icon="solar:play-bold" class="h-3.5 w-3.5" />
-		Run a task
-	</button>
+<div class="flex flex-col gap-6 lg:flex-row">
+	<!-- ═══════════ Left sidebar ═══════════ -->
+	<div class="w-full shrink-0 space-y-6 lg:w-72 xl:w-80">
+		<!-- Run a task button -->
+		<button
+			onclick={() => (showBuilder = true)}
+			disabled={ctx.liveWorkflowRun?.status === 'running'}
+			class="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-stone-900 px-4 py-2.5 text-xs font-medium text-white transition-colors hover:bg-stone-800 disabled:opacity-40"
+		>
+			<Icon icon="solar:play-bold" class="h-3.5 w-3.5" />
+			Run a task
+		</button>
 
-	<!-- Execution Pipeline (only visible when something is running/queued) -->
-	<ExecutionPipeline
-		liveRun={ctx.liveWorkflowRun}
-		queued={ctx.queuedItems}
-		onstop={ctx.handleWorkflowStop}
-		oncancel={ctx.handleQueueCancel}
-		runningCachedFlow={ctx.runningCachedFlow}
-	/>
+		<!-- Recent runs sidebar -->
+		<RunsList
+			runs={ctx.workflowRuns}
+			liveRun={ctx.liveWorkflowRun}
+			selectedRunId={ctx.selectedRunId}
+			onselect={(runId) => ctx.selectRun(runId)}
+		/>
 
-	<!-- Active Workflows (cached flows) -->
-	<ActiveWorkflows
-		flows={ctx.cachedFlows}
-		loading={!ctx.cachedFlowsLoaded}
-		runningFlowId={ctx.runningCachedFlowId}
-		onrun={ctx.handleCachedFlowRun}
-		ondelete={ctx.handleCachedFlowDelete}
-	/>
+		<!-- Active Workflows (cached flows) -->
+		<ActiveWorkflows
+			flows={ctx.cachedFlows}
+			loading={!ctx.cachedFlowsLoaded}
+			runningFlowId={ctx.runningCachedFlowId}
+			onrun={ctx.handleCachedFlowRun}
+			ondelete={ctx.handleCachedFlowDelete}
+		/>
+	</div>
+
+	<!-- ═══════════ Center detail panel ═══════════ -->
+	<div class="min-w-0 flex-1">
+		{#if ctx.selectedRunId}
+			<RunDetail
+				run={isLiveSelected ? null : ctx.selectedRunDetail}
+				liveRun={isLiveSelected ? ctx.liveWorkflowRun : null}
+				loading={ctx.selectedRunLoading}
+				onstop={ctx.handleWorkflowStop}
+				cachedFlowMeta={isLiveSelected && ctx.runningCachedFlow
+					? {
+							goalKey: ctx.runningCachedFlow.goalKey,
+							stepCount: ctx.runningCachedFlow.stepCount,
+							successCount: ctx.runningCachedFlow.successCount ?? 0
+						}
+					: null}
+			/>
+		{:else}
+			<!-- Empty state -->
+			<div class="flex flex-col items-center justify-center rounded-2xl border border-dashed border-stone-200 py-16">
+				<Icon icon="solar:inbox-bold-duotone" class="mb-3 h-10 w-10 text-stone-300" />
+				<p class="text-sm text-stone-400">Select a run or start a new task</p>
+				<p class="mt-1 text-xs text-stone-300">Runs will appear in the sidebar</p>
+			</div>
+		{/if}
+	</div>
 </div>
 
 <!-- Workflow Builder Modal -->

@@ -29,6 +29,16 @@ export interface WorkflowStepConfig {
 	eval?: Record<string, unknown>;
 }
 
+export interface AgentStepDetail {
+	id: string;
+	stepNumber: number;
+	action: unknown;
+	reasoning: string | null;
+	result: string | null;
+	packageName?: string;
+	durationMs?: number;
+}
+
 export interface StepResult {
 	goal?: string;
 	command?: string;
@@ -44,6 +54,7 @@ export interface StepResult {
 		packageName?: string;
 		activityName?: string;
 	}>;
+	agentSteps?: AgentStepDetail[];
 }
 
 export interface WorkflowRun {

@@ -46,6 +46,11 @@ export interface DevicePageContext {
 	readonly workflowsPage: number;
 	readonly workflowsTotalPages: number;
 
+	// ─── Selected run (Home tab detail panel) ───────────
+	readonly selectedRunId: string | null;
+	readonly selectedRunDetail: WorkflowRun | null;
+	readonly selectedRunLoading: boolean;
+
 	// ─── Actions ────────────────────────────────────────
 	handleWorkflowSubmit: (steps: WorkflowStepConfig[], variables: Record<string, string>) => Promise<void>;
 	handleWorkflowStop: () => Promise<void>;
@@ -54,6 +59,7 @@ export interface DevicePageContext {
 	handleQueueCancel: (runId: string) => void;
 	handleLogPageChange: (page: number) => void;
 	loadSessionSteps: (sessionId: string) => Promise<Step[]>;
+	selectRun: (runId: string | null) => void;
 }
 
 export function setDeviceContext(ctx: DevicePageContext) {
