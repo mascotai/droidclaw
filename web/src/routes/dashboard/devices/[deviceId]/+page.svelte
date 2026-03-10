@@ -16,6 +16,7 @@
 	} from '$lib/api/devices.remote';
 	import { dashboardWs } from '$lib/stores/dashboard-ws.svelte';
 	import { onMount } from 'svelte';
+	import { slide } from 'svelte/transition';
 	import Icon from '@iconify/svelte';
 	import { track } from '$lib/analytics/track';
 	import { renderAsciiScreen } from '$lib/utils/ascii-screen';
@@ -475,6 +476,9 @@
 	let liveBattery = $state<number | null>(null);
 	let liveCharging = $state(false);
 
+	// Auto-refresh relative timestamps every 60s
+	let _timestampTick = $state(0);
+
 	async function toggleSession(sessionId: string) {
 		if (expandedSession === sessionId) {
 			expandedSession = null;
@@ -519,6 +523,9 @@
 	}
 
 	onMount(() => {
+		// Auto-refresh relative timestamps every 60s
+		const timestampInterval = setInterval(() => { _timestampTick++; }, 60_000);
+
 		const unsub = dashboardWs.subscribe((msg) => {
 			switch (msg.type) {
 				case 'device_status': {
@@ -754,7 +761,10 @@
 				}
 			}
 		});
-		return unsub;
+		return () => {
+			unsub();
+			clearInterval(timestampInterval);
+		};
 	});
 
 	function formatTime(d: string | Date) {
@@ -762,6 +772,7 @@
 	}
 
 	function relativeTime(iso: string) {
+		void _timestampTick; // Reference tick to trigger reactivity
 		const diff = Date.now() - new Date(iso).getTime();
 		const mins = Math.floor(diff / 60000);
 		if (mins < 1) return 'just now';
@@ -1022,9 +1033,10 @@
 	{#if sessions.length === 0}
 		<div class="rounded-2xl bg-white p-10 text-center">
 			<div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-stone-100">
-				<Icon icon="solar:history-bold-duotone" class="h-6 w-6 text-stone-400" />
+				<Icon icon="solar:play-circle-bold-duotone" class="h-6 w-6 text-stone-400" />
 			</div>
-			<p class="text-sm text-stone-500">No goals yet. Go to the Run tab to send a goal.</p>
+			<p class="font-medium text-stone-600">No goals yet</p>
+			<p class="mt-1 text-sm text-stone-400">Run a workflow to see step-by-step agent actions here.</p>
 		</div>
 	{:else}
 		<p class="mb-3 text-sm font-medium text-stone-500">Goal history</p>
@@ -1072,7 +1084,7 @@
 						</span>
 					</button>
 					{#if expandedSession === sess.id}
-						<div class="border-t border-stone-100 bg-stone-50 px-4 md:px-6 py-4
+						<div transition:slide={{ duration: 200 }} class="border-t border-stone-100 bg-stone-50 px-4 md:px-6 py-4
 							{i === sessions.length - 1 ? 'rounded-b-2xl' : ''}">
 							{#if sess.status === 'scheduled'}
 								<div class="flex items-center gap-3 py-2">
@@ -1241,20 +1253,23 @@
 	{:else if workflowRuns.length === 0}
 		<div class="rounded-2xl bg-white p-10 text-center">
 			<div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-stone-100">
-				<Icon icon="solar:layers-bold-duotone" class="h-6 w-6 text-stone-400" />
+				<Icon icon="solar:play-circle-bold-duotone" class="h-6 w-6 text-stone-400" />
 			</div>
-			<p class="text-sm text-stone-500">No workflow runs yet. Trigger a workflow via the API.</p>
+			<p class="font-medium text-stone-600">No workflow runs yet</p>
+			<p class="mt-1 text-sm text-stone-400">Trigger a workflow via the API to see results here.</p>
 		</div>
 	{:else}
 		<p class="mb-3 text-sm font-medium text-stone-500">Workflow runs</p>
 		<div class="space-y-3">
 			{#each workflowRuns as run (run.id)}
 				{@const liveProgress = workflowLiveProgress[run.id]}
-				<div class="rounded-2xl bg-white">
+				<div class="rounded-2xl bg-white border-l-[3px] {run.status === 'completed' ? 'border-l-emerald-400' : run.status === 'failed' ? 'border-l-red-400' : run.status === 'running' ? 'border-l-amber-400' : 'border-l-stone-200'}
+					{expandedWorkflow === run.id ? 'ring-1 ring-stone-200' : ''}"
+				>
 					<!-- Workflow header -->
 					<button
 						onclick={() => toggleWorkflow(run.id)}
-						class="flex w-full items-center justify-between rounded-2xl px-4 md:px-6 py-4 text-left transition-colors hover:bg-stone-50"
+						class="group flex w-full items-center justify-between rounded-2xl px-4 md:px-6 py-4 text-left transition-colors hover:bg-stone-50"
 					>
 						<div class="min-w-0 flex-1">
 							<div class="flex items-center gap-2">
@@ -1309,16 +1324,19 @@
 									: run.status === 'stopped' ? 'Stopped'
 									: 'Failed'}
 							</span>
-							<Icon
-								icon={expandedWorkflow === run.id ? 'solar:alt-arrow-up-linear' : 'solar:alt-arrow-down-linear'}
-								class="h-4 w-4 text-stone-400"
-							/>
+							<span class="flex items-center gap-1 text-xs text-stone-400 transition-colors group-hover:text-violet-500">
+								<Icon
+									icon={expandedWorkflow === run.id ? 'solar:alt-arrow-up-linear' : 'solar:alt-arrow-down-linear'}
+									class="h-4 w-4"
+								/>
+								{run.totalSteps} goal{run.totalSteps !== 1 ? 's' : ''}
+							</span>
 						</div>
 					</button>
 
 					<!-- Expanded goal results -->
 					{#if expandedWorkflow === run.id}
-						<div class="border-t border-stone-100 px-4 md:px-6 py-4">
+						<div transition:slide={{ duration: 200 }} class="border-t border-stone-100 px-4 md:px-6 py-4">
 							<div class="space-y-2">
 								{#each Array.from({ length: run.totalSteps }, (_, i) => i) as stepIdx}
 									<button
@@ -1755,7 +1773,7 @@
 			{#if runStatus === 'running'}
 				<button
 					onclick={stopGoal}
-					class="flex w-full sm:w-auto items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-500"
+					class="flex w-full sm:w-auto items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition-transform hover:bg-red-500 active:scale-[0.98]"
 				>
 					<Icon icon="solar:stop-bold" class="h-4 w-4" />
 					Stop
@@ -1764,7 +1782,7 @@
 				<button
 					onclick={submitGoal}
 					disabled={liveWorkflowRun?.status === 'running'}
-					class="flex w-full sm:w-auto items-center justify-center gap-2 rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-800 disabled:opacity-40"
+					class="flex w-full sm:w-auto items-center justify-center gap-2 rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white transition-transform hover:bg-stone-800 disabled:opacity-40 active:scale-[0.98]"
 				>
 					<Icon icon="solar:play-bold" class="h-4 w-4" />
 					Run

@@ -97,7 +97,7 @@
 						{/if}
 					</div>
 					<div class="flex-1">
-						<h3 class="text-sm font-semibold {step.done ? 'text-stone-400 line-through' : 'text-stone-900'}">{step.label}</h3>
+						<h3 class="text-sm font-semibold {step.done ? 'text-stone-400' : 'text-stone-900'}">{step.label}</h3>
 						<p class="mt-0.5 text-xs text-stone-400">{step.desc}</p>
 					</div>
 					<Icon icon="solar:alt-arrow-right-linear" class="h-5 w-5 text-stone-300" />

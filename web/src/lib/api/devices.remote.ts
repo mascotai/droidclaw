@@ -244,6 +244,22 @@ async function serverFetch(path: string, body: Record<string, unknown>) {
 	return data;
 }
 
+/** Forward a GET request to the DroidClaw server with internal auth */
+async function serverGet(path: string) {
+	const { locals } = getRequestEvent();
+	if (!locals.user) throw new Error('unauthorized');
+
+	const res = await fetch(`${SERVER_URL()}${path}`, {
+		headers: {
+			'x-internal-secret': INTERNAL_SECRET(),
+			'x-internal-user-id': locals.user.id
+		}
+	});
+	const data = await res.json().catch(() => ({ error: 'Unknown error' }));
+	if (!res.ok) throw new Error(data.error ?? `Error ${res.status}`);
+	return data;
+}
+
 export const submitGoal = command(
 	v.object({ deviceId: v.string(), goal: v.string() }),
 	async ({ deviceId, goal }) => {
@@ -257,6 +273,40 @@ export const stopGoal = command(
 		return serverFetch('/goals/stop', { deviceId });
 	}
 );
+
+// ─── Workflow Commands ─────────────────────────────────────────
+
+export const submitWorkflow = command(
+	v.object({
+		deviceId: v.string(),
+		name: v.optional(v.string()),
+		type: v.optional(v.picklist(['workflow', 'flow'])),
+		steps: v.array(v.record(v.string(), v.unknown())),
+		variables: v.optional(v.record(v.string(), v.unknown())),
+		llmModel: v.optional(v.string()),
+	}),
+	async ({ deviceId, name, type, steps, variables, llmModel }) => {
+		return serverFetch('/workflows/run', {
+			deviceId,
+			...(name && { name }),
+			...(type && { type }),
+			steps,
+			...(variables && { variables }),
+			...(llmModel && { llmModel }),
+		});
+	}
+);
+
+export const stopWorkflow = command(
+	v.object({ deviceId: v.string(), runId: v.optional(v.string()) }),
+	async ({ deviceId, runId }) => {
+		return serverFetch('/workflows/stop', { deviceId, ...(runId && { runId }) });
+	}
+);
+
+export const getQueueState = query(v.string(), async (deviceId) => {
+	return serverGet(`/workflows/queue/${deviceId}`);
+});
 
 export const cancelScheduledGoal = command(
 	v.object({ sessionId: v.string() }),
@@ -334,6 +384,46 @@ export const listCachedFlows = query(v.string(), async (deviceId) => {
 		steps: undefined, // don't send full flow steps to client
 	}));
 });
+
+export const getWorkflowRun = query(
+	v.object({ deviceId: v.string(), runId: v.string() }),
+	async ({ deviceId, runId }) => {
+		const { locals } = getRequestEvent();
+		if (!locals.user) return null;
+
+		const rows = await db
+			.select()
+			.from(workflowRun)
+			.where(
+				and(
+					eq(workflowRun.id, runId),
+					eq(workflowRun.deviceId, deviceId),
+					eq(workflowRun.userId, locals.user.id)
+				)
+			)
+			.limit(1);
+
+		if (rows.length === 0) return null;
+
+		const run = rows[0];
+
+		// Expand agent steps for each step result that has a sessionId
+		const stepResults = (run.stepResults as Record<string, unknown>[] | null) ?? [];
+		const expandedResults = await Promise.all(
+			stepResults.map(async (sr) => {
+				if (!sr?.sessionId) return sr;
+				const steps = await db
+					.select()
+					.from(agentStep)
+					.where(eq(agentStep.sessionId, sr.sessionId as string))
+					.orderBy(agentStep.stepNumber);
+				return { ...sr, agentSteps: steps };
+			})
+		);
+
+		return { ...run, stepResults: expandedResults };
+	}
+);
 
 export const deleteCachedFlow = command(
 	v.object({ flowId: v.string() }),

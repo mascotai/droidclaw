@@ -2,7 +2,7 @@ name: Build & Push DroidClaw Images
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
   workflow_dispatch:
 
 permissions:
@@ -47,12 +47,11 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}
           tags: |
-            ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.service }}:latest
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.service }}:${{ github.ref == 'refs/heads/main' && 'latest' || 'dev' }}
             ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.service }}:sha-${{ github.sha }}
 
   trigger-deploy:
     needs: build
-    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - name: Trigger service deploy
@@ -63,7 +62,10 @@ jobs:
           event-type: deploy-service
           client-payload: |
             {
-              "services": "droidclaw",
+              "services": "${{ github.ref == 'refs/heads/main' && 'droidclaw' || 'droidclaw-dev' }}",
+              "compose_file": "${{ github.ref == 'refs/heads/main' && 'docker-compose.yml' || 'docker-compose.dev.yml' }}",
+              "project": "${{ github.ref == 'refs/heads/main' && 'mascotai-stack' || 'mascotai-dev' }}",
+              "infisical_env": "${{ github.ref == 'refs/heads/main' && '' || 'dev' }}",
               "triggered_by": "${{ github.repository }}",
               "commit_sha": "${{ github.sha }}"
             }

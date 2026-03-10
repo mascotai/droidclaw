@@ -62,6 +62,8 @@ class DashboardWebSocket {
 	private handlers = new Set<MessageHandler>();
 	private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 	private sessionToken: string | null = null;
+	/** True after the first successful auth — used to distinguish reconnects from initial connect */
+	private hasConnectedBefore = false;
 
 	connected = $state(false);
 
@@ -89,7 +91,15 @@ class DashboardWebSocket {
 			try {
 				const msg = JSON.parse(event.data) as Record<string, unknown>;
 				if (msg.type === 'auth_ok') {
+					const isReconnect = this.hasConnectedBefore;
 					this.connected = true;
+					this.hasConnectedBefore = true;
+					if (isReconnect) {
+						// Notify subscribers so pages can re-fetch stale data
+						for (const handler of this.handlers) {
+							handler({ type: 'reconnected' });
+						}
+					}
 					return;
 				}
 				if (msg.type === 'auth_error') {

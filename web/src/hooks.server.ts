@@ -26,16 +26,19 @@ async function proxyAuthLogin(
 		.limit(1);
 
 	let userId: string;
+	let userName: string;
 
 	if (existing.length > 0) {
 		userId = existing[0].id;
+		userName = existing[0].name ?? email.split('@')[0];
 	} else {
 		// Auto-create user from proxy-auth headers
 		userId = crypto.randomUUID();
+		userName = displayName || username || email.split('@')[0];
 		await db.insert(userTable).values({
 			id: userId,
 			email,
-			name: displayName || username || email.split('@')[0],
+			name: userName,
 			emailVerified: true,
 			createdAt: new Date(),
 			updatedAt: new Date()
@@ -65,14 +68,10 @@ async function proxyAuthLogin(
 		expires: expiresAt
 	});
 
-	// Re-fetch session so locals are populated
-	const session = await auth.api.getSession({
-		headers: event.request.headers
-	});
-	if (session) {
-		event.locals.session = session.session;
-		event.locals.user = session.user;
-	}
+	// Populate locals directly — getSession() won't work here because
+	// the cookie was just set on the response, not on the incoming request headers
+	event.locals.session = { id: sessionId, token: sessionToken, userId, expiresAt } as any;
+	event.locals.user = { id: userId, email, name: userName, emailVerified: true } as any;
 }
 
 export const handle: Handle = async ({ event, resolve }) => {
@@ -80,23 +79,37 @@ export const handle: Handle = async ({ event, resolve }) => {
 		// ── Proxy-auth auto-login (authentik forward-auth headers) ──
 		if (env.TRUST_PROXY_AUTH === 'true') {
 			const proxyEmail = event.request.headers.get('x-authentik-email');
-			if (proxyEmail && !event.cookies.get('better-auth.session_token')) {
-				const proxyUsername = event.request.headers.get('x-authentik-username');
-				const proxyName = event.request.headers.get('x-authentik-name');
-				await proxyAuthLogin(event, proxyEmail, proxyUsername, proxyName);
+			if (proxyEmail) {
+				// Try existing session first
+				const existingSession = event.cookies.get('better-auth.session_token')
+					? await auth.api.getSession({ headers: event.request.headers })
+					: null;
+
+				if (existingSession) {
+					event.locals.session = existingSession.session;
+					event.locals.user = existingSession.user;
+				} else {
+					// No valid session — clear stale cookie and create a new one
+					if (event.cookies.get('better-auth.session_token')) {
+						event.cookies.delete('better-auth.session_token', { path: '/' });
+					}
+					const proxyUsername = event.request.headers.get('x-authentik-username');
+					const proxyName = event.request.headers.get('x-authentik-name');
+					await proxyAuthLogin(event, proxyEmail, proxyUsername, proxyName);
+				}
 			}
 		}
 
-		const session = await auth.api.getSession({
-			headers: event.request.headers
-		});
+		// For non-proxy-auth requests (or if proxy auth didn't run)
+		if (!event.locals.user) {
+			const session = await auth.api.getSession({
+				headers: event.request.headers
+			});
 
-		if (session) {
-			event.locals.session = session.session;
-			event.locals.user = session.user;
-		} else if (event.url.pathname.startsWith('/api/')) {
-			console.log(`[Auth] No session for ${event.request.method} ${event.url.pathname}`);
-			console.log(`[Auth] Cookie header: ${event.request.headers.get('cookie')?.slice(0, 80) ?? 'NONE'}`);
+			if (session) {
+				event.locals.session = session.session;
+				event.locals.user = session.user;
+			}
 		}
 	} catch (err) {
 		console.error(`[Auth] getSession error for ${event.request.method} ${event.url.pathname}:`, err);

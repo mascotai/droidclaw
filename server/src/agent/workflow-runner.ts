@@ -585,6 +585,17 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
                     sourceSessionId: result.sessionId,
                   });
                   wfLog(`[Workflow ${runId}] Step ${i}: compiled and cached deterministic flow (${compiled.steps.length} steps, timeline: [${compiled.timeline.join(", ")}]ms)`);
+
+                  // Notify dashboard that a new cached flow was compiled
+                  sessions.notifyDashboard(userId, {
+                    type: "cached_flow_compiled",
+                    runId,
+                    stepIndex: i,
+                    deviceId: persistentDeviceId,
+                    goalKey,
+                    appPackage: step.app ?? null,
+                    stepCount: compiled.steps.length,
+                  } as any);
                 }
               } catch (cacheErr) {
                 // Cache save error — non-fatal, just log
