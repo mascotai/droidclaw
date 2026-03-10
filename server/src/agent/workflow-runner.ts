@@ -254,14 +254,6 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
     // Notify device so it hides the overlay / shows running state
     sendToDevice({ type: "goal_started", goal: `Workflow: ${name}` });
 
-    // Clean slate: press Home then Back to dismiss any leftover UI from previous workflows
-    try {
-      await sessions.sendCommand(deviceId, { type: "home" });
-      await new Promise((r) => setTimeout(r, 500));
-      await sessions.sendCommand(deviceId, { type: "back" });
-      await new Promise((r) => setTimeout(r, 500));
-    } catch { /* ignore */ }
-
     sessions.notifyDashboard(userId, {
       type: "workflow_started",
       runId,
@@ -337,6 +329,13 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
           continue;
         }
       }
+
+      // ── Clean slate between steps: collapse notification shade ──
+      // Cached flow replays can leave the notification shade open (e.g., a
+      // downward swipe from step 1 pulls it down). Collapse it before each step.
+      try {
+        await sessions.sendCommand(deviceId, { type: "shell", text: "cmd statusbar collapse" });
+      } catch { /* ignore — device may not support it */ }
 
       const effectiveGoal = buildGoal(step);
 
