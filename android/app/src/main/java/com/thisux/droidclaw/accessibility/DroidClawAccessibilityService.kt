@@ -42,85 +42,11 @@ class DroidClawAccessibilityService : AccessibilityService() {
         Log.i(TAG, "Accessibility service connected")
         instance = this
         isRunning.value = true
-        disableSystemPopups()
     }
-
-    /**
-     * Disable system services that produce popups interfering with automation.
-     * Uses 'settings put' which works without root on managed devices (Esper).
-     *
-     * Disables:
-     * - Autofill service: prevents autofill/password popups on text fields
-     * - Credential manager: prevents Google/Samsung credential selector half-sheets
-     * - Credential manager for Samsung: Samsung-specific credential service
-     */
-    private fun disableSystemPopups() {
-        // 1. Disable system settings for autofill and credential manager
-        val settings = mapOf(
-            "autofill_service" to "",                   // Disable autofill popups
-            "credential_service" to "",                 // Disable Android Credential Manager
-            "credential_service_primary" to "",         // Disable primary credential provider
-        )
-        for ((key, value) in settings) {
-            try {
-                Runtime.getRuntime().exec(arrayOf("settings", "put", "secure", key, value))
-                Log.i(TAG, "Disabled setting: $key")
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to disable $key: ${e.message}")
-            }
-        }
-
-        // 2. Disable Google Password Manager / Credential Provider components in GMS
-        //    This prevents the "Sign in with your saved password?" popup from appearing.
-        val componentsToDisable = listOf(
-            "com.google.android.gms/.auth.credentials.credman.service.CredentialManagerService",
-            "com.google.android.gms/.auth.credentials.credman.CredentialManagerUi",
-            "com.google.android.gms/.auth.api.credentials.CredentialsApiService",
-            "com.google.android.gms/.auth.api.credentials.CredentialPickerActivity",
-            "com.google.android.gms/.auth.api.credentials.CredentialSavingActivity",
-        )
-        for (component in componentsToDisable) {
-            try {
-                Runtime.getRuntime().exec(arrayOf("pm", "disable", component))
-                Log.i(TAG, "Disabled component: $component")
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to disable $component: ${e.message}")
-            }
-        }
-
-        // 3. Force-stop credential manager packages to clear any existing state
-        try {
-            Runtime.getRuntime().exec(arrayOf("am", "force-stop", "com.android.credentialmanager"))
-            Log.i(TAG, "Force-stopped com.android.credentialmanager")
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to force-stop credential packages: ${e.message}")
-        }
-    }
-
-    /** Debounce: track last dismiss time to avoid spamming BACK */
-    private var lastDismissTimeMs = 0L
-    private val DISMISS_COOLDOWN_MS = 800L
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         val eventType = event?.eventType ?: return
-        val pkgName = event.packageName?.toString()
         val className = event.className?.toString()
-
-        // ── Auto-dismiss overlays on any relevant event type ──
-        if (eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED ||
-            eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) {
-
-            if (shouldDismissOverlay(pkgName, className, eventType)) {
-                val now = System.currentTimeMillis()
-                if (now - lastDismissTimeMs > DISMISS_COOLDOWN_MS) {
-                    Log.i(TAG, "Dismissing overlay: pkg=$pkgName class=$className event=${eventTypeName(eventType)}")
-                    lastDismissTimeMs = now
-                    // Try multiple dismiss strategies
-                    dismissOverlay(pkgName)
-                }
-                return
-            }
-        }
 
         // Track the current Activity name from window state changes
         if (eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
@@ -130,102 +56,6 @@ class DroidClawAccessibilityService : AccessibilityService() {
                 currentActivityName = className
                 Log.i(TAG, "Activity updated (event): $currentActivityName")
             }
-        }
-    }
-
-    private fun eventTypeName(type: Int): String = when (type) {
-        AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> "STATE_CHANGED"
-        AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> "CONTENT_CHANGED"
-        AccessibilityEvent.TYPE_VIEW_FOCUSED -> "VIEW_FOCUSED"
-        else -> "type=$type"
-    }
-
-    /**
-     * Determine if a window event is from an overlay we should auto-dismiss.
-     * Covers: autofill popups, credential managers, Samsung clipboard panel,
-     * Samsung keyboard suggestions, and other half-sheet overlays.
-     */
-    private fun shouldDismissOverlay(pkgName: String?, className: String?, eventType: Int): Boolean {
-        if (pkgName == null) return false
-
-        // ── 1. Autofill / Credential Manager packages ──
-        val autofillPackages = setOf(
-            "com.google.android.gms",           // Google Credential Manager / Autofill
-            "com.android.credentialmanager",     // Android system Credential Manager (CredentialSelectorActivity)
-            "com.samsung.android.autofill",      // Samsung Autofill
-            "com.samsung.android.vaultkeeper",   // Samsung Pass / Vault
-            "com.samsung.android.samsungpass",   // Samsung Pass
-            "com.samsung.android.samsungpassautofill",
-        )
-
-        if (pkgName in autofillPackages) {
-            // For Samsung autofill-specific packages, always dismiss
-            if (pkgName != "com.google.android.gms") return true
-            // For Google GMS, only dismiss if it looks like an autofill/credential UI
-            return className?.let { cn ->
-                cn.contains("autofill", ignoreCase = true) ||
-                cn.contains("credential", ignoreCase = true) ||
-                cn.contains("password", ignoreCase = true) ||
-                cn.contains("Fido", ignoreCase = true) ||
-                cn.contains("SavePassword", ignoreCase = true) ||
-                cn.contains("CredentialProvider", ignoreCase = true) ||
-                cn.contains("HalfSheetActivity", ignoreCase = true) ||
-                cn.contains("BottomSheet", ignoreCase = true)
-            } ?: false
-        }
-
-        // ── 2. Samsung Keyboard clipboard panel & suggestions ──
-        // Samsung Keyboard (Honeyboard) shows a clipboard popover when you tap a text field
-        // after a clipboard_set. It also shows autocomplete suggestions as an overlay.
-        if (pkgName == "com.samsung.android.honeyboard") {
-            // Only dismiss on STATE_CHANGED (new window/panel opened), not every content change
-            // (content changes happen constantly as you type — we don't want to dismiss the keyboard itself)
-            if (eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
-                val isClipboardOrSuggestion = className?.let { cn ->
-                    cn.contains("Clipboard", ignoreCase = true) ||
-                    cn.contains("Suggestion", ignoreCase = true) ||
-                    cn.contains("PopupWindow", ignoreCase = true) ||
-                    cn.contains("BottomSheet", ignoreCase = true) ||
-                    cn.contains("FloatingToolbar", ignoreCase = true)
-                } ?: false
-                if (isClipboardOrSuggestion) return true
-            }
-        }
-
-        // ── 3. Samsung Clipboard edge panel ──
-        if (pkgName == "com.samsung.android.clipboarduiservice" ||
-            pkgName == "com.samsung.android.clipboardsaveservice") {
-            return true
-        }
-
-        // ── 4. Generic overlay class name patterns (any package) ──
-        // Some overlays appear from the app's own package (e.g. Instagram's autofill suggestion)
-        if (eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && className != null) {
-            // Credential/autofill-related class names from any package
-            val isCredentialOverlay =
-                className.contains("CredentialProviderHalfSheet", ignoreCase = true) ||
-                className.contains("CredentialAutofill", ignoreCase = true) ||
-                className.contains("AutofillPopup", ignoreCase = true)
-            if (isCredentialOverlay) return true
-        }
-
-        return false
-    }
-
-    /**
-     * Dismiss an overlay by force-stopping its package.
-     * This cleanly removes the overlay activity from the window stack without
-     * side effects (no BACK navigation, no notification shade).
-     *
-     * `am force-stop` works without root on Esper-managed devices.
-     */
-    private fun dismissOverlay(pkgName: String?) {
-        if (pkgName == null) return
-        try {
-            Runtime.getRuntime().exec(arrayOf("am", "force-stop", pkgName))
-            Log.i(TAG, "Force-stopped overlay package: $pkgName")
-        } catch (e: Exception) {
-            Log.w(TAG, "force-stop failed for $pkgName: ${e.message}")
         }
     }
 
