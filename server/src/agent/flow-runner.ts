@@ -109,6 +109,20 @@ export async function executeFlowStepWs(
         return { success: true, message: `Opened settings ${value}` };
       case "done":
         return { success: true, message: String(value) };
+      case "dismiss_popup": {
+        // Soft action — always succeeds. Try to tap dismiss button, but if not found, continue.
+        const dpScreenRes = await sessions.sendCommand(deviceId, { type: "get_screen" }) as any;
+        const dpElements = (dpScreenRes?.elements ?? []) as FlowUIElement[];
+        const queryLower = String(value).toLowerCase();
+        const dpEl = dpElements.find((e: FlowUIElement) =>
+          e.text && e.text.toLowerCase().includes(queryLower)
+        );
+        if (dpEl) {
+          await sessions.sendCommand(deviceId, { type: "tap", x: dpEl.center[0], y: dpEl.center[1] });
+          return { success: true, message: `Dismissed popup by tapping "${dpEl.text}"` };
+        }
+        return { success: true, message: `No popup button "${value}" found, continuing` };
+      }
       default:
         return { success: false, message: `Unknown command: ${command}` };
     }

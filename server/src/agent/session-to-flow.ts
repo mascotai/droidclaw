@@ -257,6 +257,13 @@ function compileAction(
     case "launch":
       return { launch: String(action.package ?? "") };
 
+    // ── Dismiss popup (soft — replayed as optional tap) ──
+    case "dismiss_popup": {
+      const query = action.query as string | undefined;
+      if (!query) return null;
+      return { dismiss_popup: query };
+    }
+
     default:
       return null;
   }
