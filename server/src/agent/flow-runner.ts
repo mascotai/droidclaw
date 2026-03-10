@@ -89,6 +89,10 @@ export async function executeFlowStepWs(
       }
       case "type":
         await sessions.sendCommand(deviceId, { type: "type", text: String(value) });
+        // Dismiss keyboard after typing (same as agent loop step 9c)
+        // so subsequent taps hit actual UI elements instead of the keyboard
+        await sessions.sendCommand(deviceId, { type: "back" });
+        await new Promise((r) => setTimeout(r, 300));
         return { success: true, message: `Typed "${value}"` };
       case "swipe":
         await sessions.sendCommand(deviceId, { type: "swipe", direction: String(value) });
