@@ -114,7 +114,7 @@ function findGoalIndex(stepResults: StepResult[], stepDefs: any[], goalId: strin
   const byDefId = stepDefs.findIndex((s: any) => s.id === goalId);
   if (byDefId !== -1) return byDefId;
   const num = parseInt(goalId, 10);
-  if (!isNaN(num) && num >= 0 && num < stepResults.length) return num;
+  if (!isNaN(num) && num >= 0 && num < stepDefs.length) return num;
   return -1;
 }
 
@@ -361,13 +361,85 @@ v2.get("/devices/:deviceId/workflows/runs", async (c) => {
 
 // ── GET /v2/devices/:deviceId/workflows/runs/:runId ──
 // Run summary with per-goal results (no screens — drill down for those)
+// Running goals appear in the goals array with status: "running"
 v2.get("/devices/:deviceId/workflows/runs/:runId", async (c) => {
   const user = c.get("user");
+  const deviceId = c.req.param("deviceId");
   const run = await loadRun(c.req.param("runId"), user.id);
   if (!run) return c.json({ error: "Run not found" }, 404);
 
   const stepResults = (run.stepResults as StepResult[] | null) ?? [];
   const stepDefs = (run.steps as any[]) ?? [];
+
+  // Build goals array from completed stepResults
+  const goals: any[] = stepResults.map((sr, idx) => ({
+    goal: idx,
+    goalId: sr.stepId ?? stepDefs[idx]?.id ?? null,
+    text: sr.goal,
+    status: sr.success ? "completed" : "failed",
+    success: sr.success,
+    stepsUsed: sr.stepsUsed,
+    resolvedBy: sr.resolvedBy ?? null,
+    evalPassed: sr.evalJudgment ? sr.evalJudgment.success : null,
+    skipped: sr.skipped ?? false,
+    error: sr.error ?? null,
+  }));
+
+  // If running, append the current live goal to the array
+  if (run.status === "running") {
+    const trackingKey = resolvePersistentDeviceId(deviceId);
+    const active = activeSessions.get(trackingKey);
+    const goalIdx = run.currentStep ?? stepResults.length;
+    const goalDef = stepDefs[goalIdx];
+
+    if (active?.sessionId) {
+      // Get the latest step from DB
+      const latestSteps = await db
+        .select()
+        .from(agentStep)
+        .where(eq(agentStep.sessionId, active.sessionId))
+        .orderBy(desc(agentStep.stepNumber))
+        .limit(1);
+      const latest = latestSteps[0] ?? null;
+
+      goals.push({
+        goal: goalIdx,
+        goalId: goalDef?.id ?? null,
+        text: goalDef?.goal ?? active.goal,
+        status: "running",
+        success: null,
+        stepsUsed: latest?.stepNumber ?? 0,
+        maxSteps: goalDef?.maxSteps ?? null,
+        resolvedBy: null,
+        evalPassed: null,
+        skipped: false,
+        error: null,
+        sessionId: active.sessionId,
+        latestStep: latest ? {
+          step: latest.stepNumber,
+          action: latest.action,
+          reasoning: latest.reasoning,
+          result: latest.result,
+          package: latest.packageName,
+          durationMs: latest.durationMs,
+        } : null,
+      });
+    } else if (goalIdx < stepDefs.length) {
+      // Goal is pending (queued, not started yet)
+      goals.push({
+        goal: goalIdx,
+        goalId: goalDef?.id ?? null,
+        text: goalDef?.goal ?? null,
+        status: "pending",
+        success: null,
+        stepsUsed: 0,
+        resolvedBy: null,
+        evalPassed: null,
+        skipped: false,
+        error: null,
+      });
+    }
+  }
 
   return c.json({
     runId: run.id,
@@ -379,17 +451,7 @@ v2.get("/devices/:deviceId/workflows/runs/:runId", async (c) => {
     startedAt: run.startedAt?.toISOString() ?? null,
     completedAt: run.completedAt?.toISOString() ?? null,
     durationMs: run.startedAt && run.completedAt ? run.completedAt.getTime() - run.startedAt.getTime() : null,
-    goals: stepResults.map((sr, idx) => ({
-      goal: idx,
-      goalId: sr.stepId ?? stepDefs[idx]?.id ?? null,
-      text: sr.goal,
-      success: sr.success,
-      stepsUsed: sr.stepsUsed,
-      resolvedBy: sr.resolvedBy ?? null,
-      evalPassed: sr.evalJudgment ? sr.evalJudgment.success : null,
-      skipped: sr.skipped ?? false,
-      error: sr.error ?? null,
-    })),
+    goals,
   });
 });
 
@@ -436,27 +498,44 @@ v2.get("/devices/:deviceId/workflows/runs/:runId/goals/:goalId", async (c) => {
 });
 
 // ── GET .../goals/:goalId/steps — all agent actions (compact, no screens) ──
+// Works for both completed goals (from stepResults) and running goals (from activeSessions)
 v2.get("/devices/:deviceId/workflows/runs/:runId/goals/:goalId/steps", async (c) => {
   const user = c.get("user");
+  const deviceId = c.req.param("deviceId");
   const run = await loadRun(c.req.param("runId"), user.id);
   if (!run) return c.json({ error: "Run not found" }, 404);
 
   const stepResults = (run.stepResults as StepResult[] | null) ?? [];
   const stepDefs = (run.steps as any[]) ?? [];
-  const idx = findGoalIndex(stepResults, stepDefs, c.req.param("goalId"));
-  if (idx === -1) return c.json({ error: `Goal "${c.req.param("goalId")}" not found` }, 404);
+  const goalIdParam = c.req.param("goalId");
+  const idx = findGoalIndex(stepResults, stepDefs, goalIdParam);
+  if (idx === -1) return c.json({ error: `Goal "${goalIdParam}" not found` }, 404);
 
-  const sr = stepResults[idx];
+  const sr = stepResults[idx] as StepResult | undefined;
+  const def = stepDefs[idx];
 
-  if (!sr.sessionId) {
+  // Determine sessionId: from completed stepResults or from live activeSessions
+  let sessionId = sr?.sessionId;
+  let isLive = false;
+
+  if (!sessionId && run.status === "running" && idx === (run.currentStep ?? stepResults.length)) {
+    const trackingKey = resolvePersistentDeviceId(deviceId);
+    const active = activeSessions.get(trackingKey);
+    if (active?.sessionId) {
+      sessionId = active.sessionId;
+      isLive = true;
+    }
+  }
+
+  if (!sessionId) {
     return c.json({
       goal: idx,
-      goalId: sr.stepId ?? stepDefs[idx]?.id ?? null,
-      stepsUsed: sr.stepsUsed,
+      goalId: sr?.stepId ?? def?.id ?? null,
+      stepsUsed: sr?.stepsUsed ?? 0,
       steps: [],
-      note: sr.resolvedBy === "cached_flow"
+      note: sr?.resolvedBy === "cached_flow"
         ? "Resolved by cached flow replay — no agent steps recorded"
-        : sr.skipped
+        : sr?.skipped
           ? `Skipped: ${sr.skipReason}`
           : "No session recorded for this goal",
     });
@@ -465,13 +544,15 @@ v2.get("/devices/:deviceId/workflows/runs/:runId/goals/:goalId/steps", async (c)
   const agentSteps = await db
     .select()
     .from(agentStep)
-    .where(eq(agentStep.sessionId, sr.sessionId))
+    .where(eq(agentStep.sessionId, sessionId))
     .orderBy(asc(agentStep.stepNumber));
 
   return c.json({
     goal: idx,
-    goalId: sr.stepId ?? stepDefs[idx]?.id ?? null,
-    stepsUsed: sr.stepsUsed,
+    goalId: sr?.stepId ?? def?.id ?? null,
+    status: isLive ? "running" : (sr?.success ? "completed" : "failed"),
+    stepsUsed: isLive ? agentSteps.length : (sr?.stepsUsed ?? 0),
+    maxSteps: def?.maxSteps ?? null,
     steps: agentSteps.map((s) => ({
       step: s.stepNumber,
       action: s.action,
