@@ -645,10 +645,12 @@ async function dismissPopup(
 ): Promise<SkillResult> {
   const buttonText = action.query;
   if (!buttonText) {
+    console.log(`[Skill] dismiss_popup: No query text, pressing Back`);
+    await sessions.sendCommand(deviceId, { type: "back" });
+    await sleep(500);
     return {
       success: true,
-      message:
-        "No dismiss button text provided, continuing",
+      message: "No dismiss button text provided, pressed Back to dismiss",
     };
   }
 
@@ -676,12 +678,14 @@ async function dismissPopup(
     };
   }
 
-  // No matching button found — soft success
+  // No matching button found — fallback to pressing Back to dismiss
   console.log(
-    `[Skill] dismiss_popup: No button matching "${buttonText}" found, continuing`
+    `[Skill] dismiss_popup: No button matching "${buttonText}" found, pressing Back`
   );
+  await sessions.sendCommand(deviceId, { type: "back" });
+  await sleep(500);
   return {
     success: true,
-    message: "No popup dismiss button found, continuing",
+    message: `No popup button "${buttonText}" found, pressed Back to dismiss`,
   };
 }
