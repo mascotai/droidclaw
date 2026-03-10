@@ -659,6 +659,24 @@ v2.get("/devices/:deviceId/workflows/runs/:runId/goals/:goalId/steps/:step/scree
   });
 });
 
+// ── GET /v2/devices/:deviceId/screen — live screen from device ──
+// Returns the current screen tree directly from the device (no run/goal context needed)
+v2.get("/devices/:deviceId/screen", async (c) => {
+  const deviceId = c.req.param("deviceId");
+  try {
+    const screenRes = (await sessions.sendCommand(deviceId, { type: "get_screen" }, 10_000)) as any;
+    if (!screenRes?.elements) return c.json({ error: "No screen data from device" }, 502);
+    return c.json(formatScreen({
+      stepNumber: 0,
+      elements: screenRes.elements,
+      packageName: screenRes.packageName ?? undefined,
+      activityName: screenRes.activityName ?? undefined,
+    }));
+  } catch (err) {
+    return c.json({ error: `Failed to get screen: ${err instanceof Error ? err.message : String(err)}` }, 504);
+  }
+});
+
 // ── GET .../goals/:goalId/eval — eval definition + judgment ──
 v2.get("/devices/:deviceId/workflows/runs/:runId/goals/:goalId/eval", async (c) => {
   const user = c.get("user");
