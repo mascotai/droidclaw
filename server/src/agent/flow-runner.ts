@@ -145,7 +145,7 @@ export async function executeFlowStepWs(
       case "done":
         return { success: true, message: String(value) };
       case "dismiss_popup": {
-        // Soft action — always succeeds. Try to tap dismiss button, but if not found, continue.
+        // Soft action — always succeeds. Try to tap dismiss button, fallback to Back.
         const dpScreenRes = await sessions.sendCommand(deviceId, { type: "get_screen" }) as any;
         const dpElements = (dpScreenRes?.elements ?? []) as FlowUIElement[];
         const queryLower = String(value).toLowerCase();
@@ -156,7 +156,10 @@ export async function executeFlowStepWs(
           await sessions.sendCommand(deviceId, { type: "tap", x: dpEl.center[0], y: dpEl.center[1] });
           return { success: true, message: `Dismissed popup by tapping "${dpEl.text}"` };
         }
-        return { success: true, message: `No popup button "${value}" found, continuing` };
+        // Button not in tree (e.g., credentialmanager) — press Back to dismiss
+        await sessions.sendCommand(deviceId, { type: "back" });
+        await new Promise((r) => setTimeout(r, 800));
+        return { success: true, message: `No popup button "${value}" found, pressed Back to dismiss` };
       }
       default:
         return { success: false, message: `Unknown command: ${command}` };

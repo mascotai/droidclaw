@@ -628,15 +628,25 @@ function base32Decode(input: string): Buffer {
 
 // ─── Skill: dismiss_popup ──────────────────────────────────────
 
+/** Packages known to render system popups with inaccessible UI trees */
+const POPUP_PACKAGES = new Set([
+  "com.android.credentialmanager",
+  "com.google.android.gms",
+  "com.samsung.android.autofill",
+]);
+
 /**
  * Dismiss a system popup by tapping its dismiss button.
  * This is a SOFT action — it always succeeds.
- * If the button isn't found, it silently continues.
+ * If the button isn't found, it presses Back to dismiss.
  *
- * Usage: {"action": "dismiss_popup", "query": "Not now"}
+ * For popups with inaccessible UI trees (e.g., credentialmanager),
+ * the skill presses Back and verifies the popup is gone, retrying if needed.
+ *
+ * Usage: {"action": "dismiss_popup", "query": "Cancel"}
  *
  * The agent sees the popup in the screen tree and identifies the
- * dismiss button text (e.g., "Not now", "None of the above").
+ * dismiss button text (e.g., "Not now", "None of the above", "Cancel").
  */
 async function dismissPopup(
   deviceId: string,
@@ -644,48 +654,59 @@ async function dismissPopup(
   elements: UIElement[]
 ): Promise<SkillResult> {
   const buttonText = action.query;
-  if (!buttonText) {
-    console.log(`[Skill] dismiss_popup: No query text, pressing Back`);
-    await sessions.sendCommand(deviceId, { type: "back" });
-    await sleep(500);
-    return {
-      success: true,
-      message: "No dismiss button text provided, pressed Back to dismiss",
-    };
-  }
 
-  const queryLower = buttonText.toLowerCase();
-
-  // Search for a matching clickable element (case-insensitive)
-  const match = elements.find(
-    (el) =>
-      el.text &&
-      el.text.toLowerCase().includes(queryLower) &&
-      (el.clickable || el.action === "tap")
-  );
-
-  if (match) {
-    const [x, y] = match.center;
-    console.log(
-      `[Skill] dismiss_popup: Tapping "${match.text}" at (${x}, ${y})`
+  // If we have a query, try to find and tap the matching button
+  if (buttonText) {
+    const queryLower = buttonText.toLowerCase();
+    const match = elements.find(
+      (el) =>
+        el.text &&
+        el.text.toLowerCase().includes(queryLower) &&
+        (el.clickable || el.action === "tap")
     );
-    await tap(deviceId, x, y);
-    await sleep(500);
 
-    return {
-      success: true,
-      message: `Dismissed popup by tapping '${match.text}' at (${x}, ${y})`,
-    };
+    if (match) {
+      const [x, y] = match.center;
+      console.log(
+        `[Skill] dismiss_popup: Tapping "${match.text}" at (${x}, ${y})`
+      );
+      await tap(deviceId, x, y);
+      await sleep(500);
+      return {
+        success: true,
+        message: `Dismissed popup by tapping '${match.text}' at (${x}, ${y})`,
+      };
+    }
   }
 
-  // No matching button found — fallback to pressing Back to dismiss
-  console.log(
-    `[Skill] dismiss_popup: No button matching "${buttonText}" found, pressing Back`
-  );
-  await sessions.sendCommand(deviceId, { type: "back" });
-  await sleep(500);
+  // No matching button found (or no query) — press Back to dismiss.
+  // Retry up to 3 times, verifying the popup is gone after each attempt.
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    console.log(
+      `[Skill] dismiss_popup: Pressing Back to dismiss (attempt ${attempt}/3)`
+    );
+    await sessions.sendCommand(deviceId, { type: "back" });
+    await sleep(800);
+
+    // Re-check if we're still on a popup
+    const { packageName } = await getScreen(deviceId);
+    if (!packageName || !POPUP_PACKAGES.has(packageName)) {
+      console.log(
+        `[Skill] dismiss_popup: Popup dismissed after ${attempt} Back press(es), now on ${packageName}`
+      );
+      return {
+        success: true,
+        message: `Dismissed popup with Back (${attempt} attempt${attempt > 1 ? "s" : ""}), now on ${packageName}`,
+      };
+    }
+    console.log(
+      `[Skill] dismiss_popup: Still on popup ${packageName}, retrying...`
+    );
+  }
+
+  // After 3 attempts, report success anyway (soft action) but note it may still be showing
   return {
     success: true,
-    message: `No popup button "${buttonText}" found, pressed Back to dismiss`,
+    message: `Pressed Back 3 times to dismiss popup${buttonText ? ` (button "${buttonText}" not found in tree)` : ""}`,
   };
 }
