@@ -81,17 +81,10 @@ export async function executeFlowStepWs(
         const screenRes = await sessions.sendCommand(deviceId, { type: "get_screen" }) as any;
         const elements = (screenRes?.elements ?? []) as FlowUIElement[];
 
-        // Fallback chain: text match → resource ID match
-        let el = findElementByText(elements, String(value));
-        if (!el) {
-          const idFallback = stepObj._id as string | undefined;
-          if (idFallback) {
-            el = findElementById(elements, idFallback);
-            if (el) {
-              return await tapElement(deviceId, el, `Tapped "${el.text}" (id fallback "${idFallback}" for "${value}")`);
-            }
-          }
-        }
+        // ID first (stable across sessions), text fallback (for elements without IDs)
+        const id = stepObj._id as string | undefined;
+        let el = id ? findElementById(elements, id) : null;
+        if (!el) el = findElementByText(elements, String(value));
         if (!el) {
           const available = elements.filter((e: FlowUIElement) => e.text).map((e: FlowUIElement) => e.text).slice(0, 10);
           return { success: false, message: `Element "${value}" not found. Available: ${available.join(", ")}` };
@@ -105,17 +98,9 @@ export async function executeFlowStepWs(
         }
         const lpScreenRes = await sessions.sendCommand(deviceId, { type: "get_screen" }) as any;
         const lpElements = (lpScreenRes?.elements ?? []) as FlowUIElement[];
-        let lpEl = findElementByText(lpElements, String(value));
-        if (!lpEl) {
-          const idFallback = stepObj._id as string | undefined;
-          if (idFallback) {
-            lpEl = findElementById(lpElements, idFallback);
-            if (lpEl) {
-              await sessions.sendCommand(deviceId, { type: "longpress", x: lpEl.center[0], y: lpEl.center[1] });
-              return { success: true, message: `Long-pressed "${lpEl.text}" (id fallback for "${value}")` };
-            }
-          }
-        }
+        const lpId = stepObj._id as string | undefined;
+        let lpEl = lpId ? findElementById(lpElements, lpId) : null;
+        if (!lpEl) lpEl = findElementByText(lpElements, String(value));
         if (!lpEl) return { success: false, message: `Element "${value}" not found for longpress` };
         await sessions.sendCommand(deviceId, { type: "longpress", x: lpEl.center[0], y: lpEl.center[1] });
         return { success: true, message: `Long-pressed "${lpEl.text}"` };
