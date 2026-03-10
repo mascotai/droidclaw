@@ -79,23 +79,37 @@ export const handle: Handle = async ({ event, resolve }) => {
 		// ── Proxy-auth auto-login (authentik forward-auth headers) ──
 		if (env.TRUST_PROXY_AUTH === 'true') {
 			const proxyEmail = event.request.headers.get('x-authentik-email');
-			if (proxyEmail && !event.cookies.get('better-auth.session_token')) {
-				const proxyUsername = event.request.headers.get('x-authentik-username');
-				const proxyName = event.request.headers.get('x-authentik-name');
-				await proxyAuthLogin(event, proxyEmail, proxyUsername, proxyName);
+			if (proxyEmail) {
+				// Try existing session first
+				const existingSession = event.cookies.get('better-auth.session_token')
+					? await auth.api.getSession({ headers: event.request.headers })
+					: null;
+
+				if (existingSession) {
+					event.locals.session = existingSession.session;
+					event.locals.user = existingSession.user;
+				} else {
+					// No valid session — clear stale cookie and create a new one
+					if (event.cookies.get('better-auth.session_token')) {
+						event.cookies.delete('better-auth.session_token', { path: '/' });
+					}
+					const proxyUsername = event.request.headers.get('x-authentik-username');
+					const proxyName = event.request.headers.get('x-authentik-name');
+					await proxyAuthLogin(event, proxyEmail, proxyUsername, proxyName);
+				}
 			}
 		}
 
-		const session = await auth.api.getSession({
-			headers: event.request.headers
-		});
+		// For non-proxy-auth requests (or if proxy auth didn't run)
+		if (!event.locals.user) {
+			const session = await auth.api.getSession({
+				headers: event.request.headers
+			});
 
-		if (session) {
-			event.locals.session = session.session;
-			event.locals.user = session.user;
-		} else if (event.url.pathname.startsWith('/api/')) {
-			console.log(`[Auth] No session for ${event.request.method} ${event.url.pathname}`);
-			console.log(`[Auth] Cookie header: ${event.request.headers.get('cookie')?.slice(0, 80) ?? 'NONE'}`);
+			if (session) {
+				event.locals.session = session.session;
+				event.locals.user = session.user;
+			}
 		}
 	} catch (err) {
 		console.error(`[Auth] getSession error for ${event.request.method} ${event.url.pathname}:`, err);
