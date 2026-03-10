@@ -72,37 +72,32 @@
 	const urlPage = Number(new URL(page.url).searchParams.get('page')) || 1;
 	const initialPage = isLogTab ? urlPage : 1;
 
-	// Fire all requests in parallel — no waterfalls
-	const devicePromise = getDevice(deviceId);
-	const statsPromise = getDeviceStats(deviceId);
-	const workflowsPromise = listWorkflowRuns({ deviceId, page: initialPage });
-
-	// Resolve device data
-	const deviceResult = await devicePromise;
-	let deviceData = $state<DeviceData | null>(deviceResult as DeviceData | null);
-
-	// Stats
+	// State declarations (no top-level await — avoids SSR crash when context isn't set before children render)
+	let deviceData = $state<DeviceData | null>(null);
 	let stats = $state<{ totalSessions: number; successRate: number; avgSteps: number } | null>(null);
-	statsPromise.then((s) => { stats = s as typeof stats; });
-
-	// Workflow runs (for Log tab)
 	let workflowRuns = $state<WorkflowRun[]>([]);
 	let workflowLiveProgress = $state<Record<string, WorkflowLiveProgress>>({});
 	let workflowsLoaded = $state(false);
 	let workflowsPage = $state(initialPage);
 	let workflowsTotalPages = $state(1);
 	let workflowPageCache = $state<Map<number, { items: WorkflowRun[]; total: number }>>(new Map());
-
-	// Resolve workflow data
-	const wfResult = await workflowsPromise;
-	workflowRuns = wfResult.items as WorkflowRun[];
-	workflowsTotalPages = Math.ceil(wfResult.total / 20) || 1;
-	workflowsLoaded = true;
-	workflowPageCache.set(initialPage, { items: workflowRuns, total: wfResult.total });
-
-	// Cached flows
 	let cachedFlows = $state<CachedFlowEntry[]>([]);
 	let cachedFlowsLoaded = $state(false);
+
+	// Fire all requests in parallel — no waterfalls, no top-level await
+	const devicePromise = getDevice(deviceId);
+	const statsPromise = getDeviceStats(deviceId);
+	const workflowsPromise = listWorkflowRuns({ deviceId, page: initialPage });
+
+	// Resolve asynchronously without blocking context setup
+	devicePromise.then((r) => { deviceData = r as DeviceData | null; }).catch(() => {});
+	statsPromise.then((s) => { stats = s as typeof stats; }).catch(() => {});
+	workflowsPromise.then((wf) => {
+		workflowRuns = wf.items as WorkflowRun[];
+		workflowsTotalPages = Math.ceil(wf.total / 20) || 1;
+		workflowsLoaded = true;
+		workflowPageCache.set(initialPage, { items: workflowRuns, total: wf.total });
+	}).catch(() => { workflowsLoaded = true; });
 
 	// Load cached flows immediately (Home tab needs them)
 	loadCachedFlows().catch(() => {});
