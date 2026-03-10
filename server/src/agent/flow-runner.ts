@@ -46,6 +46,9 @@ export async function executeFlowStepWs(
       case "enter":
         await sessions.sendCommand(deviceId, { type: "enter" });
         return { success: true, message: "enter" };
+      case "clear":
+        await sessions.sendCommand(deviceId, { type: "clear" });
+        return { success: true, message: "clear" };
       case "done":
         return { success: true, message: "Flow complete" };
       default:
