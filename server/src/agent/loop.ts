@@ -717,6 +717,19 @@ export async function runAgentLoop(
           );
         }
         console.log(`[Agent ${sessionId}] Step ${step + 1} result: ${lastActionFeedback}`);
+
+        // ── 9d. Update persisted step with _resolved metadata ──
+        // The DB insert at 8b fires before text resolution (9a), so we patch
+        // the action column with _resolved data (contains matchedId for caching)
+        if (persistentDeviceId && (action as any)._resolved) {
+          db.update(agentStep)
+            .set({ action: action as unknown as Record<string, unknown> })
+            .where(eq(agentStep.id, stepId))
+            .catch((err) =>
+              console.error(`[Agent ${sessionId}] Failed to update step ${step + 1} with _resolved: ${err}`)
+            );
+        }
+
         // Append result to last history entry
         if (actionHistory.length > 0) {
           const ok = lastActionFeedback.includes("-> OK");
