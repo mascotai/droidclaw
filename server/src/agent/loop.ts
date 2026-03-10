@@ -619,6 +619,23 @@ export async function runAgentLoop(
 
       // ── 8c. Done check (after persist so the step is saved) ──
       if (action.action === "done") {
+        // Capture one final screenshot so the eval judge sees the true end-state
+        // (the observation collected at step start may have been mid-transition)
+        try {
+          await new Promise((r) => setTimeout(r, 1500)); // let UI settle
+          const finalScreen = (await sessions.sendCommand(deviceId, { type: "get_screen" })) as any;
+          const finalElements = (finalScreen?.elements ?? []) as UIElement[];
+          if (finalElements.length > 0) {
+            observations.push({
+              stepNumber: step + 1,
+              elements: finalElements,
+              packageName: finalScreen?.packageName ?? undefined,
+              activityName: finalScreen?.activityName ?? undefined,
+            });
+          }
+        } catch (err) {
+          console.warn(`[Agent ${sessionId}] Failed to capture final screen for eval: ${err}`);
+        }
         success = true;
         break;
       }
