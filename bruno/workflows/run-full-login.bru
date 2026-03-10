@@ -1,0 +1,81 @@
+meta {
+  name: Run Full Login with TOTP
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/v2/devices/{{deviceId}}/workflows/run
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{apiKey}}
+}
+
+body:json {
+  {
+    "name": "Instagram Full Login with TOTP",
+    "variables": {
+      "username": "dragon.2408522",
+      "password": "igmascotpass",
+      "totpSecret": "7234BXWSLEK5LZHA4REGUHQ4ENUVI2HH"
+    },
+    "steps": [
+      {
+        "id": "add_account",
+        "app": "com.instagram.android",
+        "forceStop": true,
+        "goal": "From the home feed, long-press the profile picture icon in the bottom-right corner of the navigation bar to open the account switcher popup. In the account switcher, tap the 'Add Instagram account' button. After tapping it, wait a few seconds for the next screen to load — do NOT scroll or use find_and_tap, just wait. Then: if you see a screen with 'Log into existing account' and 'Create new account', tap 'Log into existing account'. If you see a screen listing existing accounts with a 'Use another profile' button, tap 'Use another profile'. If you land directly on a login screen with username/password fields, you are done. After each tap, wait for the screen to transition before taking the next action.",
+        "maxSteps": 20,
+        "eval": {
+          "states": {
+            "on_login_screen": {
+              "type": "boolean",
+              "description": "The Instagram login screen is visible with username and password input fields and a Log in button",
+              "expected": true
+            },
+            "accounts_count": {
+              "type": "number",
+              "description": "The number of Instagram accounts currently signed in, as seen in the account switcher or account picker screen"
+            }
+          }
+        }
+      },
+      {
+        "id": "login",
+        "goal": "First: if the foreground app is a system popup (e.g., com.android.credentialmanager, Google Password Manager, Samsung Autofill), use dismiss_popup to close it — pass the visible dismiss/cancel button text as the query (e.g., 'Cancel', 'Not now', 'None of the above'). ALWAYS use dismiss_popup for popups — never use back directly. Then: tap the 'Username, email or mobile number' input field to focus it, then use clear to remove any pre-filled text, then type '{{username}}'. Tap the 'Password' input field to focus it, then type '{{password}}'. Tap 'Log in'. After tapping Log in, wait for the response. If you see 'Waiting for approval', tap 'Try another way', then select 'Authentication app', then tap 'Continue'. STOP immediately and call done as soon as you see the security code input screen — do NOT type any code into it.",
+        "maxSteps": 22,
+        "eval": {
+          "states": {
+            "on_2fa_screen": {
+              "type": "boolean",
+              "description": "A security code / 2FA input screen appeared after login",
+              "expected": true
+            }
+          }
+        }
+      },
+      {
+        "id": "totp",
+        "goal": "Use get_totp with text '{{totpSecret}}' to generate a 6-digit code. Tap the security code input field to focus it, then use paste to paste the code. Tap Continue or Next or Confirm. If you see 'Waiting for approval' or 'Choose a way to confirm', tap 'Try another way', then select 'Authentication app', then tap Continue to get to the code entry screen, then do the get_totp + paste.",
+        "maxSteps": 15,
+        "retries": 0,
+        "eval": {
+          "states": {
+            "past_2fa": {
+              "type": "boolean",
+              "description": "The 2FA screen is no longer visible — moved on to onboarding, home feed, or any other screen",
+              "expected": true
+            }
+          }
+        }
+      }
+    ]
+  }
+}
+
+docs {
+  Run the full Instagram login flow: add_account → login → TOTP 2FA. The totp step has 4 retries since TOTP codes expire quickly.
+}

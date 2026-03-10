@@ -1,0 +1,47 @@
+meta {
+  name: Run Add Account
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/v2/devices/{{deviceId}}/workflows/run
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{apiKey}}
+}
+
+body:json {
+  {
+    "name": "Instagram Add Account",
+    "steps": [
+      {
+        "id": "add_account",
+        "app": "com.instagram.android",
+        "forceStop": true,
+        "goal": "From the home feed, long-press the profile picture icon in the bottom-right corner of the navigation bar to open the account switcher popup. In the account switcher, tap the 'Add Instagram account' button. After tapping it, wait a few seconds for the next screen to load — do NOT scroll or use find_and_tap, just wait. Then: if you see a screen with 'Log into existing account' and 'Create new account', tap 'Log into existing account'. If you see a screen listing existing accounts with a 'Use another profile' button, tap 'Use another profile'. If you land directly on a login screen with username/password fields, you are done. After each tap, wait for the screen to transition before taking the next action.",
+        "maxSteps": 20,
+        "eval": {
+          "states": {
+            "on_login_screen": {
+              "type": "boolean",
+              "description": "The Instagram login screen is visible with username and password input fields and a Log in button",
+              "expected": true
+            },
+            "accounts_count": {
+              "type": "number",
+              "description": "The number of Instagram accounts currently signed in, as seen in the account switcher or account picker screen"
+            }
+          }
+        }
+      }
+    ]
+  }
+}
+
+docs {
+  Run just the add_account step — navigates to the Instagram login screen. Use to test caching or as a prerequisite before login/totp.
+}

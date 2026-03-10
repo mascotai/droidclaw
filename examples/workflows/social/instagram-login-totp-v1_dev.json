@@ -1,4 +1,5 @@
 {
+  "deviceId": "DEVICE",
   "name": "Instagram Add Account with TOTP 2FA",
   "steps": [
     {

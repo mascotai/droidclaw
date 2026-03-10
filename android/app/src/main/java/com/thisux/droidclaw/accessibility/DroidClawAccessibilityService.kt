@@ -174,10 +174,19 @@ class DroidClawAccessibilityService : AccessibilityService() {
         val allElements = mutableListOf<UIElement>()
         try {
             val allWindows = windows ?: return emptyList()
+            Log.d(TAG, "captureAllWindows: ${allWindows.size} windows")
             for (window in allWindows) {
-                val root = window.root ?: continue
+                val windowPkg = window.root?.packageName?.toString() ?: "null"
+                val windowType = window.type
+                val windowLayer = window.layer
+                val root = window.root
+                if (root == null) {
+                    Log.d(TAG, "  window pkg=$windowPkg type=$windowType layer=$windowLayer -> root is null, skipping")
+                    continue
+                }
                 try {
                     val windowElements = ScreenTreeBuilder.capture(root)
+                    Log.d(TAG, "  window pkg=$windowPkg type=$windowType layer=$windowLayer -> ${windowElements.size} elements")
                     allElements.addAll(windowElements)
                 } finally {
                     root.recycle()
