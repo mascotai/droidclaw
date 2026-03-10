@@ -646,6 +646,7 @@ export async function runAgentLoop(
               target: action.target,
               matchedText: matched.text,
               matchedCenter: matched.center,
+              matchedId: matched.id || undefined,
               originalCoords,
             };
           } else {

@@ -2,10 +2,10 @@ import { sessions } from "../ws/sessions.js";
 import { db } from "../db.js";
 import { workflowRun } from "../schema.js";
 import { eq } from "drizzle-orm";
-import { findElementByText } from "./session-to-flow.js";
+import { findElementByText, findElementById } from "./session-to-flow.js";
+import type { FlowStep } from "./session-to-flow.js";
 export { findElementByText } from "./session-to-flow.js";
-
-type FlowStep = string | { [key: string]: string | number | [number, number] };
+export type { FlowStep } from "./session-to-flow.js";
 
 export interface RunFlowOptions {
   runId: string;
@@ -24,6 +24,16 @@ interface FlowUIElement {
   id?: string;
   bounds: { left: number; top: number; right: number; bottom: number };
   center: [number, number];
+}
+
+/** Helper to tap an element and return a success result */
+async function tapElement(
+  deviceId: string,
+  el: FlowUIElement,
+  message: string,
+): Promise<{ success: boolean; message: string }> {
+  await sessions.sendCommand(deviceId, { type: "tap", x: el.center[0], y: el.center[1] });
+  return { success: true, message };
 }
 
 export async function executeFlowStepWs(
@@ -57,23 +67,36 @@ export async function executeFlowStepWs(
   }
 
   if (typeof step === "object" && step !== null) {
-    const [command, value] = Object.entries(step)[0];
+    // Find the primary command (skip underscore-prefixed metadata keys like _coords, _hint)
+    const primaryEntry = Object.entries(step).find(([k]) => !k.startsWith("_"));
+    if (!primaryEntry) return { success: false, message: `No command in step: ${JSON.stringify(step)}` };
+    const [command, value] = primaryEntry;
+    const stepObj = step as Record<string, unknown>;
     switch (command) {
       case "tap": {
         if (Array.isArray(value)) {
           await sessions.sendCommand(deviceId, { type: "tap", x: value[0], y: value[1] });
           return { success: true, message: `Tapped (${value[0]}, ${value[1]})` };
         }
-        // Use "get_screen" — same command the agent loop uses (device doesn't support "get_ui_tree")
         const screenRes = await sessions.sendCommand(deviceId, { type: "get_screen" }) as any;
         const elements = (screenRes?.elements ?? []) as FlowUIElement[];
-        const el = findElementByText(elements, String(value));
+
+        // Fallback chain: text match → resource ID match
+        let el = findElementByText(elements, String(value));
+        if (!el) {
+          const idFallback = stepObj._id as string | undefined;
+          if (idFallback) {
+            el = findElementById(elements, idFallback);
+            if (el) {
+              return await tapElement(deviceId, el, `Tapped "${el.text}" (id fallback "${idFallback}" for "${value}")`);
+            }
+          }
+        }
         if (!el) {
           const available = elements.filter((e: FlowUIElement) => e.text).map((e: FlowUIElement) => e.text).slice(0, 10);
           return { success: false, message: `Element "${value}" not found. Available: ${available.join(", ")}` };
         }
-        await sessions.sendCommand(deviceId, { type: "tap", x: el.center[0], y: el.center[1] });
-        return { success: true, message: `Tapped "${el.text}" at (${el.center[0]}, ${el.center[1]})` };
+        return await tapElement(deviceId, el, `Tapped "${el.text}" at (${el.center[0]}, ${el.center[1]})`);
       }
       case "longpress": {
         if (Array.isArray(value)) {
@@ -82,7 +105,17 @@ export async function executeFlowStepWs(
         }
         const lpScreenRes = await sessions.sendCommand(deviceId, { type: "get_screen" }) as any;
         const lpElements = (lpScreenRes?.elements ?? []) as FlowUIElement[];
-        const lpEl = findElementByText(lpElements, String(value));
+        let lpEl = findElementByText(lpElements, String(value));
+        if (!lpEl) {
+          const idFallback = stepObj._id as string | undefined;
+          if (idFallback) {
+            lpEl = findElementById(lpElements, idFallback);
+            if (lpEl) {
+              await sessions.sendCommand(deviceId, { type: "longpress", x: lpEl.center[0], y: lpEl.center[1] });
+              return { success: true, message: `Long-pressed "${lpEl.text}" (id fallback for "${value}")` };
+            }
+          }
+        }
         if (!lpEl) return { success: false, message: `Element "${value}" not found for longpress` };
         await sessions.sendCommand(deviceId, { type: "longpress", x: lpEl.center[0], y: lpEl.center[1] });
         return { success: true, message: `Long-pressed "${lpEl.text}"` };

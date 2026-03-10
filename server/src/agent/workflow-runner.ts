@@ -5,6 +5,7 @@ import { eq, and, asc, sql } from "drizzle-orm";
 import { runPipeline } from "./pipeline.js";
 import { executeFlowStepWs } from "./flow-runner.js";
 import { compileSessionToFlow, normalizeGoalKey, isCacheable, resolveFlowVariables } from "./session-to-flow.js";
+import type { FlowStep } from "./session-to-flow.js";
 import { activeSessions } from "./active-sessions.js";
 import { evaluateStep, type EvalJudgment, type StateDefinition, type AgentStepRecord } from "./eval-judge.js";
 import type { LLMConfig } from "./llm.js";
@@ -60,8 +61,6 @@ const RECONNECT_POLL_INTERVAL = 3_000; // 3 seconds
 function buildGoal(step: WorkflowStep): string {
   return step.goal;
 }
-
-type FlowStep = string | { [key: string]: string | number | [number, number] };
 
 /**
  * Replay a cached deterministic flow on the device.

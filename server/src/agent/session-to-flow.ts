@@ -7,7 +7,16 @@
  * placeholders, and validates the result is stable enough to cache.
  */
 
-export type FlowStep = string | { [key: string]: string | number | [number, number] };
+export type FlowStep = string | FlowStepObject;
+
+/** Object-form flow step. Simple steps have one key (e.g. {tap: "Log in"}).
+ *  Tap/longpress carry a stable resource ID fallback for resilient replay. */
+export interface FlowStepObject {
+  [key: string]: string | number | [number, number] | undefined;
+  /** Android resource ID of the element (e.g. "com.instagram.android:id/login_username").
+   *  Most stable identifier — doesn't change between sessions. */
+  _id?: string;
+}
 
 // ── Element matching utility ────────────────────────────────────────────
 // Pure function used by flow-runner during replay and available for testing.
@@ -40,6 +49,13 @@ export function findElementByText<T extends TextMatchElement>(elements: T[], que
   const idMatch = elements.find((el) => el.id && el.id.toLowerCase().includes(q));
   if (idMatch) return idMatch;
   return null;
+}
+
+/**
+ * Find a UI element by its Android resource ID.
+ */
+export function findElementById<T extends TextMatchElement>(elements: T[], id: string): T | null {
+  return elements.find((el) => el.id === id) ?? null;
 }
 
 /** Action types that are observation-only and should not appear in a replay flow. */
@@ -217,6 +233,12 @@ function compileAction(
     case "tap": {
       const target = action.target as string | undefined;
       if (!target) return null; // coordinate-only taps are fragile
+      // Extract the stable resource ID from the resolved match (set by agent loop)
+      const resolved = action._resolved as { matchedId?: string } | undefined;
+      const id = resolved?.matchedId;
+      if (id) {
+        return { tap: target, _id: id } as FlowStepObject;
+      }
       return { tap: target };
     }
 
@@ -224,6 +246,11 @@ function compileAction(
     case "longpress": {
       const target = action.target as string | undefined;
       if (!target) return null;
+      const resolved = action._resolved as { matchedId?: string } | undefined;
+      const id = resolved?.matchedId;
+      if (id) {
+        return { longpress: target, _id: id } as FlowStepObject;
+      }
       return { longpress: target };
     }
 
@@ -356,7 +383,11 @@ export function resolveFlowVariables(
     if (typeof step === "string") return step;
     if (typeof step !== "object" || step === null) return step;
 
-    const [command, value] = Object.entries(step)[0];
+    // Find the primary command entry (skip underscore-prefixed metadata keys)
+    const entries = Object.entries(step);
+    const cmdEntry = entries.find(([k]) => !k.startsWith("_"));
+    if (!cmdEntry) return step;
+    const [command, value] = cmdEntry;
     if (typeof value !== "string") return step;
 
     // Replace {{var}} placeholders in the value
@@ -365,6 +396,6 @@ export function resolveFlowVariables(
     );
 
     if (resolved === value) return step; // no change
-    return { [command]: resolved };
+    return { ...step, [command]: resolved };
   });
 }
