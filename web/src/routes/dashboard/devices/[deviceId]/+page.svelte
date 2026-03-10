@@ -20,9 +20,9 @@
 	<button
 		onclick={() => (showBuilder = true)}
 		disabled={ctx.liveWorkflowRun?.status === 'running'}
-		class="flex w-full items-center justify-center gap-2 rounded-2xl bg-stone-900 px-5 py-3.5 text-sm font-medium text-white transition-colors hover:bg-stone-800 disabled:opacity-40"
+		class="flex items-center gap-2 rounded-xl bg-stone-900 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-stone-800 disabled:opacity-40"
 	>
-		<Icon icon="solar:play-bold" class="h-4 w-4" />
+		<Icon icon="solar:play-bold" class="h-3.5 w-3.5" />
 		Run a task
 	</button>
 

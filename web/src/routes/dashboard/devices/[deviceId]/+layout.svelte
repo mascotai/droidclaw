@@ -72,7 +72,7 @@
 	const urlPage = Number(new URL(page.url).searchParams.get('page')) || 1;
 	const initialPage = isLogTab ? urlPage : 1;
 
-	// State declarations (no top-level await — avoids SSR crash when context isn't set before children render)
+	// State declarations
 	let deviceData = $state<DeviceData | null>(null);
 	let stats = $state<{ totalSessions: number; successRate: number; avgSteps: number } | null>(null);
 	let workflowRuns = $state<WorkflowRun[]>([]);
@@ -83,24 +83,6 @@
 	let workflowPageCache = $state<Map<number, { items: WorkflowRun[]; total: number }>>(new Map());
 	let cachedFlows = $state<CachedFlowEntry[]>([]);
 	let cachedFlowsLoaded = $state(false);
-
-	// Fire all requests in parallel — no waterfalls, no top-level await
-	const devicePromise = getDevice(deviceId);
-	const statsPromise = getDeviceStats(deviceId);
-	const workflowsPromise = listWorkflowRuns({ deviceId, page: initialPage });
-
-	// Resolve asynchronously without blocking context setup
-	devicePromise.then((r) => { deviceData = r as DeviceData | null; }).catch(() => {});
-	statsPromise.then((s) => { stats = s as typeof stats; }).catch(() => {});
-	workflowsPromise.then((wf) => {
-		workflowRuns = wf.items as WorkflowRun[];
-		workflowsTotalPages = Math.ceil(wf.total / 20) || 1;
-		workflowsLoaded = true;
-		workflowPageCache.set(initialPage, { items: workflowRuns, total: wf.total });
-	}).catch(() => { workflowsLoaded = true; });
-
-	// Load cached flows immediately (Home tab needs them)
-	loadCachedFlows().catch(() => {});
 
 	// Live workflow run tracking
 	let liveWorkflowRun = $state<LiveWorkflowRun | null>(null);
@@ -231,9 +213,20 @@
 		return loaded as Step[];
 	}
 
-	// ─── WebSocket events ───────────────────────────────────────
+	// ─── WebSocket events + data loading ────────────────────────
 
 	onMount(() => {
+		// Load initial data (inside onMount to avoid SSR issues and effect loops)
+		getDevice(deviceId).then((r) => { deviceData = r as DeviceData | null; }).catch(() => {});
+		getDeviceStats(deviceId).then((s) => { stats = s as typeof stats; }).catch(() => {});
+		listWorkflowRuns({ deviceId, page: initialPage }).then((wf) => {
+			workflowRuns = wf.items as WorkflowRun[];
+			workflowsTotalPages = Math.ceil(wf.total / 20) || 1;
+			workflowsLoaded = true;
+			workflowPageCache.set(initialPage, { items: workflowRuns, total: wf.total });
+		}).catch(() => { workflowsLoaded = true; });
+		loadCachedFlows().catch(() => {});
+
 		const unsub = dashboardWs.subscribe((msg) => {
 			switch (msg.type) {
 				case 'device_status': {
