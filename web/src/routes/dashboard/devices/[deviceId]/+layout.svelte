@@ -57,9 +57,12 @@
 		{ id: 'log' as const, label: 'Log', icon: 'solar:history-bold-duotone', href: `/dashboard/devices/${deviceId}/log` }
 	];
 
-	const activeTab = $derived<'home' | 'log'>(
-		page.url.pathname.endsWith('/log') ? 'log' : 'home'
-	);
+	// Use $state + $effect instead of $derived(page.url...) to avoid
+	// effect_update_depth_exceeded from SvelteKit's reactive page.url proxy.
+	let activeTab = $state<'home' | 'log'>(page.url.pathname.endsWith('/log') ? 'log' : 'home');
+	$effect(() => {
+		activeTab = page.url.pathname.endsWith('/log') ? 'log' : 'home';
+	});
 
 	function navigateTab(tab: typeof tabs[number]) {
 		track(DEVICE_TAB_CHANGE, { tab: tab.id });
@@ -68,8 +71,9 @@
 	}
 
 	// ─── Data loading ───────────────────────────────────────────
+	// Extract primitives from page.url at init to avoid reactive proxy issues
 	const isLogTab = page.url.pathname.endsWith('/log');
-	const urlPage = Number(new URL(page.url).searchParams.get('page')) || 1;
+	const urlPage = Number(page.url.searchParams.get('page')) || 1;
 	const initialPage = isLogTab ? urlPage : 1;
 
 	// State declarations
