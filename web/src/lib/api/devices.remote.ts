@@ -388,7 +388,40 @@ export const listCachedFlows = query(v.string(), async (deviceId) => {
 export const getWorkflowRun = query(
 	v.object({ deviceId: v.string(), runId: v.string() }),
 	async ({ deviceId, runId }) => {
-		return serverGet(`/workflows/runs/${deviceId}/${runId}?expand=steps`);
+		const { locals } = getRequestEvent();
+		if (!locals.user) return null;
+
+		const rows = await db
+			.select()
+			.from(workflowRun)
+			.where(
+				and(
+					eq(workflowRun.id, runId),
+					eq(workflowRun.deviceId, deviceId),
+					eq(workflowRun.userId, locals.user.id)
+				)
+			)
+			.limit(1);
+
+		if (rows.length === 0) return null;
+
+		const run = rows[0];
+
+		// Expand agent steps for each step result that has a sessionId
+		const stepResults = (run.stepResults as Record<string, unknown>[] | null) ?? [];
+		const expandedResults = await Promise.all(
+			stepResults.map(async (sr) => {
+				if (!sr?.sessionId) return sr;
+				const steps = await db
+					.select()
+					.from(agentStep)
+					.where(eq(agentStep.sessionId, sr.sessionId as string))
+					.orderBy(agentStep.stepNumber);
+				return { ...sr, agentSteps: steps };
+			})
+		);
+
+		return { ...run, stepResults: expandedResults };
 	}
 );
 
