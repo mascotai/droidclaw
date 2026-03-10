@@ -16,6 +16,9 @@ export interface FlowStepObject {
   /** Android resource ID of the element (e.g. "com.instagram.android:id/login_username").
    *  Most stable identifier — doesn't change between sessions. */
   _id?: string;
+  /** Original tap coordinates from the session — last-resort fallback when
+   *  neither resource ID nor text match finds the element. */
+  _coords?: [number, number];
 }
 
 // ── Element matching utility ────────────────────────────────────────────
@@ -233,25 +236,27 @@ function compileAction(
     case "tap": {
       const target = action.target as string | undefined;
       if (!target) return null; // coordinate-only taps are fragile
-      // Extract the stable resource ID from the resolved match (set by agent loop)
-      const resolved = action._resolved as { matchedId?: string } | undefined;
+      // Extract the stable resource ID and coordinates from the resolved match (set by agent loop)
+      const resolved = action._resolved as { matchedId?: string; matchedCenter?: [number, number] } | undefined;
       const id = resolved?.matchedId;
-      if (id) {
-        return { tap: target, _id: id } as FlowStepObject;
-      }
-      return { tap: target };
+      const coords = resolved?.matchedCenter;
+      const step: FlowStepObject = { tap: target };
+      if (id) step._id = id;
+      if (coords) step._coords = coords;
+      return step;
     }
 
     // ── Long press ──
     case "longpress": {
       const target = action.target as string | undefined;
       if (!target) return null;
-      const resolved = action._resolved as { matchedId?: string } | undefined;
+      const resolved = action._resolved as { matchedId?: string; matchedCenter?: [number, number] } | undefined;
       const id = resolved?.matchedId;
-      if (id) {
-        return { longpress: target, _id: id } as FlowStepObject;
-      }
-      return { longpress: target };
+      const coords = resolved?.matchedCenter;
+      const step: FlowStepObject = { longpress: target };
+      if (id) step._id = id;
+      if (coords) step._coords = coords;
+      return step;
     }
 
     // ── Type / text input ──
