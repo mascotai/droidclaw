@@ -176,6 +176,10 @@ class DroidClawAccessibilityService : AccessibilityService() {
             val allWindows = windows ?: return emptyList()
             Log.d(TAG, "captureAllWindows: ${allWindows.size} windows")
             for (window in allWindows) {
+                // Skip input method windows (keyboard) to reduce noise
+                // and prevent keyboard elements from confusing the agent
+                if (window.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD) continue
+
                 val windowPkg = window.root?.packageName?.toString() ?: "null"
                 val windowType = window.type
                 val windowLayer = window.layer
