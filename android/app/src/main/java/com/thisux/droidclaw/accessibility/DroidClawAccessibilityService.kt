@@ -270,21 +270,23 @@ class DroidClawAccessibilityService : AccessibilityService() {
             runBlocking { delay(400) }
         }
 
-        // Retry with increasing delays — apps like Contacts on Vivo
-        // can take 500ms+ to render after a cold launch
-        val delays = longArrayOf(50, 100, 200, 300, 500)
-        for (delayMs in delays) {
-            val elements = captureAllWindows()
-            if (elements.isNotEmpty()) {
-                lastScreenTree.value = elements
-                return elements
+        // Phase 1: Normal retries with short delays — covers most cases
+        // (apps like Contacts on Vivo can take 500ms+ to render after cold launch)
+        val normalDelays = longArrayOf(50, 100, 200, 300, 500)
+        for (delayMs in normalDelays) {
+            val capture = captureAllWindows()
+            if (capture.elements.isNotEmpty() && capture.hasAppWindow) {
+                lastScreenTree.value = capture.elements
+                return capture.elements
             }
             // Fallback: try rootInActiveWindow (in case windows API fails)
             val root = rootInActiveWindow
             if (root != null) {
                 try {
+                    val pkg = root.packageName?.toString()
+                    val isAppRoot = pkg != null && pkg !in systemUiPackages
                     val fallback = ScreenTreeBuilder.capture(root)
-                    if (fallback.isNotEmpty()) {
+                    if (fallback.isNotEmpty() && isAppRoot) {
                         lastScreenTree.value = fallback
                         return fallback
                     }
@@ -294,19 +296,83 @@ class DroidClawAccessibilityService : AccessibilityService() {
             }
             runBlocking { delay(delayMs) }
         }
-        Log.w(TAG, "rootInActiveWindow null or empty after retries")
+
+        // Phase 2: Extended retries for slow transitions (e.g. Instagram login)
+        // If we got elements but no app window, the app is mid-transition.
+        // Wait longer with bigger delays before giving up.
+        val extendedDelays = longArrayOf(500, 1000, 1500, 2000)
+        for (delayMs in extendedDelays) {
+            Log.i(TAG, "No app window found, extended retry (${delayMs}ms)")
+            runBlocking { delay(delayMs) }
+            val capture = captureAllWindows()
+            if (capture.elements.isNotEmpty() && capture.hasAppWindow) {
+                Log.i(TAG, "App window found after extended retry")
+                lastScreenTree.value = capture.elements
+                return capture.elements
+            }
+        }
+
+        // Phase 3: Give up on app window requirement — return whatever we have.
+        // This is the fallback for edge cases like the home screen where the
+        // launcher may not register as TYPE_APPLICATION on some devices.
+        Log.w(TAG, "No app window found after all retries, returning best-effort capture")
+        val lastCapture = captureAllWindows()
+        if (lastCapture.elements.isNotEmpty()) {
+            lastScreenTree.value = lastCapture.elements
+            return lastCapture.elements
+        }
+
+        // Final fallback: rootInActiveWindow
+        val root = rootInActiveWindow
+        if (root != null) {
+            try {
+                val fallback = ScreenTreeBuilder.capture(root)
+                if (fallback.isNotEmpty()) {
+                    lastScreenTree.value = fallback
+                    return fallback
+                }
+            } finally {
+                root.recycle()
+            }
+        }
+
+        Log.w(TAG, "rootInActiveWindow null or empty after all retries")
         return emptyList()
     }
+
+    /** Result of captureAllWindows — includes whether any app window contributed elements */
+    private data class CaptureResult(
+        val elements: List<UIElement>,
+        val hasAppWindow: Boolean
+    )
+
+    /** System UI packages whose elements alone don't constitute a valid capture.
+     *  When the screen only contains elements from these packages, the app
+     *  window likely hasn't rendered yet and we should retry. */
+    private val systemUiPackages = setOf(
+        "com.android.systemui",
+        "com.android.launcher",
+        "com.sec.android.app.launcher",        // Samsung launcher (older)
+        "com.samsung.android.app.launcher",    // Samsung launcher (newer)
+        "com.google.android.apps.nexuslauncher", // Pixel launcher
+        "com.huawei.android.launcher",         // Huawei launcher
+    )
 
     /**
      * Walk ALL accessible windows (application, system, input method, etc.)
      * and merge their element trees. This captures bottom nav bars, dialogs,
      * and other UI layers that rootInActiveWindow alone would miss.
+     *
+     * Returns a CaptureResult that also indicates whether any TYPE_APPLICATION
+     * window contributed elements. When only system windows are captured (status
+     * bar, nav bar), the caller should retry — the app window likely hasn't
+     * rendered its accessibility tree yet after a transition.
      */
-    private fun captureAllWindows(): List<UIElement> {
+    private fun captureAllWindows(): CaptureResult {
         val allElements = mutableListOf<UIElement>()
+        var hasAppWindow = false
         try {
-            val allWindows = windows ?: return emptyList()
+            val allWindows = windows ?: return CaptureResult(emptyList(), false)
             Log.d(TAG, "captureAllWindows: ${allWindows.size} windows")
             for (window in allWindows) {
                 // Skip input method windows (keyboard) to reduce noise
@@ -331,6 +397,13 @@ class DroidClawAccessibilityService : AccessibilityService() {
                     val windowElements = ScreenTreeBuilder.capture(root)
                     Log.d(TAG, "  window pkg=$windowPkg type=$windowType layer=$windowLayer -> ${windowElements.size} elements")
                     allElements.addAll(windowElements)
+
+                    // Track if a real application window contributed elements
+                    if (windowType == AccessibilityWindowInfo.TYPE_APPLICATION &&
+                        windowElements.isNotEmpty() &&
+                        windowPkg !in systemUiPackages) {
+                        hasAppWindow = true
+                    }
                 } finally {
                     root.recycle()
                 }
@@ -338,7 +411,7 @@ class DroidClawAccessibilityService : AccessibilityService() {
         } catch (e: Exception) {
             Log.w(TAG, "captureAllWindows failed: ${e.message}")
         }
-        return allElements
+        return CaptureResult(allElements, hasAppWindow)
     }
 
     fun findNodeAt(x: Int, y: Int): AccessibilityNodeInfo? {
