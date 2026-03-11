@@ -72,7 +72,7 @@
 	</Card.Header>
 	<Card.Content>
 		{#if loading}
-			<div class="grid gap-3 sm:grid-cols-2">
+			<div class="grid gap-3 grid-cols-1">
 				{#each [1, 2] as _}
 					<div class="space-y-2 rounded-xl border border-stone-200 p-4">
 						<Skeleton class="h-3.5 w-32" />
@@ -89,7 +89,7 @@
 				</p>
 			</div>
 		{:else}
-			<div class="grid gap-3 sm:grid-cols-2">
+			<div class="grid gap-3 grid-cols-1">
 				{#each flows as flow (flow.id)}
 					{#if runningFlowId === flow.id}
 						<!-- Ghost placeholder — card is lifted into pipeline -->
