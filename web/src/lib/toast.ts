@@ -4,9 +4,9 @@ import IconToast from '$lib/components/IconToast.svelte';
 const toastDefaults = {
 	unstyled: true,
 	classes: {
-		toast: 'flex items-center gap-3 bg-neutral-900 text-white px-4 py-3 rounded-xl shadow-lg min-w-[300px]',
+		toast: 'flex items-center gap-3 bg-stone-900 text-white px-4 py-3 rounded-xl shadow-lg min-w-[300px]',
 		title: 'text-sm font-medium',
-		description: 'text-xs text-neutral-400'
+		description: 'text-xs text-stone-400'
 	}
 } as const;
 

@@ -82,7 +82,7 @@
 
 <!-- Workflow Builder Dialog -->
 <Dialog.Root bind:open={showBuilder}>
-	<Dialog.Content class="max-h-[85vh] max-w-2xl overflow-y-auto p-1 bg-stone-50">
+	<Dialog.Content class="max-h-[85vh] max-w-2xl overflow-y-auto p-4 sm:p-6 bg-white">
 		<WorkflowBuilder
 			disabled={ctx.liveWorkflowRun?.status === 'running'}
 			onsubmit={handleSubmit}

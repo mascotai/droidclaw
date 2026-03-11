@@ -142,7 +142,11 @@
 
 		<main class="flex-1 overflow-auto p-4 md:p-8">
 			<div class="mx-auto max-w-5xl">
-				{@render children?.()}
+				{#key page.url.pathname}
+					<div class="animate-page-enter">
+						{@render children?.()}
+					</div>
+				{/key}
 			</div>
 		</main>
 	</Sidebar.Inset>

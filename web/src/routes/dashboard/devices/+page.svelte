@@ -275,7 +275,7 @@
 
 <!-- Pairing Dialog -->
 <Dialog.Root bind:open={dialogOpen} onOpenChange={(open) => { if (!open) closeModal(); }}>
-	<Dialog.Content class="max-w-md">
+	<Dialog.Content class="max-w-md max-h-[85vh] overflow-y-auto">
 		<Dialog.Header>
 			<Dialog.Title>Pair Your Device</Dialog.Title>
 			<Dialog.Description>
@@ -346,8 +346,8 @@
 			{:else if modalState === 'paired'}
 				<!-- Success state -->
 				<div class="flex flex-col items-center gap-4 py-4">
-					<div class="flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
-						<Icon icon="solar:check-circle-bold-duotone" class="h-6 w-6 text-green-600" />
+					<div class="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100">
+						<Icon icon="solar:check-circle-bold-duotone" class="h-6 w-6 text-emerald-600" />
 					</div>
 					<p class="text-lg font-semibold text-stone-900">Device Paired!</p>
 					<p class="text-sm text-stone-500">Your device is now connected and ready to use.</p>

@@ -8,6 +8,7 @@
 	import { EmptyState } from '$lib/components/shared';
 	import { ConfirmDialog } from '$lib/components/shared';
 	import { TimeAgo } from '$lib/components/shared';
+	import * as Tooltip from '$lib/components/ui/tooltip';
 	import type { CachedFlowEntry } from './types';
 
 	interface Props {
@@ -136,15 +137,19 @@
 										<Icon icon="solar:play-bold" class="h-3 w-3" />
 										Run
 									</Button>
-									<Button
-										variant="ghost"
-										size="icon"
-										onclick={() => confirmDelete(flow.id)}
-										class="h-7 w-7 text-stone-300 hover:text-red-500 opacity-0 group-hover:opacity-100"
-										title="Delete cached flow"
-									>
-										<Icon icon="solar:trash-bin-minimalistic-bold-duotone" class="h-3.5 w-3.5" />
-									</Button>
+									<Tooltip.Root>
+									<Tooltip.Trigger>
+										<Button
+											variant="ghost"
+											size="icon"
+											onclick={() => confirmDelete(flow.id)}
+											class="h-7 w-7 text-stone-300 hover:text-red-500 sm:opacity-0 sm:group-hover:opacity-100"
+										>
+											<Icon icon="solar:trash-bin-minimalistic-bold-duotone" class="h-3.5 w-3.5" />
+										</Button>
+									</Tooltip.Trigger>
+									<Tooltip.Content>Delete cached flow</Tooltip.Content>
+								</Tooltip.Root>
 								</div>
 							</Card.Content>
 						</Card.Root>

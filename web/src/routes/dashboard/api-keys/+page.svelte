@@ -5,6 +5,7 @@
 	import { track } from '$lib/analytics/track';
 	import { APIKEY_CREATE, APIKEY_COPY, APIKEY_DELETE } from '$lib/analytics/events';
 	import * as Card from '$lib/components/ui/card';
+	import * as Dialog from '$lib/components/ui/dialog';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
@@ -13,11 +14,26 @@
 	import { Separator } from '$lib/components/ui/separator';
 	import { EmptyState } from '$lib/components/shared';
 	import { Skeleton } from '$lib/components/ui/skeleton';
+	import * as ToggleGroup from '$lib/components/ui/toggle-group';
+	import * as Tooltip from '$lib/components/ui/tooltip';
+	import { Spinner } from '$lib/components/ui/spinner';
 
 	let newKeyValue = $state<string | null>(null);
 	let keysPromise = $state(listKeys());
 	let showUsage = $state(false);
-	let confirmingDelete = $state<string | null>(null);
+	let submitting = $state(false);
+
+	// Delete confirmation state
+	let deleteConfirmOpen = $state(false);
+	let deleteKeyId = $state<string | null>(null);
+
+	// ToggleGroup key type state
+	let keyType = $state('user');
+
+	function confirmDelete(id: string) {
+		deleteKeyId = id;
+		deleteConfirmOpen = true;
+	}
 </script>
 
 <h2 class="mb-2 text-xl font-bold md:text-2xl">API Keys</h2>
@@ -33,11 +49,16 @@
 	<Card.Content>
 		<form
 			{...createKey.enhance(async ({ submit }) => {
-				await submit().updates(listKeys());
-				newKeyValue = createKey.result?.key ?? null;
-				keysPromise = listKeys();
-				toast.success('API key created');
-				track(APIKEY_CREATE);
+				submitting = true;
+				try {
+					await submit().updates(listKeys());
+					newKeyValue = createKey.result?.key ?? null;
+					keysPromise = listKeys();
+					toast.success('API key created');
+					track(APIKEY_CREATE);
+				} finally {
+					submitting = false;
+				}
 			})}
 			class="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-4"
 		>
@@ -54,25 +75,30 @@
 			</div>
 			<div class="flex flex-col gap-1.5">
 				<Label>Type</Label>
-				<div class="flex gap-1 rounded-lg border border-stone-200 bg-stone-50 p-0.5">
-					<label class="flex-1">
-						<input {...createKey.fields.type.as('radio')} value="user" class="peer sr-only" checked />
-						<span class="flex cursor-pointer items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium text-stone-500 transition-colors peer-checked:bg-white peer-checked:text-violet-700 peer-checked:shadow-sm">
-							<Icon icon="solar:user-bold-duotone" class="h-3.5 w-3.5" />
-							User
-						</span>
-					</label>
-					<label class="flex-1">
-						<input {...createKey.fields.type.as('radio')} value="device" class="peer sr-only" />
-						<span class="flex cursor-pointer items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium text-stone-500 transition-colors peer-checked:bg-white peer-checked:text-blue-700 peer-checked:shadow-sm">
-							<Icon icon="solar:smartphone-bold-duotone" class="h-3.5 w-3.5" />
-							Device
-						</span>
-					</label>
-				</div>
+				<ToggleGroup.Root
+					type="single"
+					value={keyType}
+					onValueChange={(v) => { if (v) keyType = v; }}
+					variant="outline"
+					class="rounded-lg border border-stone-200 bg-stone-50 p-0.5"
+				>
+					<ToggleGroup.Item value="user" class="gap-1.5 text-xs data-[state=on]:bg-white data-[state=on]:text-violet-700 data-[state=on]:shadow-sm">
+						<Icon icon="solar:user-bold-duotone" class="h-3.5 w-3.5" />
+						User
+					</ToggleGroup.Item>
+					<ToggleGroup.Item value="device" class="gap-1.5 text-xs data-[state=on]:bg-white data-[state=on]:text-blue-700 data-[state=on]:shadow-sm">
+						<Icon icon="solar:smartphone-bold-duotone" class="h-3.5 w-3.5" />
+						Device
+					</ToggleGroup.Item>
+				</ToggleGroup.Root>
+				<input type="hidden" {...createKey.fields.type.as('text')} value={keyType} />
 			</div>
-			<Button type="submit" class="gap-2">
-				<Icon icon="solar:add-circle-bold-duotone" class="h-4 w-4" />
+			<Button type="submit" class="gap-2" disabled={submitting}>
+				{#if submitting}
+					<Spinner class="h-4 w-4" />
+				{:else}
+					<Icon icon="solar:add-circle-bold-duotone" class="h-4 w-4" />
+				{/if}
 				Create
 			</Button>
 		</form>
@@ -91,19 +117,24 @@
 			<code class="flex-1 rounded-lg bg-amber-100 px-3 py-2 font-mono text-sm break-all">
 				{newKeyValue}
 			</code>
-			<Button
-				variant="outline"
-				size="sm"
-				onclick={() => {
-					navigator.clipboard.writeText(newKeyValue!);
-					toast.success('Copied to clipboard');
-					track(APIKEY_COPY);
-				}}
-				class="shrink-0 gap-1.5 border-amber-300 text-amber-800 hover:bg-amber-100"
-			>
-				<Icon icon="solar:copy-bold-duotone" class="h-4 w-4" />
-				Copy
-			</Button>
+			<Tooltip.Root>
+				<Tooltip.Trigger>
+					<Button
+						variant="outline"
+						size="sm"
+						onclick={() => {
+							navigator.clipboard.writeText(newKeyValue!);
+							toast.success('Copied to clipboard');
+							track(APIKEY_COPY);
+						}}
+						class="shrink-0 gap-1.5 border-amber-300 text-amber-800 hover:bg-amber-100"
+					>
+						<Icon icon="solar:copy-bold-duotone" class="h-4 w-4" />
+						Copy
+					</Button>
+				</Tooltip.Trigger>
+				<Tooltip.Content>Copy API key</Tooltip.Content>
+			</Tooltip.Root>
 		</div>
 
 		<!-- Usage example -->
@@ -116,12 +147,30 @@
 		</button>
 
 		{#if showUsage}
-			<div class="mt-3 rounded-lg bg-stone-900 p-4 text-sm">
-				<p class="mb-2 text-stone-400"># Run a workflow with Bearer auth</p>
-				<pre class="overflow-x-auto text-stone-100"><code>curl -X POST https://droidclaw.stack.mascott.ai/workflows/run \
+			<div class="mt-3 overflow-hidden rounded-lg bg-stone-900">
+				<div class="flex items-center justify-between border-b border-stone-700 px-4 py-2">
+					<span class="text-xs font-medium text-stone-400">bash</span>
+					<Button
+						variant="ghost"
+						size="sm"
+						onclick={() => {
+							const code = `curl -X POST https://droidclaw.stack.mascott.ai/workflows/run \\\n  -H "Content-Type: application/json" \\\n  -H "Authorization: Bearer ${newKeyValue}" \\\n  -d '${JSON.stringify({ deviceId: '<your-device-id>', name: 'My Workflow', steps: [{ app: 'com.example.app', goal: 'Open the app', maxSteps: 10 }] }, null, 2)}'`;
+							navigator.clipboard.writeText(code);
+							toast.success('Code copied');
+						}}
+						class="h-6 gap-1 text-stone-400 hover:text-white hover:bg-stone-700"
+					>
+						<Icon icon="solar:copy-bold-duotone" class="h-3 w-3" />
+						<span class="text-[10px]">Copy</span>
+					</Button>
+				</div>
+				<div class="p-4 text-sm overflow-x-auto">
+					<p class="mb-2 text-stone-400"># Run a workflow with Bearer auth</p>
+					<pre class="text-stone-100"><code>curl -X POST https://droidclaw.stack.mascott.ai/workflows/run \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer {newKeyValue}" \
   -d '{JSON.stringify({ deviceId: '<your-device-id>', name: 'My Workflow', steps: [{ app: 'com.example.app', goal: 'Open the app', maxSteps: 10 }] }, null, 2)}'</code></pre>
+				</div>
 			</div>
 		{/if}
 
@@ -147,8 +196,8 @@
 	<Card.Content class="p-0">
 		{#await keysPromise}
 			<div class="space-y-3 px-6 py-6">
-				{#each [1, 2] as _}
-					<div class="flex items-center gap-3">
+				{#each [1, 2] as _, i}
+					<div class="flex items-center gap-3" style="animation-delay: {i * 150}ms">
 						<Skeleton class="h-9 w-9 rounded-full" />
 						<div class="space-y-1.5">
 							<Skeleton class="h-4 w-32" />
@@ -193,36 +242,20 @@
 							</div>
 						</div>
 						<div class="flex items-center gap-2">
-							{#if confirmingDelete === key.id}
-								<span class="text-xs text-stone-500">Delete?</span>
-								<form
-									{...deleteKey.enhance(async ({ submit }) => {
-										await submit().updates(listKeys());
-										keysPromise = listKeys();
-										confirmingDelete = null;
-										toast.success('API key deleted');
-										track(APIKEY_DELETE);
-									})}
-								>
-									<input type="hidden" name="keyId" value={key.id} />
-									<Button type="submit" variant="ghost" size="sm" class="text-red-600 hover:bg-red-50">
-										Yes
+							<Tooltip.Root>
+								<Tooltip.Trigger>
+									<Button
+										variant="ghost"
+										size="sm"
+										onclick={() => confirmDelete(key.id)}
+										class="gap-1.5 text-red-500 hover:bg-red-50 hover:text-red-600"
+									>
+										<Icon icon="solar:trash-bin-trash-bold-duotone" class="h-4 w-4" />
+										<span class="hidden sm:inline">Delete</span>
 									</Button>
-								</form>
-								<Button variant="ghost" size="sm" onclick={() => (confirmingDelete = null)}>
-									No
-								</Button>
-							{:else}
-								<Button
-									variant="ghost"
-									size="sm"
-									onclick={() => (confirmingDelete = key.id)}
-									class="gap-1.5 text-red-500 hover:bg-red-50 hover:text-red-600"
-								>
-									<Icon icon="solar:trash-bin-trash-bold-duotone" class="h-4 w-4" />
-									<span class="hidden sm:inline">Delete</span>
-								</Button>
-							{/if}
+								</Tooltip.Trigger>
+								<Tooltip.Content>Delete key</Tooltip.Content>
+							</Tooltip.Root>
 						</div>
 					</div>
 				{/each}
@@ -243,3 +276,35 @@
 		{/await}
 	</Card.Content>
 </Card.Root>
+
+<!-- Delete confirmation dialog -->
+<Dialog.Root bind:open={deleteConfirmOpen} onOpenChange={(open) => { if (!open) deleteKeyId = null; }}>
+	<Dialog.Content class="max-w-md">
+		<Dialog.Header>
+			<Dialog.Title>Delete API key?</Dialog.Title>
+			<Dialog.Description>This action cannot be undone. Any scripts or integrations using this key will stop working.</Dialog.Description>
+		</Dialog.Header>
+		<Dialog.Footer class="flex gap-2 pt-4">
+			<Button variant="outline" onclick={() => { deleteConfirmOpen = false; deleteKeyId = null; }}>
+				Cancel
+			</Button>
+			{#if deleteKeyId}
+				<form
+					{...deleteKey.enhance(async ({ submit }) => {
+						await submit().updates(listKeys());
+						keysPromise = listKeys();
+						deleteConfirmOpen = false;
+						deleteKeyId = null;
+						toast.success('API key deleted');
+						track(APIKEY_DELETE);
+					})}
+				>
+					<input type="hidden" name="keyId" value={deleteKeyId} />
+					<Button type="submit" variant="destructive">
+						Delete
+					</Button>
+				</form>
+			{/if}
+		</Dialog.Footer>
+	</Dialog.Content>
+</Dialog.Root>

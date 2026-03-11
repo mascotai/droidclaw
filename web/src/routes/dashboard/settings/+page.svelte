@@ -1,16 +1,19 @@
 <script lang="ts">
 	import { getConfig, updateConfig } from '$lib/api/settings.remote';
+	import { signout } from '$lib/api/auth.remote';
 	import { page } from '$app/state';
 	import Icon from '@iconify/svelte';
 	import { toast } from '$lib/toast';
 	import { track } from '$lib/analytics/track';
-	import { SETTINGS_SAVE } from '$lib/analytics/events';
+	import { SETTINGS_SAVE, AUTH_SIGNOUT } from '$lib/analytics/events';
 	import * as Card from '$lib/components/ui/card';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Separator } from '$lib/components/ui/separator';
+	import * as Select from '$lib/components/ui/select';
+	import { Spinner } from '$lib/components/ui/spinner';
 
 	const PROVIDER_MODELS: Record<string, { id: string; label: string; recommended?: boolean }[]> = {
 		openai: [
@@ -45,6 +48,14 @@
 		bedrock: [],
 	};
 
+	const PROVIDERS = [
+		{ id: 'openai', label: 'OpenAI' },
+		{ id: 'groq', label: 'Groq' },
+		{ id: 'ollama', label: 'Ollama' },
+		{ id: 'bedrock', label: 'AWS Bedrock' },
+		{ id: 'openrouter', label: 'OpenRouter' },
+	];
+
 	function getModels(provider: string) {
 		return PROVIDER_MODELS[provider] ?? [];
 	}
@@ -57,6 +68,7 @@
 	const initialConfig = await getConfig();
 	let config = $state(initialConfig);
 	const layoutData = page.data;
+	let submitting = $state(false);
 
 	// Compute initial values from the saved config (non-reactive, one-time)
 	const initProvider = initialConfig?.provider ?? 'openai';
@@ -69,16 +81,14 @@
 	let useCustomModel = $state(initIsCustom);
 	let selectedModel = $state(initModel || getDefaultModel(initProvider));
 
-	function handleProviderChange(e: Event) {
-		const provider = (e.target as HTMLSelectElement).value;
-		selectedProvider = provider;
+	function handleProviderChange(value: string) {
+		selectedProvider = value;
 		useCustomModel = false;
 		customModel = '';
-		selectedModel = getDefaultModel(provider);
+		selectedModel = getDefaultModel(value);
 	}
 
-	function handleModelChange(e: Event) {
-		const value = (e.target as HTMLSelectElement).value;
+	function handleModelChange(value: string) {
 		if (value === '__custom__') {
 			useCustomModel = true;
 			selectedModel = customModel;
@@ -131,27 +141,35 @@
 	<Card.Content>
 		<form
 			{...updateConfig.enhance(async ({ submit }) => {
-				await submit().updates(getConfig());
-				config = await getConfig();
-				toast.success('Settings saved');
-				track(SETTINGS_SAVE);
+				submitting = true;
+				try {
+					await submit().updates(getConfig());
+					config = await getConfig();
+					toast.success('Settings saved');
+					track(SETTINGS_SAVE);
+				} finally {
+					submitting = false;
+				}
 			})}
 			class="space-y-4"
 		>
 			<div class="space-y-2">
 				<Label for="provider">Provider</Label>
-				<select
-					{...updateConfig.fields.provider.as('text')}
-					id="provider"
-					onchange={handleProviderChange}
-					class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+				<Select.Root
+					type="single"
+					value={selectedProvider}
+					onValueChange={(value) => { if (value) handleProviderChange(value); }}
 				>
-					<option value="openai">OpenAI</option>
-					<option value="groq">Groq</option>
-					<option value="ollama">Ollama</option>
-					<option value="bedrock">AWS Bedrock</option>
-					<option value="openrouter">OpenRouter</option>
-				</select>
+					<Select.Trigger class="w-full">
+						{PROVIDERS.find((p) => p.id === selectedProvider)?.label ?? 'Select provider'}
+					</Select.Trigger>
+					<Select.Content>
+						{#each PROVIDERS as provider}
+							<Select.Item value={provider.id} label={provider.label} />
+						{/each}
+					</Select.Content>
+				</Select.Root>
+				<input type="hidden" {...updateConfig.fields.provider.as('text')} value={selectedProvider} />
 				{#each updateConfig.fields.provider.issues() ?? [] as issue (issue.message)}
 					<p class="text-sm text-red-600">{issue.message}</p>
 				{/each}
@@ -172,19 +190,26 @@
 			<div class="space-y-2">
 				<Label for="model">Model</Label>
 				{#if getModels(selectedProvider).length > 0}
-					<select
-						id="model"
-						onchange={handleModelChange}
+					<Select.Root
+						type="single"
 						value={useCustomModel ? '__custom__' : selectedModel}
-						class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+						onValueChange={(value) => { if (value) handleModelChange(value); }}
 					>
-						{#each getModels(selectedProvider) as model}
-							<option value={model.id}>
-								{model.label}{model.recommended ? ' (Recommended)' : ''}
-							</option>
-						{/each}
-						<option value="__custom__">Custom model ID...</option>
-					</select>
+						<Select.Trigger class="w-full">
+							{#if useCustomModel}
+								Custom model ID...
+							{:else}
+								{@const current = getModels(selectedProvider).find((m) => m.id === selectedModel)}
+								{current ? `${current.label}${current.recommended ? ' (Recommended)' : ''}` : selectedModel || 'Select model'}
+							{/if}
+						</Select.Trigger>
+						<Select.Content>
+							{#each getModels(selectedProvider) as model}
+								<Select.Item value={model.id} label="{model.label}{model.recommended ? ' (Recommended)' : ''}" />
+							{/each}
+							<Select.Item value="__custom__" label="Custom model ID..." />
+						</Select.Content>
+					</Select.Root>
 					{#if useCustomModel}
 						<Input
 							bind:value={customModel}
@@ -201,8 +226,12 @@
 				<input type="hidden" name="model" value={selectedModel} />
 			</div>
 
-			<Button type="submit" class="gap-2">
-				<Icon icon="solar:diskette-bold-duotone" class="h-4 w-4" />
+			<Button type="submit" class="gap-2" disabled={submitting}>
+				{#if submitting}
+					<Spinner class="h-4 w-4" />
+				{:else}
+					<Icon icon="solar:diskette-bold-duotone" class="h-4 w-4" />
+				{/if}
 				Save
 			</Button>
 		</form>
@@ -217,3 +246,17 @@
 	</Card.Content>
 </Card.Root>
 
+<!-- Mobile sign out (sidebar hidden on mobile) -->
+<div class="mt-8 md:hidden">
+	<form {...signout}>
+		<Button
+			type="submit"
+			variant="outline"
+			class="w-full gap-2"
+			data-umami-event={AUTH_SIGNOUT}
+		>
+			<Icon icon="solar:logout-2-bold-duotone" class="h-4 w-4" />
+			Sign out
+		</Button>
+	</form>
+</div>

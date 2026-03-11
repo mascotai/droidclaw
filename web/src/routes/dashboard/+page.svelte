@@ -29,7 +29,7 @@
 			icon: 'solar:settings-bold-duotone',
 			title: 'Settings',
 			desc: 'Configure LLM provider',
-			color: 'bg-purple-100 text-purple-600'
+			color: 'bg-violet-100 text-violet-600'
 		}
 	];
 
@@ -114,7 +114,7 @@
 						<h3 class="text-sm font-semibold {step.done ? 'text-stone-400 line-through' : 'text-stone-900'}">{step.label}</h3>
 						<p class="mt-0.5 text-xs text-stone-400">{step.desc}</p>
 					</div>
-					<Icon icon="solar:alt-arrow-right-linear" class="h-5 w-5 text-stone-300" />
+					<Icon icon="solar:alt-arrow-right-linear" class="h-4 w-4 text-stone-300" />
 				</a>
 			{/each}
 		</Card.Root>
@@ -127,7 +127,7 @@
 			href={card.href}
 			data-umami-event={DASHBOARD_CARD_CLICK}
 			data-umami-event-section={card.title.toLowerCase().replace(' ', '-')}
-			class="flex items-center gap-4 p-5 transition-colors hover:bg-stone-50/80
+			class="flex items-center gap-4 p-5 transition-all duration-200 hover:bg-stone-50/80
 				{i > 0 ? 'border-t border-stone-100' : ''}
 				{i === 0 ? 'rounded-t-2xl' : ''}
 				{i === cards.length - 1 ? 'rounded-b-2xl' : ''}"
@@ -139,7 +139,7 @@
 				<h3 class="font-semibold text-stone-900">{card.title}</h3>
 				<p class="mt-0.5 text-sm text-stone-500">{card.desc}</p>
 			</div>
-			<Icon icon="solar:alt-arrow-right-linear" class="h-5 w-5 text-stone-300" />
+			<Icon icon="solar:alt-arrow-right-linear" class="h-4 w-4 text-stone-300" />
 		</a>
 	{/each}
 </Card.Root>

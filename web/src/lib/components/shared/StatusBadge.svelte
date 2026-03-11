@@ -103,7 +103,7 @@
 	const sizeClass = $derived(size === 'sm' ? 'text-[10px] px-1.5 py-0' : 'text-xs px-2.5 py-0.5');
 </script>
 
-<Badge variant={config.variant} class="inline-flex items-center gap-1.5 font-medium {config.colorClass} {sizeClass} {cls}">
+<Badge variant={config.variant} class="inline-flex items-center gap-1.5 font-medium transition-colors duration-300 {config.colorClass} {sizeClass} {cls}">
 	{#if showPulse}
 		<span class="relative flex h-1.5 w-1.5">
 			<span class="absolute inline-flex h-full w-full animate-ping rounded-full {config.dotClass} opacity-60"></span>
