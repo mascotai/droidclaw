@@ -289,6 +289,13 @@ function compileAction(
     case "launch":
       return { launch: String(action.package ?? "") };
 
+    // ── find_and_tap: compile to a regular tap with the query as target ──
+    case "find_and_tap": {
+      const query = action.query as string | undefined;
+      if (!query) return null;
+      return { tap: query };
+    }
+
     // ── Dismiss popup (soft — replayed as optional tap) ──
     case "dismiss_popup": {
       const query = action.query as string | undefined;
