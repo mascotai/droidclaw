@@ -31,7 +31,8 @@ data class ScreenResponse(
     val screenHash: String? = null,
     val screenshot: String? = null,
     val packageName: String? = null,
-    val activityName: String? = null
+    val activityName: String? = null,
+    val hasAppWindow: Boolean = true
 )
 
 @Serializable

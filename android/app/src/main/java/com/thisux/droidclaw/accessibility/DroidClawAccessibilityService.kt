@@ -252,7 +252,13 @@ class DroidClawAccessibilityService : AccessibilityService() {
         return false
     }
 
-    fun getScreenTree(): List<UIElement> {
+    /** Result of getScreenTree — includes whether any app window contributed elements */
+    data class ScreenTreeResult(
+        val elements: List<UIElement>,
+        val hasAppWindow: Boolean
+    )
+
+    fun getScreenTree(): ScreenTreeResult {
         // ── Clean the screen before capturing ──
         // Dismiss keyboard — it shifts element positions, making coordinate-based
         // taps unreliable for the agent.
@@ -277,7 +283,7 @@ class DroidClawAccessibilityService : AccessibilityService() {
             val capture = captureAllWindows()
             if (capture.elements.isNotEmpty() && capture.hasAppWindow) {
                 lastScreenTree.value = capture.elements
-                return capture.elements
+                return ScreenTreeResult(capture.elements, true)
             }
             // Fallback: try rootInActiveWindow (in case windows API fails)
             val root = rootInActiveWindow
@@ -288,7 +294,7 @@ class DroidClawAccessibilityService : AccessibilityService() {
                     val fallback = ScreenTreeBuilder.capture(root)
                     if (fallback.isNotEmpty() && isAppRoot) {
                         lastScreenTree.value = fallback
-                        return fallback
+                        return ScreenTreeResult(fallback, true)
                     }
                 } finally {
                     root.recycle()
@@ -308,7 +314,7 @@ class DroidClawAccessibilityService : AccessibilityService() {
             if (capture.elements.isNotEmpty() && capture.hasAppWindow) {
                 Log.i(TAG, "App window found after extended retry")
                 lastScreenTree.value = capture.elements
-                return capture.elements
+                return ScreenTreeResult(capture.elements, true)
             }
         }
 
@@ -319,7 +325,7 @@ class DroidClawAccessibilityService : AccessibilityService() {
         val lastCapture = captureAllWindows()
         if (lastCapture.elements.isNotEmpty()) {
             lastScreenTree.value = lastCapture.elements
-            return lastCapture.elements
+            return ScreenTreeResult(lastCapture.elements, false)
         }
 
         // Final fallback: rootInActiveWindow
@@ -329,7 +335,7 @@ class DroidClawAccessibilityService : AccessibilityService() {
                 val fallback = ScreenTreeBuilder.capture(root)
                 if (fallback.isNotEmpty()) {
                     lastScreenTree.value = fallback
-                    return fallback
+                    return ScreenTreeResult(fallback, false)
                 }
             } finally {
                 root.recycle()
@@ -337,7 +343,7 @@ class DroidClawAccessibilityService : AccessibilityService() {
         }
 
         Log.w(TAG, "rootInActiveWindow null or empty after all retries")
-        return emptyList()
+        return ScreenTreeResult(emptyList(), false)
     }
 
     /** Result of captureAllWindows — includes whether any app window contributed elements */

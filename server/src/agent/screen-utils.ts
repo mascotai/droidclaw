@@ -6,6 +6,9 @@
  * system UI elements — notification labels, status bar, nav bar — instead
  * of the actual app content.
  *
+ * Detection uses the `hasAppWindow` flag from the Android side (preferred)
+ * with a text-based heuristic fallback for older APK versions.
+ *
  * This module provides:
  *   isSystemOnlyScreen() — detect system-only captures
  *   getScreenWithRetry() — retry get_screen when system-only is detected
@@ -23,11 +26,20 @@ interface ScreenElement {
  * Detect if a screen capture contains only system UI elements
  * (notification shade, status bar) and no actual app content.
  *
- * Heuristic: If ALL text-bearing elements contain "notification"
- * (case-insensitive) and there are no editable fields, the screen
- * is system-only.
+ * Uses `hasAppWindow` from the Android response when available (v1.0.88+).
+ * Falls back to a text heuristic for older APK versions.
  */
-export function isSystemOnlyScreen(elements: ScreenElement[]): boolean {
+export function isSystemOnlyScreen(
+  elements: ScreenElement[],
+  hasAppWindow?: boolean
+): boolean {
+  // Preferred: use the Android-side flag (accurate, based on window type)
+  if (hasAppWindow === false && elements.length > 0) return true;
+  if (hasAppWindow === true) return false;
+
+  // Fallback heuristic for older APK versions that don't send hasAppWindow:
+  // If ALL text-bearing elements contain "notification" and there are no
+  // editable fields, the screen is system-only.
   const textElements = elements.filter((el) => el.text?.trim());
   if (textElements.length === 0) return false; // empty = different problem
   const allNotifications = textElements.every((el) =>
@@ -50,6 +62,7 @@ export async function getScreenWithRetry(
   packageName?: string;
   activityName?: string;
   screenshot?: string;
+  hasAppWindow?: boolean;
 }> {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const res = (await sessions.sendCommand(deviceId, {
@@ -57,18 +70,19 @@ export async function getScreenWithRetry(
     })) as any;
     const elements = res?.elements ?? [];
 
-    if (!isSystemOnlyScreen(elements)) {
+    if (!isSystemOnlyScreen(elements, res?.hasAppWindow)) {
       return {
         elements,
         packageName: res?.packageName,
         activityName: res?.activityName,
         screenshot: res?.screenshot,
+        hasAppWindow: res?.hasAppWindow,
       };
     }
 
     if (attempt < maxRetries) {
       console.log(
-        `[screen-utils] System-only screen detected (${elements.length} elements), retrying in ${delayMs}ms (${attempt + 1}/${maxRetries})`
+        `[screen-utils] System-only screen detected (${elements.length} elements, hasAppWindow=${res?.hasAppWindow}), retrying in ${delayMs}ms (${attempt + 1}/${maxRetries})`
       );
       await new Promise((r) => setTimeout(r, delayMs));
     }
@@ -86,5 +100,6 @@ export async function getScreenWithRetry(
     packageName: finalRes?.packageName,
     activityName: finalRes?.activityName,
     screenshot: finalRes?.screenshot,
+    hasAppWindow: finalRes?.hasAppWindow,
   };
 }
