@@ -1,13 +1,12 @@
-import { Menu, LogOut, User as UserIcon } from 'lucide-react';
+import { Menu, User as UserIcon } from 'lucide-react';
 import { useWebSocketStore } from '@/stores/websocket';
 
 interface HeaderProps {
 	user: { name: string; email: string; id: string };
 	onMenuClick: () => void;
-	onSignOut: () => void;
 }
 
-export function Header({ user, onMenuClick, onSignOut }: HeaderProps) {
+export function Header({ user, onMenuClick }: HeaderProps) {
 	const wsConnected = useWebSocketStore((s) => s.connected);
 
 	return (
@@ -42,16 +41,6 @@ export function Header({ user, onMenuClick, onSignOut }: HeaderProps) {
 						<p className="text-xs text-stone-500">{user.email}</p>
 					</div>
 				</div>
-
-				{/* Sign out */}
-				<button
-					onClick={onSignOut}
-					className="rounded-md p-1.5 text-stone-400 hover:text-stone-600"
-					title="Sign out"
-					data-umami-event="auth-signout"
-				>
-					<LogOut className="h-4 w-4" />
-				</button>
 			</div>
 		</header>
 	);

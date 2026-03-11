@@ -4,6 +4,7 @@ import type { AgentStep } from '@/lib/api';
 import { useCallback, useState } from 'react';
 import { useWsSubscription } from '@/hooks/use-websocket';
 import type { WsMessage, StepEvent, GoalCompletedEvent } from '@/stores/websocket';
+import type { LiveAgentStep } from '@/types/devices';
 import {
 	Send,
 	Square,
@@ -15,6 +16,8 @@ import {
 	Loader2,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+import { LiveAgentSteps } from '@/components/goals/live-agent-steps';
+import { ActionBadge } from '@/components/shared';
 import { track } from '@/lib/analytics/track';
 import { DEVICE_GOAL_SUBMIT, DEVICE_GOAL_STOP } from '@/lib/analytics/events';
 
@@ -26,7 +29,7 @@ interface GoalsTabProps {
 export function GoalsTab({ deviceId, onGoalStarted }: GoalsTabProps) {
 	const queryClient = useQueryClient();
 	const [goal, setGoal] = useState('');
-	const [liveSteps, setLiveSteps] = useState<StepEvent[]>([]);
+	const [liveSteps, setLiveSteps] = useState<LiveAgentStep[]>([]);
 	const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
 	const [expandedSession, setExpandedSession] = useState<string | null>(null);
 	const [page, setPage] = useState(1);
@@ -55,7 +58,7 @@ export function GoalsTab({ deviceId, onGoalStarted }: GoalsTabProps) {
 		},
 	});
 
-	// Live agent steps
+	// Live agent steps via WebSocket
 	useWsSubscription(
 		['step', 'goal_completed'],
 		useCallback(
@@ -63,7 +66,12 @@ export function GoalsTab({ deviceId, onGoalStarted }: GoalsTabProps) {
 				if (msg.type === 'step') {
 					const step = msg as StepEvent;
 					if (step.sessionId === activeSessionId) {
-						setLiveSteps((prev) => [...prev, step]);
+						const liveStep: LiveAgentStep = {
+							step: step.step,
+							action: (step.action as Record<string, unknown>)?.action as string ?? 'unknown',
+							reasoning: step.reasoning,
+						};
+						setLiveSteps((prev) => [...prev, liveStep]);
 					}
 				}
 				if (msg.type === 'goal_completed') {
@@ -134,24 +142,7 @@ export function GoalsTab({ deviceId, onGoalStarted }: GoalsTabProps) {
 						<Loader2 className="h-4 w-4 animate-spin text-violet-600" />
 						<h3 className="text-sm font-semibold text-violet-900">Live progress</h3>
 					</div>
-					<div className="mt-3 space-y-2">
-						{liveSteps.map((step, i) => (
-							<div
-								key={i}
-								className="rounded-lg bg-white px-3 py-2 text-sm shadow-sm"
-							>
-								<div className="flex items-center justify-between">
-									<span className="font-medium text-stone-700">
-										Step {step.step}:{' '}
-										{(step.action as Record<string, unknown>).action as string || 'action'}
-									</span>
-								</div>
-								{step.reasoning && (
-									<p className="mt-1 text-xs text-stone-500">{step.reasoning}</p>
-								)}
-							</div>
-						))}
-					</div>
+					<LiveAgentSteps steps={liveSteps} variant="live" />
 				</div>
 			)}
 
@@ -259,35 +250,34 @@ function SessionRow({
 			{expanded && steps && (
 				<div className="border-t border-stone-100 px-3 py-2">
 					<div className="space-y-1.5">
-						{steps.map((step: AgentStep) => (
-							<StepRow key={step.id} step={step} />
-						))}
+						{steps.map((step: AgentStep) => {
+							const action = step.action as Record<string, unknown> | null;
+							const actionName = action?.action as string || 'unknown';
+
+							return (
+								<div key={step.id} className="flex items-start gap-1.5 rounded bg-stone-50 px-2.5 py-1.5">
+									<span className="mt-0.5 shrink-0 rounded bg-stone-100 px-1 py-0.5 font-mono text-[9px] text-stone-500">
+										{step.stepNumber}
+									</span>
+									<div className="min-w-0 flex-1">
+										<div className="flex items-center gap-1.5">
+											<ActionBadge action={actionName} />
+											{step.durationMs && (
+												<span className="text-[9px] text-stone-300">{Math.round(step.durationMs / 1000)}s</span>
+											)}
+										</div>
+										{step.reasoning && (
+											<p className="mt-0.5 text-xs leading-relaxed text-stone-500">{step.reasoning}</p>
+										)}
+										{step.result && step.result !== 'success' && (
+											<p className="mt-0.5 text-xs text-amber-600">{step.result}</p>
+										)}
+									</div>
+								</div>
+							);
+						})}
 					</div>
 				</div>
-			)}
-		</div>
-	);
-}
-
-function StepRow({ step }: { step: AgentStep }) {
-	const action = step.action as Record<string, unknown> | null;
-	const actionName = action?.action as string || 'unknown';
-
-	return (
-		<div className="rounded bg-stone-50 px-2.5 py-1.5 text-xs">
-			<div className="flex items-center justify-between">
-				<span className="font-medium text-stone-700">
-					{step.stepNumber}. {actionName}
-				</span>
-				{step.durationMs && (
-					<span className="text-stone-400">{step.durationMs}ms</span>
-				)}
-			</div>
-			{step.reasoning && (
-				<p className="mt-0.5 text-stone-500">{step.reasoning}</p>
-			)}
-			{step.result && step.result !== 'success' && (
-				<p className="mt-0.5 text-amber-600">{step.result}</p>
 			)}
 		</div>
 	);

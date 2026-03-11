@@ -23,8 +23,8 @@ jobs:
             context: .
             dockerfile: Dockerfile.server
           - service: droidclaw-web
-            context: ./web
-            dockerfile: web/Dockerfile
+            context: ./web-react
+            dockerfile: web-react/Dockerfile
     steps:
       - uses: actions/checkout@v4
 

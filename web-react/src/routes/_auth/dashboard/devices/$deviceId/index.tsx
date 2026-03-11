@@ -1,17 +1,22 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod/v4';
+import { useCallback, useMemo, useState } from 'react';
 import { api } from '@/lib/api';
+import type { WorkflowRun, WorkflowLiveProgress, Step } from '@/types/devices';
+import type { WsMessage, WorkflowStepDoneEvent, WorkflowCompletedEvent } from '@/stores/websocket';
+import { useWsSubscription } from '@/hooks/use-websocket';
 import { DeviceHeader } from '@/components/devices/device-header';
 import { OverviewTab } from '@/components/devices/overview-tab';
 import { GoalsTab } from '@/components/goals/goals-tab';
 import { WorkflowsTab } from '@/components/workflows/workflows-tab';
 import { RunTab } from '@/components/workflows/run-tab';
+import { UnifiedLog } from '@/components/workflows/unified-log';
 import { track } from '@/lib/analytics/track';
 import { DEVICE_TAB_CHANGE } from '@/lib/analytics/events';
 
 const searchSchema = z.object({
-	tab: z.enum(['overview', 'goals', 'workflows', 'run']).default('overview'),
+	tab: z.enum(['overview', 'goals', 'workflows', 'run', 'log']).default('overview'),
 	runId: z.string().optional(),
 });
 
@@ -24,6 +29,7 @@ function DeviceDetailPage() {
 	const { deviceId } = Route.useParams();
 	const { tab } = Route.useSearch();
 	const navigate = useNavigate();
+	const queryClient = useQueryClient();
 
 	const { data: device, isLoading: deviceLoading } = useQuery({
 		queryKey: ['device', deviceId],
@@ -36,7 +42,82 @@ function DeviceDetailPage() {
 		queryFn: () => api.getDeviceStats(deviceId),
 	});
 
-	function setTab(newTab: 'overview' | 'goals' | 'workflows' | 'run') {
+	// ── Log tab data ──
+
+	const [logPage, setLogPage] = useState(1);
+
+	const { data: logRunsData, isLoading: logRunsLoading } = useQuery({
+		queryKey: ['workflowRuns', deviceId, logPage],
+		queryFn: () => api.listWorkflowRuns(deviceId, logPage),
+		enabled: tab === 'log',
+		refetchInterval: tab === 'log' ? 10000 : false,
+	});
+
+	const logRuns = useMemo(
+		() => (logRunsData?.items as WorkflowRun[] | undefined) ?? [],
+		[logRunsData],
+	);
+
+	const logTotalPages = useMemo(
+		() => (logRunsData ? Math.ceil(logRunsData.total / 20) : 1),
+		[logRunsData],
+	);
+
+	// Track live workflow progress for the log tab
+	const [liveProgress, setLiveProgress] = useState<Record<string, WorkflowLiveProgress>>({});
+
+	useWsSubscription(
+		['workflow_step_done', 'workflow_completed'],
+		useCallback(
+			(msg: WsMessage) => {
+				if (tab !== 'log') return;
+
+				if (msg.type === 'workflow_step_done') {
+					const evt = msg as WorkflowStepDoneEvent;
+					setLiveProgress((prev) => ({
+						...prev,
+						[evt.runId]: {
+							...(prev[evt.runId] ?? {
+								activeStepGoal: '',
+								attempt: 1,
+								totalAttempts: 1,
+								stepsUsedInAttempt: 0,
+							}),
+							activeStepIndex: evt.stepIndex + 1,
+							stepsUsedInAttempt: evt.stepsUsed ?? 0,
+						},
+					}));
+				}
+
+				if (msg.type === 'workflow_completed') {
+					const evt = msg as WorkflowCompletedEvent;
+					setLiveProgress((prev) => {
+						const next = { ...prev };
+						delete next[evt.runId];
+						return next;
+					});
+					queryClient.invalidateQueries({ queryKey: ['workflowRuns', deviceId] });
+				}
+			},
+			[tab, deviceId, queryClient],
+		),
+	);
+
+	const loadSessionSteps = useCallback(
+		async (sessionId: string): Promise<Step[]> => {
+			const steps = await api.listSessionSteps(deviceId, sessionId);
+			return steps.map((s) => ({
+				id: s.id,
+				stepNumber: s.stepNumber,
+				action: s.action,
+				reasoning: s.reasoning,
+				result: s.result,
+			}));
+		},
+		[deviceId],
+	);
+
+	function setTab(newTab: 'overview' | 'goals' | 'workflows' | 'run' | 'log') {
 		track(DEVICE_TAB_CHANGE, { tab: newTab });
 		navigate({
 			to: '/dashboard/devices/$deviceId',
@@ -75,6 +156,7 @@ function DeviceDetailPage() {
 		{ key: 'goals' as const, label: 'Goals' },
 		{ key: 'workflows' as const, label: 'Workflows' },
 		{ key: 'run' as const, label: 'Run' },
+		{ key: 'log' as const, label: 'Log' },
 	];
 
 	return (
@@ -108,6 +190,17 @@ function DeviceDetailPage() {
 			{tab === 'goals' && <GoalsTab deviceId={deviceId} />}
 			{tab === 'workflows' && <WorkflowsTab deviceId={deviceId} />}
 			{tab === 'run' && <RunTab deviceId={deviceId} />}
+			{tab === 'log' && (
+				<UnifiedLog
+					runs={logRuns}
+					liveProgress={liveProgress}
+					loaded={!logRunsLoading}
+					page={logPage}
+					totalPages={logTotalPages}
+					onPageChange={setLogPage}
+					loadSessionSteps={loadSessionSteps}
+				/>
+			)}
 		</div>
 	);
 }

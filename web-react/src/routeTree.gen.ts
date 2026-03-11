@@ -9,9 +9,6 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as VerifyEmailRouteImport } from './routes/verify-email'
-import { Route as SignupRouteImport } from './routes/signup'
-import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthRouteImport } from './routes/_auth'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthDashboardIndexRouteImport } from './routes/_auth/dashboard/index'
@@ -21,21 +18,6 @@ import { Route as AuthDashboardActivateRouteImport } from './routes/_auth/dashbo
 import { Route as AuthDashboardDevicesIndexRouteImport } from './routes/_auth/dashboard/devices/index'
 import { Route as AuthDashboardDevicesDeviceIdIndexRouteImport } from './routes/_auth/dashboard/devices/$deviceId/index'
 
-const VerifyEmailRoute = VerifyEmailRouteImport.update({
-  id: '/verify-email',
-  path: '/verify-email',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SignupRoute = SignupRouteImport.update({
-  id: '/signup',
-  path: '/signup',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const LoginRoute = LoginRouteImport.update({
-  id: '/login',
-  path: '/login',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const AuthRoute = AuthRouteImport.update({
   id: '/_auth',
   getParentRoute: () => rootRouteImport,
@@ -80,9 +62,6 @@ const AuthDashboardDevicesDeviceIdIndexRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/login': typeof LoginRoute
-  '/signup': typeof SignupRoute
-  '/verify-email': typeof VerifyEmailRoute
   '/dashboard/activate': typeof AuthDashboardActivateRoute
   '/dashboard/api-keys': typeof AuthDashboardApiKeysRoute
   '/dashboard/settings': typeof AuthDashboardSettingsRoute
@@ -92,9 +71,6 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/login': typeof LoginRoute
-  '/signup': typeof SignupRoute
-  '/verify-email': typeof VerifyEmailRoute
   '/dashboard/activate': typeof AuthDashboardActivateRoute
   '/dashboard/api-keys': typeof AuthDashboardApiKeysRoute
   '/dashboard/settings': typeof AuthDashboardSettingsRoute
@@ -106,9 +82,6 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_auth': typeof AuthRouteWithChildren
-  '/login': typeof LoginRoute
-  '/signup': typeof SignupRoute
-  '/verify-email': typeof VerifyEmailRoute
   '/_auth/dashboard/activate': typeof AuthDashboardActivateRoute
   '/_auth/dashboard/api-keys': typeof AuthDashboardApiKeysRoute
   '/_auth/dashboard/settings': typeof AuthDashboardSettingsRoute
@@ -120,9 +93,6 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/login'
-    | '/signup'
-    | '/verify-email'
     | '/dashboard/activate'
     | '/dashboard/api-keys'
     | '/dashboard/settings'
@@ -132,9 +102,6 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/login'
-    | '/signup'
-    | '/verify-email'
     | '/dashboard/activate'
     | '/dashboard/api-keys'
     | '/dashboard/settings'
@@ -145,9 +112,6 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/_auth'
-    | '/login'
-    | '/signup'
-    | '/verify-email'
     | '/_auth/dashboard/activate'
     | '/_auth/dashboard/api-keys'
     | '/_auth/dashboard/settings'
@@ -159,34 +123,10 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthRoute: typeof AuthRouteWithChildren
-  LoginRoute: typeof LoginRoute
-  SignupRoute: typeof SignupRoute
-  VerifyEmailRoute: typeof VerifyEmailRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/verify-email': {
-      id: '/verify-email'
-      path: '/verify-email'
-      fullPath: '/verify-email'
-      preLoaderRoute: typeof VerifyEmailRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/signup': {
-      id: '/signup'
-      path: '/signup'
-      fullPath: '/signup'
-      preLoaderRoute: typeof SignupRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/login': {
-      id: '/login'
-      path: '/login'
-      fullPath: '/login'
-      preLoaderRoute: typeof LoginRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/_auth': {
       id: '/_auth'
       path: ''
@@ -270,9 +210,6 @@ const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthRoute: AuthRouteWithChildren,
-  LoginRoute: LoginRoute,
-  SignupRoute: SignupRoute,
-  VerifyEmailRoute: VerifyEmailRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

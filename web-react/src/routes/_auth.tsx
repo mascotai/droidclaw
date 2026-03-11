@@ -1,47 +1,57 @@
-import { createFileRoute, Outlet, redirect, useNavigate } from '@tanstack/react-router';
-import { authClient } from '@/lib/auth-client';
+import { createFileRoute, Outlet } from '@tanstack/react-router';
+import { useQuery } from '@tanstack/react-query';
 import { useWebSocket } from '@/hooks/use-websocket';
 import { Sidebar } from '@/components/layout/sidebar';
 import { Header } from '@/components/layout/header';
 import { useState } from 'react';
 
+export interface AuthUser {
+	id: string;
+	email: string;
+	name: string;
+}
+
+async function fetchCurrentUser(): Promise<AuthUser> {
+	const res = await fetch('/api/me');
+	if (!res.ok) throw new Error('Not authenticated');
+	return res.json();
+}
+
 export const Route = createFileRoute('/_auth')({
-	beforeLoad: async () => {
-		try {
-			const session = await authClient.getSession();
-			if (!session?.data?.user) {
-				throw redirect({ to: '/login', search: { redirect: window.location.pathname } });
-			}
-			return { user: session.data.user, session: session.data.session };
-		} catch (err) {
-			if (err && typeof err === 'object' && 'to' in err) throw err;
-			throw redirect({ to: '/login' });
-		}
-	},
 	component: DashboardLayout,
 });
 
 function DashboardLayout() {
-	const { user, session } = Route.useRouteContext();
-	const navigate = useNavigate();
 	const [sidebarOpen, setSidebarOpen] = useState(false);
 
-	// Connect WebSocket for real-time updates
-	useWebSocket(session?.token);
+	const { data: user, isLoading } = useQuery({
+		queryKey: ['currentUser'],
+		queryFn: fetchCurrentUser,
+		retry: false,
+		staleTime: Infinity,
+	});
 
-	async function handleSignOut() {
-		await authClient.signOut();
-		navigate({ to: '/login' });
+	// Connect WebSocket for real-time updates
+	useWebSocket(user?.id);
+
+	if (isLoading) {
+		return (
+			<div className="flex min-h-screen items-center justify-center bg-stone-100">
+				<div className="text-sm text-stone-400">Loading...</div>
+			</div>
+		);
 	}
+
+	// If authentik is not in front (e.g. local dev), show a fallback
+	const currentUser = user ?? { id: 'dev', email: 'dev@localhost', name: 'Developer' };
 
 	return (
 		<div className="flex min-h-screen bg-stone-100">
 			<Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 			<div className="flex flex-1 flex-col">
 				<Header
-					user={user}
+					user={currentUser}
 					onMenuClick={() => setSidebarOpen(true)}
-					onSignOut={handleSignOut}
 				/>
 				<main className="flex-1 p-6">
 					<Outlet />

@@ -4,11 +4,7 @@
  */
 
 // Auth
-export const AUTH_LOGIN_SUBMIT = 'auth-login-submit';
-export const AUTH_LOGIN_SUCCESS = 'auth-login-success';
-export const AUTH_SIGNUP_SUBMIT = 'auth-signup-submit';
-export const AUTH_SIGNUP_SUCCESS = 'auth-signup-success';
-export const AUTH_SIGNOUT = 'auth-signout';
+// (auth handled by authentik - no client-side auth events)
 
 // License / Conversion
 export const LICENSE_ACTIVATE_CHECKOUT = 'license-activate-checkout';
