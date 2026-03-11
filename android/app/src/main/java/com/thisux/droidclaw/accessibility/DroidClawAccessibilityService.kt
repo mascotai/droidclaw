@@ -136,6 +136,34 @@ class DroidClawAccessibilityService : AccessibilityService() {
         isRunning.value = false
     }
 
+    // ── Overlay / keyboard packages to auto-dismiss before screen capture ──
+
+    /** Autofill & credential manager packages that show bottom sheets */
+    private val overlayPackages = setOf(
+        "com.samsung.android.autofill",
+        "com.samsung.android.vaultkeeper",
+        "com.samsung.android.samsungpass",
+        "com.samsung.android.samsungpassautofill",
+        "com.samsung.android.clipboarduiservice",
+        "com.samsung.android.clipboardsaveservice",
+    )
+
+    /** GMS shows many things — only treat these class-name fragments as overlays */
+    private val gmsOverlayClassFragments = listOf(
+        "autofill", "credential", "password", "fido",
+        "savepassword", "credentialprovider", "halfsheetactivity", "bottomsheet"
+    )
+
+    /** Samsung keyboard clipboard/suggestion panels */
+    private val honeyboardOverlayFragments = listOf(
+        "clipboard", "suggestion", "popupwindow", "bottomsheet", "floatingtoolbar"
+    )
+
+    /** Labels we look for when trying to click a dismiss button */
+    private val dismissLabels = listOf(
+        "not now", "close", "dismiss", "cancel", "no thanks", "✕", "×"
+    )
+
     /**
      * Check if a soft keyboard (input method) window is currently visible.
      */
@@ -153,13 +181,171 @@ class DroidClawAccessibilityService : AccessibilityService() {
         return false
     }
 
+    /**
+     * Check visible windows for overlay popups (autofill, credential managers,
+     * Samsung clipboard, etc.) that should be dismissed before screen capture.
+     */
+    private fun findOverlayWindow(): AccessibilityWindowInfo? {
+        try {
+            val allWindows = windows ?: return null
+            for (window in allWindows) {
+                if (window.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD) continue
+                if (window.type == AccessibilityWindowInfo.TYPE_APPLICATION) continue
+
+                val root = window.root ?: continue
+                val pkg = root.packageName?.toString()
+                root.recycle()
+
+                if (pkg == null) continue
+
+                // Known overlay packages — always dismiss
+                if (pkg in overlayPackages) {
+                    Log.d(TAG, "Overlay detected: $pkg")
+                    return window
+                }
+
+                // Google GMS — only if the window looks like autofill/credential UI
+                if (pkg == "com.google.android.gms") {
+                    // Check if any node text hints at autofill
+                    val windowRoot = window.root ?: continue
+                    try {
+                        if (hasOverlayContent(windowRoot, gmsOverlayClassFragments)) {
+                            Log.d(TAG, "GMS autofill overlay detected")
+                            return window
+                        }
+                    } finally {
+                        windowRoot.recycle()
+                    }
+                }
+
+                // Samsung keyboard clipboard/suggestion panels
+                if (pkg == "com.samsung.android.honeyboard") {
+                    val windowRoot = window.root ?: continue
+                    try {
+                        if (hasOverlayContent(windowRoot, honeyboardOverlayFragments)) {
+                            Log.d(TAG, "Samsung keyboard overlay detected")
+                            return window
+                        }
+                    } finally {
+                        windowRoot.recycle()
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "findOverlayWindow failed: ${e.message}")
+        }
+        return null
+    }
+
+    /**
+     * Quick check: does any node's className contain one of the given fragments?
+     * Used to identify GMS/honeyboard overlays without false positives.
+     */
+    private fun hasOverlayContent(node: AccessibilityNodeInfo, fragments: List<String>): Boolean {
+        val cn = node.className?.toString()?.lowercase() ?: ""
+        for (f in fragments) {
+            if (cn.contains(f)) return true
+        }
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            try {
+                if (hasOverlayContent(child, fragments)) return true
+            } finally {
+                child.recycle()
+            }
+        }
+        return false
+    }
+
+    /**
+     * Dismiss an overlay by trying to click a dismiss button first,
+     * then falling back to pressing Back.
+     */
+    private fun dismissOverlay() {
+        if (tryClickDismissButton()) {
+            Log.i(TAG, "Dismissed overlay via button click")
+            return
+        }
+        Log.i(TAG, "Dismissing overlay via BACK action")
+        performGlobalAction(GLOBAL_ACTION_BACK)
+    }
+
+    /**
+     * Search non-app, non-keyboard windows for a clickable button
+     * labelled "Not now", "Close", "Dismiss", "Cancel", etc.
+     */
+    private fun tryClickDismissButton(): Boolean {
+        try {
+            val allWindows = windows ?: return false
+            for (window in allWindows) {
+                if (window.type == AccessibilityWindowInfo.TYPE_APPLICATION) continue
+                if (window.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD) continue
+                val root = window.root ?: continue
+                try {
+                    val button = findButtonByText(root, dismissLabels)
+                    if (button != null) {
+                        try {
+                            button.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                            Log.i(TAG, "Clicked dismiss button: '${button.text}'")
+                            return true
+                        } finally {
+                            button.recycle()
+                        }
+                    }
+                } finally {
+                    root.recycle()
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "tryClickDismissButton failed: ${e.message}")
+        }
+        return false
+    }
+
+    /**
+     * Recursively search for a clickable node whose text or content description
+     * contains one of the given labels (case-insensitive).
+     */
+    private fun findButtonByText(node: AccessibilityNodeInfo, labels: List<String>): AccessibilityNodeInfo? {
+        val nodeText = node.text?.toString()?.lowercase()
+        val nodeDesc = node.contentDescription?.toString()?.lowercase()
+        for (label in labels) {
+            if ((nodeText != null && nodeText.contains(label)) ||
+                (nodeDesc != null && nodeDesc.contains(label))) {
+                if (node.isClickable) return node
+                val parent = node.parent
+                if (parent != null && parent.isClickable) {
+                    node.recycle()
+                    return parent
+                }
+                parent?.recycle()
+            }
+        }
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            val found = findButtonByText(child, labels)
+            if (found != null) return found
+        }
+        return null
+    }
+
     fun getScreenTree(): List<UIElement> {
-        // Auto-dismiss keyboard before capturing — the keyboard shifts element
-        // positions, making coordinate-based taps unreliable for the agent.
+        // ── Clean the screen before capturing ──
+        // Dismiss keyboard — it shifts element positions, making coordinate-based
+        // taps unreliable for the agent.
         if (isKeyboardVisible()) {
             Log.i(TAG, "Keyboard visible, dismissing before screen capture")
             performGlobalAction(GLOBAL_ACTION_BACK)
             runBlocking { delay(300) }
+        }
+
+        // Dismiss overlay popups (autofill, credential managers, Samsung clipboard)
+        // that obscure the app and confuse the agent.
+        val overlay = findOverlayWindow()
+        if (overlay != null) {
+            Log.i(TAG, "Overlay popup detected, dismissing before screen capture")
+            dismissOverlay()
+            runBlocking { delay(400) }
         }
 
         // Retry with increasing delays — apps like Contacts on Vivo
@@ -206,6 +392,12 @@ class DroidClawAccessibilityService : AccessibilityService() {
                 if (window.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD) continue
 
                 val windowPkg = window.root?.packageName?.toString() ?: "null"
+
+                // Skip known overlay packages (autofill, credential managers, clipboard)
+                if (windowPkg in overlayPackages) {
+                    Log.d(TAG, "  window pkg=$windowPkg -> skipped (overlay)")
+                    continue
+                }
                 val windowType = window.type
                 val windowLayer = window.layer
                 val root = window.root
