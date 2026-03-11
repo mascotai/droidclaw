@@ -3,6 +3,7 @@ import { db } from "../db.js";
 import { workflowRun } from "../schema.js";
 import { eq } from "drizzle-orm";
 import { findElementByText, findElementById } from "./session-to-flow.js";
+import { getScreenWithRetry } from "./screen-utils.js";
 import type { FlowStep } from "./session-to-flow.js";
 export { findElementByText } from "./session-to-flow.js";
 export type { FlowStep } from "./session-to-flow.js";
@@ -78,7 +79,7 @@ export async function executeFlowStepWs(
           await sessions.sendCommand(deviceId, { type: "tap", x: value[0], y: value[1] });
           return { success: true, message: `Tapped (${value[0]}, ${value[1]})` };
         }
-        const screenRes = await sessions.sendCommand(deviceId, { type: "get_screen" }) as any;
+        const screenRes = await getScreenWithRetry(deviceId);
         const elements = (screenRes?.elements ?? []) as FlowUIElement[];
 
         // 1. ID first (stable across sessions)
@@ -100,7 +101,7 @@ export async function executeFlowStepWs(
           await sessions.sendCommand(deviceId, { type: "longpress", x: value[0], y: value[1] });
           return { success: true, message: `Long-pressed (${value[0]}, ${value[1]})` };
         }
-        const lpScreenRes = await sessions.sendCommand(deviceId, { type: "get_screen" }) as any;
+        const lpScreenRes = await getScreenWithRetry(deviceId);
         const lpElements = (lpScreenRes?.elements ?? []) as FlowUIElement[];
         const lpId = stepObj._id as string | undefined;
         let lpEl = lpId ? findElementById(lpElements, lpId) : null;
@@ -138,7 +139,7 @@ export async function executeFlowStepWs(
         return { success: true, message: String(value) };
       case "dismiss_popup": {
         // Soft action — always succeeds. Try to tap dismiss button, fallback to Back.
-        const dpScreenRes = await sessions.sendCommand(deviceId, { type: "get_screen" }) as any;
+        const dpScreenRes = await getScreenWithRetry(deviceId);
         const dpElements = (dpScreenRes?.elements ?? []) as FlowUIElement[];
         const queryLower = String(value).toLowerCase();
         const dpEl = dpElements.find((e: FlowUIElement) =>
@@ -159,7 +160,7 @@ export async function executeFlowStepWs(
         const maxScrolls = 8;
 
         // 1. Check current screen
-        const fatScreenRes = await sessions.sendCommand(deviceId, { type: "get_screen" }) as any;
+        const fatScreenRes = await getScreenWithRetry(deviceId);
         let fatElements = (fatScreenRes?.elements ?? []) as FlowUIElement[];
         let fatEl = fatElements.find((e: FlowUIElement) =>
           e.text && e.text.toLowerCase().includes(query)
@@ -170,7 +171,7 @@ export async function executeFlowStepWs(
           for (let s = 0; s < maxScrolls; s++) {
             await sessions.sendCommand(deviceId, { type: "scroll", direction: "down" });
             await new Promise((r) => setTimeout(r, 1200));
-            const freshRes = await sessions.sendCommand(deviceId, { type: "get_screen" }) as any;
+            const freshRes = await getScreenWithRetry(deviceId);
             fatElements = (freshRes?.elements ?? []) as FlowUIElement[];
             fatEl = fatElements.find((e: FlowUIElement) =>
               e.text && e.text.toLowerCase().includes(query)

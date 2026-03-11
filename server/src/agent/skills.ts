@@ -19,6 +19,7 @@
 
 import { sessions } from "../ws/sessions.js";
 import { createHmac } from "crypto";
+import { getScreenWithRetry } from "./screen-utils.js";
 import type { UIElement } from "@droidclaw/shared";
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -95,10 +96,8 @@ async function getScreen(
   deviceId: string
 ): Promise<{ elements: UIElement[]; packageName?: string }> {
   try {
-    const res = (await sessions.sendCommand(deviceId, {
-      type: "get_screen",
-    })) as { elements?: UIElement[]; packageName?: string };
-    return { elements: res.elements ?? [], packageName: res.packageName };
+    const res = await getScreenWithRetry(deviceId);
+    return { elements: res.elements as UIElement[], packageName: res.packageName };
   } catch {
     return { elements: [] };
   }

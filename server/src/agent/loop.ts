@@ -29,6 +29,7 @@ import { formatAppHints } from "./hints.js";
 import { isSkillAction, executeSkill } from "./skills.js";
 import { createStuckDetector } from "./stuck.js";
 import { findElementByText } from "./flow-runner.js";
+import { getScreenWithRetry } from "./screen-utils.js";
 import { db } from "../db.js";
 import { agentSession, agentStep, device as deviceTable } from "../schema.js";
 import { eq } from "drizzle-orm";
@@ -371,14 +372,7 @@ export async function runAgentLoop(
       const stepStartTime = Date.now();
 
       // ── 1. Get screen state from device ─────────────────────
-      const screenResponse = (await sessions.sendCommand(deviceId, {
-        type: "get_screen",
-      })) as {
-        elements?: UIElement[];
-        screenshot?: string;
-        packageName?: string;
-        activityName?: string;
-      };
+      const screenResponse = await getScreenWithRetry(deviceId);
 
       const elements = screenResponse.elements ?? [];
       const screenshot = screenResponse.screenshot;
