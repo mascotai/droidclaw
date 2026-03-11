@@ -4,6 +4,46 @@
 
 @theme {
 	--font-sans: 'Google Sans', 'Google Sans Text', system-ui, -apple-system, sans-serif;
+
+	/* ─── shadcn semantic color tokens ──────────────────────────────── */
+	--color-background: var(--color-white);
+	--color-foreground: var(--color-stone-950);
+
+	--color-card: var(--color-white);
+	--color-card-foreground: var(--color-stone-950);
+
+	--color-popover: var(--color-white);
+	--color-popover-foreground: var(--color-stone-950);
+
+	--color-primary: var(--color-stone-900);
+	--color-primary-foreground: var(--color-stone-50);
+
+	--color-secondary: var(--color-stone-100);
+	--color-secondary-foreground: var(--color-stone-900);
+
+	--color-muted: var(--color-stone-100);
+	--color-muted-foreground: var(--color-stone-500);
+
+	--color-accent: var(--color-stone-100);
+	--color-accent-foreground: var(--color-stone-900);
+
+	--color-destructive: var(--color-red-500);
+
+	--color-border: var(--color-stone-200);
+	--color-input: var(--color-stone-200);
+	--color-ring: var(--color-stone-950);
+
+	/* ─── Sidebar tokens ───────────────────────────────────────────── */
+	--color-sidebar: var(--color-stone-50);
+	--color-sidebar-foreground: var(--color-stone-950);
+	--color-sidebar-accent: var(--color-stone-100);
+	--color-sidebar-accent-foreground: var(--color-stone-900);
+	--color-sidebar-border: var(--color-stone-200);
+	--color-sidebar-ring: var(--color-stone-950);
+
+	/* ─── Sidebar layout ───────────────────────────────────────────── */
+	--sidebar-width: 16rem;
+	--sidebar-width-icon: 3rem;
 }
 
 body {
