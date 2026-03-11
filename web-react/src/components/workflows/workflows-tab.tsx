@@ -65,7 +65,7 @@ export function WorkflowsTab({ deviceId }: WorkflowsTabProps) {
 	// ── Mutations ──
 
 	const stopWorkflow = useMutation({
-		mutationFn: () => api.stopWorkflow(deviceId),
+		mutationFn: (runId?: string) => api.stopWorkflow(deviceId, runId),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: ['workflowRuns', deviceId] });
 		},
@@ -88,7 +88,7 @@ export function WorkflowsTab({ deviceId }: WorkflowsTabProps) {
 	});
 
 	const deleteCachedFlow = useMutation({
-		mutationFn: (flowId: string) => api.deleteCachedFlow(flowId),
+		mutationFn: (flowId: string) => api.deleteCachedFlow(flowId, deviceId),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: ['cachedFlows', deviceId] });
 			toast.success('Cached flow deleted');
@@ -231,7 +231,7 @@ export function WorkflowsTab({ deviceId }: WorkflowsTabProps) {
 					loading={runDetailLoading}
 					onStop={() => {
 						track(DEVICE_WORKFLOW_STOP);
-						stopWorkflow.mutate();
+						stopWorkflow.mutate(liveRun?.runId ?? selectedRunId ?? undefined);
 					}}
 					cachedFlowMeta={cachedFlowMeta}
 				/>

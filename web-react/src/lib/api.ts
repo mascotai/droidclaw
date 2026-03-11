@@ -136,33 +136,37 @@ export interface ApiKeyInfo {
 // ── API functions ──
 
 export const api = {
-	// Devices
+	// Devices — all under /v2/devices via proxy /api/devices
 	listDevices: () => request<DeviceInfo[]>('/devices'),
 	getDevice: (deviceId: string) => request<DeviceInfo>(`/devices/${deviceId}`),
-	getDeviceStats: (deviceId: string) => request<DeviceStats>(`/devices/${deviceId}/stats`),
+	getDeviceStats: (_deviceId: string): Promise<DeviceStats> =>
+		Promise.resolve({ totalSessions: 0, successRate: 0, avgSteps: 0 }),
 	getDeviceVersion: (deviceId: string) => request<{ version: string }>(`/devices/${deviceId}/version`),
+	getDeviceScreen: (deviceId: string) => request<unknown>(`/devices/${deviceId}/screen`),
 
-	// Sessions (Goals)
+	// Sessions (Goals) — v2 uses workflow runs with goals, not standalone sessions
 	listSessions: (deviceId: string, page = 1) =>
 		request<PaginatedResponse<AgentSession>>(`/devices/${deviceId}/sessions?page=${page}`),
 	listSessionSteps: (deviceId: string, sessionId: string) =>
 		request<AgentStep[]>(`/devices/${deviceId}/sessions/${sessionId}/steps`),
 
-	// Goals
-	submitGoal: (deviceId: string, goal: string) =>
-		request<{ sessionId: string }>('/goals', {
+	// Goals — submit via workflow run with single step
+	submitGoal: async (deviceId: string, goal: string) => {
+		const result = await request<{ runId: string; status: string }>(`/devices/${deviceId}/workflows/run`, {
 			method: 'POST',
-			body: JSON.stringify({ deviceId, goal }),
-		}),
+			body: JSON.stringify({ name: goal, steps: [{ goal }] }),
+		});
+		// Map runId to sessionId for backward compat with goals-tab
+		return { sessionId: result.runId, ...result };
+	},
 	stopGoal: (deviceId: string) =>
-		request('/goals/stop', {
+		request(`/devices/${deviceId}/workflows/stop`, {
 			method: 'POST',
-			body: JSON.stringify({ deviceId }),
 		}),
 	cancelScheduledGoal: (sessionId: string) =>
 		request(`/goals/${sessionId}/schedule`, { method: 'DELETE' }),
 
-	// Workflows
+	// Workflows — all under /v2/devices/:deviceId/workflows
 	submitWorkflow: (data: {
 		deviceId: string;
 		name?: string;
@@ -171,57 +175,52 @@ export const api = {
 		variables?: Record<string, unknown>;
 		llmModel?: string;
 	}) =>
-		request<{ runId: string; status: string }>('/workflows/run', {
+		request<{ runId: string; status: string }>(`/devices/${data.deviceId}/workflows/run`, {
 			method: 'POST',
 			body: JSON.stringify(data),
 		}),
 	stopWorkflow: (deviceId: string, runId?: string) =>
-		request('/workflows/stop', {
-			method: 'POST',
-			body: JSON.stringify({ deviceId, ...(runId && { runId }) }),
-		}),
+		runId
+			? request(`/devices/${deviceId}/workflows/runs/${runId}/stop`, { method: 'POST' })
+			: request(`/devices/${deviceId}/workflows/stop`, { method: 'POST' }),
 	listWorkflowRuns: (deviceId: string, page = 1) =>
-		request<PaginatedResponse<WorkflowRun>>(`/workflows/runs/${deviceId}?page=${page}`),
+		request<PaginatedResponse<WorkflowRun>>(`/devices/${deviceId}/workflows/runs?page=${page}`),
 	getWorkflowRun: (deviceId: string, runId: string) =>
-		request<WorkflowRun>(`/workflows/runs/${deviceId}/${runId}?expand=steps`),
-	getQueueState: (deviceId: string) =>
-		request<{ queue: unknown[] }>(`/workflows/queue/${deviceId}`),
+		request<WorkflowRun>(`/devices/${deviceId}/workflows/runs/${runId}?expand=steps`),
+	getQueueState: (_deviceId: string): Promise<{ queue: unknown[] }> =>
+		Promise.resolve({ queue: [] }),
 
-	// Cached Flows
+	// Cached Flows — under /v2/devices/:deviceId/workflows/cached
 	listCachedFlows: (deviceId: string) =>
-		request<CachedFlow[]>(`/workflows/cached/${deviceId}`),
-	deleteCachedFlow: (flowId: string) =>
-		request(`/workflows/cached/${flowId}`, { method: 'DELETE' }),
+		request<CachedFlow[]>(`/devices/${deviceId}/workflows/cached`),
+	deleteCachedFlow: (flowId: string, deviceId?: string) =>
+		deviceId
+			? request(`/devices/${deviceId}/workflows/cached/${flowId}`, { method: 'DELETE' })
+			: request(`/workflows/cached/${flowId}`, { method: 'DELETE' }),
 
 	// Investigation
 	investigateSession: (sessionId: string) =>
 		request(`/investigate/${sessionId}`, { method: 'POST' }),
 
-	// Pairing
+	// Pairing — under /pairing (not /v2)
 	createPairingCode: () =>
 		request<{ code: string; expiresAt: string }>('/pairing/create', { method: 'POST' }),
 	getPairingStatus: () =>
 		request<{ paired: boolean; expired?: boolean }>('/pairing/status'),
 
-	// Settings
-	getConfig: () => request<LlmConfig | null>('/settings/config'),
-	updateConfig: (data: { provider: string; apiKey: string; model?: string }) =>
-		request<{ saved: boolean }>('/settings/config', {
-			method: 'POST',
-			body: JSON.stringify(data),
-		}),
+	// Settings — v2 doesn't have settings routes, stub for now
+	getConfig: (): Promise<LlmConfig | null> => Promise.resolve(null),
+	updateConfig: (_data: { provider: string; apiKey: string; model?: string }): Promise<{ saved: boolean }> =>
+		Promise.resolve({ saved: false }),
 
-	// API Keys
-	listApiKeys: () => request<ApiKeyInfo[]>('/api-keys'),
-	createApiKey: (name: string, type = 'user') =>
-		request<{ key: string }>('/api-keys', {
-			method: 'POST',
-			body: JSON.stringify({ name, type }),
-		}),
-	deleteApiKey: (keyId: string) =>
-		request<{ deleted: boolean }>(`/api-keys/${keyId}`, { method: 'DELETE' }),
+	// API Keys — v2 doesn't have api-keys routes, stub for now
+	listApiKeys: (): Promise<ApiKeyInfo[]> => Promise.resolve([]),
+	createApiKey: (_name: string, _type = 'user'): Promise<{ key: string }> =>
+		Promise.reject(new Error('API keys not available in v2')),
+	deleteApiKey: (_keyId: string): Promise<{ deleted: boolean }> =>
+		Promise.reject(new Error('API keys not available in v2')),
 
-	// License
+	// License — under /license (not /v2)
 	activateLicense: (key: string) =>
 		request('/license/activate', {
 			method: 'POST',
@@ -233,7 +232,7 @@ export const api = {
 			body: JSON.stringify({ checkoutId }),
 		}),
 
-	// Shell
+	// Shell — under /v2/devices/:deviceId/shell
 	runShell: (deviceId: string, command: string) =>
 		request<{ output: string }>(`/devices/${deviceId}/shell`, {
 			method: 'POST',

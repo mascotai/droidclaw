@@ -43,7 +43,7 @@ export function OverviewTab({ deviceId, device }: OverviewTabProps) {
 	});
 
 	const deleteCachedFlow = useMutation({
-		mutationFn: (flowId: string) => api.deleteCachedFlow(flowId),
+		mutationFn: (flowId: string) => api.deleteCachedFlow(flowId, deviceId),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: ['cachedFlows', deviceId] });
 			toast.success('Cached flow deleted');
