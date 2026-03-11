@@ -2,7 +2,6 @@
 	import Icon from '@iconify/svelte';
 	import { StatusBadge, TimeAgo, DurationDisplay } from '$lib/components/shared';
 	import * as Card from '$lib/components/ui/card';
-	import { ScrollArea } from '$lib/components/ui/scroll-area';
 	import type { WorkflowRun, LiveWorkflowRun, StepResult } from './types';
 
 	interface Props {
@@ -42,7 +41,7 @@
 		</div>
 	</Card.Header>
 	<Card.Content class="px-2 pb-2">
-		<ScrollArea class="max-h-[60vh]">
+		<div class="max-h-[60vh] overflow-y-auto">
 				<div class="space-y-1">
 					<!-- Live run at top -->
 					{#if liveRun}
@@ -128,6 +127,6 @@
 						</div>
 					{/if}
 				</div>
-		</ScrollArea>
+		</div>
 	</Card.Content>
 </Card.Root>
