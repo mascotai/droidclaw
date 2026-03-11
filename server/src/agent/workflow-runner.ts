@@ -101,9 +101,9 @@ async function replayCachedFlow(
         const stepCmd = typeof step === "object" ? Object.keys(step).find(k => !k.startsWith("_")) : null;
         if ((stepCmd === "tap" || stepCmd === "longpress" || stepCmd === "find_and_tap") && result.message.includes("not found")) {
           let retryResult = result;
-          for (let retry = 0; retry < 3; retry++) {
-            wfLog(`[Workflow] Cached flow step ${i}: element not found, waiting 2s and retrying (${retry + 1}/3)`);
-            await new Promise((r) => setTimeout(r, 2000));
+          for (let retry = 0; retry < 5; retry++) {
+            wfLog(`[Workflow] Cached flow step ${i}: element not found, waiting 3s and retrying (${retry + 1}/5)`);
+            await new Promise((r) => setTimeout(r, 3000));
             retryResult = await executeFlowStepWs(deviceId, step, appId);
             wfLog(`[Workflow] Cached flow step ${i} retry ${retry + 1}: ${retryResult.message}`);
             if (retryResult.success) break;

@@ -86,13 +86,10 @@ export async function executeFlowStepWs(
         let el = id ? findElementById(elements, id) : null;
         // 2. Text fallback (for elements without IDs)
         if (!el) el = findElementByText(elements, String(value));
-        // 3. Coordinate fallback (last resort — original session coordinates)
+        // 3. No coordinate fallback — if the element isn't found by ID or text,
+        //    the screen probably hasn't transitioned yet. Report failure so the
+        //    retry logic in replayCachedFlow can wait and try again.
         if (!el) {
-          const coords = stepObj._coords as [number, number] | undefined;
-          if (coords) {
-            await sessions.sendCommand(deviceId, { type: "tap", x: coords[0], y: coords[1] });
-            return { success: true, message: `Tapped "${value}" at coords fallback (${coords[0]}, ${coords[1]})` };
-          }
           const available = elements.filter((e: FlowUIElement) => e.text).map((e: FlowUIElement) => e.text).slice(0, 10);
           return { success: false, message: `Element "${value}" not found. Available: ${available.join(", ")}` };
         }
@@ -109,11 +106,6 @@ export async function executeFlowStepWs(
         let lpEl = lpId ? findElementById(lpElements, lpId) : null;
         if (!lpEl) lpEl = findElementByText(lpElements, String(value));
         if (!lpEl) {
-          const lpCoords = stepObj._coords as [number, number] | undefined;
-          if (lpCoords) {
-            await sessions.sendCommand(deviceId, { type: "longpress", x: lpCoords[0], y: lpCoords[1] });
-            return { success: true, message: `Long-pressed "${value}" at coords fallback (${lpCoords[0]}, ${lpCoords[1]})` };
-          }
           return { success: false, message: `Element "${value}" not found for longpress` };
         }
         await sessions.sendCommand(deviceId, { type: "longpress", x: lpEl.center[0], y: lpEl.center[1] });
