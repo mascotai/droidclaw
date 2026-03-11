@@ -183,16 +183,29 @@ export const api = {
 		runId
 			? request(`/devices/${deviceId}/workflows/runs/${runId}/stop`, { method: 'POST' })
 			: request(`/devices/${deviceId}/workflows/stop`, { method: 'POST' }),
-	listWorkflowRuns: (deviceId: string, page = 1) =>
-		request<PaginatedResponse<WorkflowRun>>(`/devices/${deviceId}/workflows/runs?page=${page}`),
-	getWorkflowRun: (deviceId: string, runId: string) =>
-		request<WorkflowRun>(`/devices/${deviceId}/workflows/runs/${runId}?expand=steps`),
+	listWorkflowRuns: async (deviceId: string, page = 1) => {
+		const offset = (page - 1) * 10;
+		const data = await request<{ runs: Array<Record<string, unknown>>; total: number }>(`/devices/${deviceId}/workflows/runs?limit=10&offset=${offset}`);
+		return {
+			items: data.runs.map((r) => ({ ...r, id: r.runId as string })) as unknown as WorkflowRun[],
+			total: data.total,
+		} as PaginatedResponse<WorkflowRun>;
+	},
+	getWorkflowRun: async (deviceId: string, runId: string) => {
+		const data = await request<Record<string, unknown>>(`/devices/${deviceId}/workflows/runs/${runId}?expand=steps`);
+		return { ...data, id: data.runId as string } as unknown as WorkflowRun;
+	},
 	getQueueState: (_deviceId: string): Promise<{ queue: unknown[] }> =>
 		Promise.resolve({ queue: [] }),
 
 	// Cached Flows — under /v2/devices/:deviceId/workflows/cached
-	listCachedFlows: (deviceId: string) =>
-		request<CachedFlow[]>(`/devices/${deviceId}/workflows/cached`),
+	listCachedFlows: async (deviceId: string) => {
+		const data = await request<{ flows: Array<Record<string, unknown>> }>(`/devices/${deviceId}/workflows/cached`);
+		return data.flows.map((f) => ({
+			...f,
+			stepCount: f.stepsCount as number ?? f.stepCount as number ?? 0,
+		})) as unknown as CachedFlow[];
+	},
 	deleteCachedFlow: (flowId: string, deviceId?: string) =>
 		deviceId
 			? request(`/devices/${deviceId}/workflows/cached/${flowId}`, { method: 'DELETE' })
