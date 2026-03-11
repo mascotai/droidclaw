@@ -159,11 +159,6 @@ class DroidClawAccessibilityService : AccessibilityService() {
         "clipboard", "suggestion", "popupwindow", "bottomsheet", "floatingtoolbar"
     )
 
-    /** Labels we look for when trying to click a dismiss button */
-    private val dismissLabels = listOf(
-        "not now", "close", "dismiss", "cancel", "no thanks", "✕", "×"
-    )
-
     /**
      * Check if a soft keyboard (input method) window is currently visible.
      */
@@ -257,78 +252,6 @@ class DroidClawAccessibilityService : AccessibilityService() {
         return false
     }
 
-    /**
-     * Dismiss an overlay by trying to click a dismiss button first,
-     * then falling back to pressing Back.
-     */
-    private fun dismissOverlay() {
-        if (tryClickDismissButton()) {
-            Log.i(TAG, "Dismissed overlay via button click")
-            return
-        }
-        Log.i(TAG, "Dismissing overlay via BACK action")
-        performGlobalAction(GLOBAL_ACTION_BACK)
-    }
-
-    /**
-     * Search non-app, non-keyboard windows for a clickable button
-     * labelled "Not now", "Close", "Dismiss", "Cancel", etc.
-     */
-    private fun tryClickDismissButton(): Boolean {
-        try {
-            val allWindows = windows ?: return false
-            for (window in allWindows) {
-                if (window.type == AccessibilityWindowInfo.TYPE_APPLICATION) continue
-                if (window.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD) continue
-                val root = window.root ?: continue
-                try {
-                    val button = findButtonByText(root, dismissLabels)
-                    if (button != null) {
-                        try {
-                            button.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                            Log.i(TAG, "Clicked dismiss button: '${button.text}'")
-                            return true
-                        } finally {
-                            button.recycle()
-                        }
-                    }
-                } finally {
-                    root.recycle()
-                }
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "tryClickDismissButton failed: ${e.message}")
-        }
-        return false
-    }
-
-    /**
-     * Recursively search for a clickable node whose text or content description
-     * contains one of the given labels (case-insensitive).
-     */
-    private fun findButtonByText(node: AccessibilityNodeInfo, labels: List<String>): AccessibilityNodeInfo? {
-        val nodeText = node.text?.toString()?.lowercase()
-        val nodeDesc = node.contentDescription?.toString()?.lowercase()
-        for (label in labels) {
-            if ((nodeText != null && nodeText.contains(label)) ||
-                (nodeDesc != null && nodeDesc.contains(label))) {
-                if (node.isClickable) return node
-                val parent = node.parent
-                if (parent != null && parent.isClickable) {
-                    node.recycle()
-                    return parent
-                }
-                parent?.recycle()
-            }
-        }
-        for (i in 0 until node.childCount) {
-            val child = node.getChild(i) ?: continue
-            val found = findButtonByText(child, labels)
-            if (found != null) return found
-        }
-        return null
-    }
-
     fun getScreenTree(): List<UIElement> {
         // ── Clean the screen before capturing ──
         // Dismiss keyboard — it shifts element positions, making coordinate-based
@@ -341,10 +264,9 @@ class DroidClawAccessibilityService : AccessibilityService() {
 
         // Dismiss overlay popups (autofill, credential managers, Samsung clipboard)
         // that obscure the app and confuse the agent.
-        val overlay = findOverlayWindow()
-        if (overlay != null) {
+        if (findOverlayWindow() != null) {
             Log.i(TAG, "Overlay popup detected, dismissing before screen capture")
-            dismissOverlay()
+            performGlobalAction(GLOBAL_ACTION_BACK)
             runBlocking { delay(400) }
         }
 
