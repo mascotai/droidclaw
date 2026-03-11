@@ -9,12 +9,10 @@ import { Worker, NativeConnection } from "@temporalio/worker";
 import { env } from "../env.js";
 import * as activities from "./activities/execute-run.js";
 
-const TASK_QUEUE = "droidclaw-device-queue";
-
 /**
  * Start the embedded Temporal worker.
  *
- * The worker polls the `droidclaw-device-queue` task queue for:
+ * The worker polls the task queue (from TEMPORAL_TASK_QUEUE env) for:
  * - Workflow tasks (device-queue coordinator)
  * - Activity tasks (executeWorkflowRun)
  *
@@ -29,7 +27,7 @@ export async function startTemporalWorker(): Promise<void> {
   const worker = await Worker.create({
     connection,
     namespace: env.TEMPORAL_NAMESPACE,
-    taskQueue: TASK_QUEUE,
+    taskQueue: env.TEMPORAL_TASK_QUEUE,
     workflowsPath: new URL("./workflows/index.ts", import.meta.url).pathname,
     activities,
     maxConcurrentActivityTaskExecutions: 10,
@@ -38,7 +36,7 @@ export async function startTemporalWorker(): Promise<void> {
 
   console.log(
     `[Temporal] Worker started — address: ${env.TEMPORAL_ADDRESS}, ` +
-      `namespace: ${env.TEMPORAL_NAMESPACE}, queue: ${TASK_QUEUE}`
+      `namespace: ${env.TEMPORAL_NAMESPACE}, queue: ${env.TEMPORAL_TASK_QUEUE}`
   );
 
   // worker.run() returns a promise that resolves when the worker shuts down

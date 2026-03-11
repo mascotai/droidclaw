@@ -9,8 +9,6 @@ import { Client, Connection } from "@temporalio/client";
 import { env } from "../env.js";
 import type { RunPayload } from "./types.js";
 
-const TASK_QUEUE = "droidclaw-device-queue";
-
 let _client: Client | null = null;
 
 /** Get or create the singleton Temporal client */
@@ -42,7 +40,7 @@ export async function enqueueRun(opts: {
   const workflowId = `device-queue-${opts.deviceId}`;
 
   await client.workflow.signalWithStart("deviceQueueWorkflow", {
-    taskQueue: TASK_QUEUE,
+    taskQueue: env.TEMPORAL_TASK_QUEUE,
     workflowId,
     args: [{ deviceId: opts.deviceId }],
     signal: "enqueueRun",

@@ -15,6 +15,16 @@
       "env": {
         "DROIDCLAW_API_KEY": "droidclaw_ba98a706eb83ac81ac36998f6679481bbe24baaaec112b7591fdcd5c8ee418ba"
       }
+    },
+    "temporal": {
+      "command": "uvx",
+      "args": [
+        "temporal-mcp-server",
+        "--host", "temporal-grpc.stack.mascott.ai:443",
+        "--namespace", "droidclaw",
+        "--tls-cert", "/Users/yohairosen/.claude/certs/client.crt",
+        "--tls-key", "/Users/yohairosen/.claude/certs/client.key"
+      ]
     }
   }
 }
