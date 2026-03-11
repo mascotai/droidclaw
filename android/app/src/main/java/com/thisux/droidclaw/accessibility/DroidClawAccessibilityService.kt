@@ -136,7 +136,32 @@ class DroidClawAccessibilityService : AccessibilityService() {
         isRunning.value = false
     }
 
+    /**
+     * Check if a soft keyboard (input method) window is currently visible.
+     */
+    private fun isKeyboardVisible(): Boolean {
+        try {
+            val allWindows = windows ?: return false
+            for (window in allWindows) {
+                if (window.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD) {
+                    return true
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "isKeyboardVisible check failed: ${e.message}")
+        }
+        return false
+    }
+
     fun getScreenTree(): List<UIElement> {
+        // Auto-dismiss keyboard before capturing — the keyboard shifts element
+        // positions, making coordinate-based taps unreliable for the agent.
+        if (isKeyboardVisible()) {
+            Log.i(TAG, "Keyboard visible, dismissing before screen capture")
+            performGlobalAction(GLOBAL_ACTION_BACK)
+            runBlocking { delay(300) }
+        }
+
         // Retry with increasing delays — apps like Contacts on Vivo
         // can take 500ms+ to render after a cold launch
         val delays = longArrayOf(50, 100, 200, 300, 500)
