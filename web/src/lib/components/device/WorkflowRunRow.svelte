@@ -132,7 +132,7 @@
 						disabled={!stepResult}
 					>
 						<span
-							class="mt-0.5 shrink-0 rounded-full px-2 py-0.5 font-mono text-[10px] {getStepBadgeClass(stepIdx)}"
+							class="mt-0.5 shrink-0 rounded-full px-2 py-0.5 font-mono text-xs {getStepBadgeClass(stepIdx)}"
 						>
 							{stepIdx + 1}
 						</span>
@@ -141,12 +141,12 @@
 								{getStepGoal(stepIdx)}
 							</p>
 							{#if stepResult?.error || (stepResult?.message && !stepResult?.success)}
-								<p class="mt-1 text-[11px] text-red-500">
+								<p class="mt-1 text-xs text-red-500">
 									{stepResult?.error ?? stepResult?.message}
 								</p>
 							{/if}
 							{#if isStepActive(stepIdx) && liveProgress && liveProgress.totalAttempts > 1}
-								<p class="mt-1 text-[11px] text-amber-600">
+								<p class="mt-1 text-xs text-amber-600">
 									Attempt {liveProgress.attempt}/{liveProgress.totalAttempts}
 								</p>
 							{/if}
@@ -161,7 +161,7 @@
 									{stepResult.success ? 'OK' : 'Failed'}
 								</span>
 								{#if stepResult.stepsUsed !== undefined}
-									<span class="text-[10px] text-stone-400">
+									<span class="text-xs text-stone-400">
 										{stepResult.stepsUsed} step{stepResult.stepsUsed !== 1 ? 's' : ''}
 									</span>
 								{/if}

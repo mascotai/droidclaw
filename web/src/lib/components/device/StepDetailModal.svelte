@@ -80,7 +80,7 @@
 		<div class="mt-4 space-y-4">
 			<!-- Goal -->
 			<div>
-				<p class="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-stone-400">Goal</p>
+				<p class="mb-1.5 text-xs font-semibold uppercase tracking-wider text-stone-400">Goal</p>
 				<p class="whitespace-pre-wrap text-sm leading-relaxed text-stone-800">
 					{data.stepResult.goal ?? data.config?.goal ?? data.stepResult.command ?? 'N/A'}
 				</p>
@@ -89,7 +89,7 @@
 			<!-- Configuration -->
 			{#if data.config}
 				<div>
-					<p class="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-stone-400">Configuration</p>
+					<p class="mb-1.5 text-xs font-semibold uppercase tracking-wider text-stone-400">Configuration</p>
 					<div class="flex flex-wrap gap-2">
 						{#if data.config.app}
 							<Badge variant="outline" class="bg-blue-50 text-blue-700 border-blue-200 gap-1">
@@ -125,7 +125,7 @@
 			<!-- Error -->
 			{#if data.stepResult.error || (data.stepResult.message && !data.stepResult.success)}
 				<div>
-					<p class="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-red-400">Error</p>
+					<p class="mb-1.5 text-xs font-semibold uppercase tracking-wider text-red-400">Error</p>
 					<div class="rounded-lg bg-red-50 px-3 py-2.5">
 						<p class="text-xs text-red-700">{data.stepResult.error ?? data.stepResult.message}</p>
 					</div>
@@ -137,7 +137,7 @@
 			<!-- Agent Journey (Accordion) -->
 			<Accordion.Root type="multiple" value={['journey']}>
 				<Accordion.Item value="journey" class="border-none">
-					<Accordion.Trigger class="text-[10px] font-semibold uppercase tracking-wider text-stone-400 hover:no-underline">
+					<Accordion.Trigger class="text-xs font-semibold uppercase tracking-wider text-stone-400 hover:no-underline">
 						Agent Journey
 					</Accordion.Trigger>
 					<Accordion.Content>
@@ -160,9 +160,9 @@
 											: []}
 									<div class="rounded-lg bg-stone-50 px-3 py-2.5">
 										<div class="flex items-center gap-2">
-											<Badge variant="outline" class="font-mono text-[10px]">{s.stepNumber}</Badge>
+											<Badge variant="outline" class="font-mono text-xs">{s.stepNumber}</Badge>
 											<ActionBadge action={act.type} />
-											<div class="flex flex-wrap items-center gap-1.5 text-[11px] text-stone-600">
+											<div class="flex flex-wrap items-center gap-1.5 text-xs text-stone-600">
 												{#if act.coords && act.coords.length >= 2}
 													<span class="font-mono text-stone-400">({act.coords[0]}, {act.coords[1]})</span>
 												{/if}
@@ -184,7 +184,7 @@
 												{@const elemKey = `inline-${sIdx}-${obsIdx}`}
 												{@const isExpanded = expandedElementSets.has(elemKey)}
 												<div class="ml-8 mt-2 rounded-md border border-stone-200 bg-white px-2.5 py-2">
-													<div class="flex flex-wrap items-center gap-1.5 text-[10px]">
+													<div class="flex flex-wrap items-center gap-1.5 text-xs">
 														<Icon icon="solar:monitor-smartphone-bold-duotone" class="h-3 w-3 text-blue-500" />
 														{#if obs.packageName}
 															<span class="font-medium text-blue-700">{obs.packageName}</span>
@@ -204,7 +204,7 @@
 														>
 															{#each isExpanded ? obs.elements : obs.elements.slice(0, 15) as el}
 																{@const elem = el as Record<string, unknown>}
-																<p class="truncate font-mono text-[10px] text-stone-500">
+																<p class="truncate font-mono text-xs text-stone-500">
 																	{#if elem.type}<span class="text-stone-300">[{(elem.type as string).split('.').pop()}]</span>{/if}
 																	{#if elem.action}<span class="text-amber-500/70"> {elem.action}</span>{/if}
 																	{#if elem.text}<span class="text-stone-700"> "{elem.text}"</span>{/if}
@@ -219,7 +219,7 @@
 															{/each}
 															{#if obs.elements.length > 15}
 																<button
-																	class="mt-0.5 cursor-pointer text-[10px] italic text-blue-500 hover:text-blue-700"
+																	class="mt-0.5 cursor-pointer text-xs italic text-blue-500 hover:text-blue-700"
 																	onclick={() => toggleExpanded(elemKey)}
 																>
 																	{isExpanded ? '▲ Show fewer elements' : `... +${obs.elements.length - 15} more elements`}
@@ -257,7 +257,7 @@
 							: allObs}
 					{#if unmatchedObs.length > 0}
 						<Accordion.Item value="observations" class="border-none">
-							<Accordion.Trigger class="text-[10px] font-semibold uppercase tracking-wider text-stone-400 hover:no-underline">
+							<Accordion.Trigger class="text-xs font-semibold uppercase tracking-wider text-stone-400 hover:no-underline">
 								{steps.length > 0 ? 'Additional ' : ''}Screen Observations ({unmatchedObs.length})
 							</Accordion.Trigger>
 							<Accordion.Content>
@@ -266,10 +266,10 @@
 										{@const elemKey = `unmatched-${obsIdx}`}
 										{@const isExpanded = expandedElementSets.has(elemKey)}
 										<div class="rounded-lg bg-stone-50 px-3 py-2.5">
-											<div class="mb-1.5 flex flex-wrap items-center gap-1.5 text-[10px]">
+											<div class="mb-1.5 flex flex-wrap items-center gap-1.5 text-xs">
 												<Icon icon="solar:monitor-smartphone-bold-duotone" class="h-3.5 w-3.5 text-blue-500" />
 												{#if obs.stepNumber}
-													<Badge variant="outline" class="font-mono text-[10px]">Step {obs.stepNumber}</Badge>
+													<Badge variant="outline" class="font-mono text-xs">Step {obs.stepNumber}</Badge>
 												{/if}
 												{#if obs.packageName}
 													<span class="font-medium text-blue-700">{obs.packageName}</span>
@@ -289,7 +289,7 @@
 												>
 													{#each isExpanded ? obs.elements : obs.elements.slice(0, 20) as el}
 														{@const elem = el as Record<string, unknown>}
-														<p class="truncate font-mono text-[10px] text-stone-500">
+														<p class="truncate font-mono text-xs text-stone-500">
 															{#if elem.type}<span class="text-stone-300">[{(elem.type as string).split('.').pop()}]</span>{/if}
 															{#if elem.action}<span class="text-amber-500/70"> {elem.action}</span>{/if}
 															{#if elem.text}<span class="text-stone-700"> "{elem.text}"</span>{/if}
@@ -304,7 +304,7 @@
 													{/each}
 													{#if obs.elements.length > 20}
 														<button
-															class="mt-0.5 cursor-pointer text-[10px] italic text-blue-500 hover:text-blue-700"
+															class="mt-0.5 cursor-pointer text-xs italic text-blue-500 hover:text-blue-700"
 															onclick={() => toggleExpanded(elemKey)}
 														>
 															{isExpanded ? '▲ Show fewer elements' : `... +${obs.elements.length - 20} more elements`}
@@ -324,7 +324,7 @@
 			<!-- Session ID -->
 			{#if data.stepResult.sessionId}
 				<Separator />
-				<p class="text-[10px] text-stone-400">
+				<p class="text-xs text-stone-400">
 					Session ID: <span class="font-mono">{data.stepResult.sessionId}</span>
 				</p>
 			{/if}

@@ -91,7 +91,7 @@
 								<span class="relative inline-flex h-2 w-2 rounded-full bg-stone-300"></span>
 							{/if}
 						</span>
-						<span class="text-[11px] {dashboardWs.connected ? 'text-emerald-600' : 'text-stone-400'}">
+						<span class="text-xs {dashboardWs.connected ? 'text-emerald-600' : 'text-stone-400'}">
 							{dashboardWs.connected ? 'Live' : 'Connecting...'}
 						</span>
 					</Sidebar.MenuButton>
@@ -103,7 +103,7 @@
 					<Sidebar.MenuItem>
 						<Sidebar.MenuButton class="pointer-events-none">
 							<Icon icon="ph:seal-check-duotone" class="h-4 w-4 text-emerald-600" />
-							<Badge variant="outline" class="border-emerald-200 bg-emerald-50 text-emerald-700 text-[10px]">
+							<Badge variant="outline" class="border-emerald-200 bg-emerald-50 text-emerald-700 text-xs">
 								{data.plan === 'ltd' ? 'Lifetime' : data.plan}
 							</Badge>
 						</Sidebar.MenuButton>
@@ -140,7 +140,7 @@
 			<span class="font-semibold tracking-tight text-sm">DroidClaw<span class="text-stone-400">.ai</span></span>
 		</header>
 
-		<main class="flex-1 overflow-auto p-4 md:p-8">
+		<main class="flex-1 overflow-auto p-4 pb-8 md:p-8">
 			<div class="mx-auto max-w-5xl">
 				{#key page.url.pathname}
 					<div class="animate-page-enter">

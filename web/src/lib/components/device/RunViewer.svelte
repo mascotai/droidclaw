@@ -200,14 +200,14 @@
 						{/if}
 						<Card.Title class="text-sm">{activeName}</Card.Title>
 						{#if cachedFlowMeta}
-							<span class="text-[10px] text-stone-400">
+							<span class="text-xs text-stone-400">
 								{cachedFlowMeta.stepCount} steps · {cachedFlowMeta.successCount} hits
 							</span>
 						{/if}
 					</div>
 					<div class="flex items-center gap-2">
 						{#if run && run.completedAt}
-							<DurationDisplay ms={durationMs(run.startedAt, run.completedAt)} class="text-[11px] text-stone-400" />
+							<DurationDisplay ms={durationMs(run.startedAt, run.completedAt)} class="text-xs text-stone-400" />
 						{/if}
 						{#if activeStatus === 'running'}
 							<StatusBadge status="running" />
@@ -226,7 +226,7 @@
 			{#if activeStatus === 'running' && activeTotalSteps > 0}
 				<div class="px-6 pb-4">
 					<Progress value={progressPercent} class="h-1.5" />
-					<p class="mt-1 text-[10px] text-stone-400">
+					<p class="mt-1 text-xs text-stone-400">
 						Step {completedCount + 1} of {activeTotalSteps}
 					</p>
 				</div>
@@ -251,7 +251,7 @@
 							>
 								<!-- Step number badge -->
 								<span
-									class="mt-0.5 shrink-0 rounded-full px-2 py-0.5 font-mono text-[10px]
+									class="mt-0.5 shrink-0 rounded-full px-2 py-0.5 font-mono text-xs
 										{result
 											? result.success ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
 											: isActive ? 'bg-violet-100 text-violet-700'
@@ -264,7 +264,7 @@
 								<div class="min-w-0 flex-1">
 									<p class="text-xs leading-relaxed text-stone-800">{getStepGoal(stepIdx)}</p>
 									{#if app}
-										<span class="mt-0.5 inline-flex items-center gap-1 rounded bg-blue-50 px-1.5 py-0.5 text-[10px] text-blue-600">
+										<span class="mt-0.5 inline-flex items-center gap-1 rounded bg-blue-50 px-1.5 py-0.5 text-xs text-blue-600">
 											<Icon icon="solar:box-bold-duotone" class="h-2.5 w-2.5" />
 											{app}
 										</span>
@@ -274,7 +274,7 @@
 									{#if isActive && liveRun}
 										<div class="mt-1.5 flex items-center gap-1.5">
 											<Icon icon="solar:refresh-circle-bold-duotone" class="h-3.5 w-3.5 animate-spin text-violet-500" />
-											<span class="text-[11px] text-violet-600">
+											<span class="text-xs text-violet-600">
 												Discovering...
 												{#if liveRun.totalAttempts > 1}
 													<span class="text-violet-400">&middot;</span>
@@ -287,7 +287,7 @@
 
 									<!-- Error message -->
 									{#if result && !result.success && (result.error || result.message)}
-										<p class="mt-1 text-[11px] text-red-500">{result.error ?? result.message}</p>
+										<p class="mt-1 text-xs text-red-500">{result.error ?? result.message}</p>
 									{/if}
 								</div>
 
@@ -303,7 +303,7 @@
 												{result.success ? 'OK' : 'Failed'}
 											</span>
 											{#if result.stepsUsed !== undefined && result.stepsUsed > 0}
-												<span class="text-[10px] text-stone-400">
+												<span class="text-xs text-stone-400">
 													{result.stepsUsed} step{result.stepsUsed !== 1 ? 's' : ''}
 												</span>
 											{/if}
@@ -349,20 +349,20 @@
 													<div class="flex items-center gap-1.5">
 														<ActionBadge action={act.type} />
 														{#if act.coords && act.coords.length >= 2}
-															<span class="font-mono text-[10px] text-stone-400">({act.coords[0]}, {act.coords[1]})</span>
+															<span class="font-mono text-xs text-stone-400">({act.coords[0]}, {act.coords[1]})</span>
 														{/if}
 														{#if act.text}
-															<span class="rounded bg-stone-50 px-1 py-0.5 text-[10px] text-stone-700">"{act.text}"</span>
+															<span class="rounded bg-stone-50 px-1 py-0.5 text-xs text-stone-700">"{act.text}"</span>
 														{/if}
 														{#if act.direction}
-															<span class="text-[10px] text-stone-400">{act.direction}</span>
+															<span class="text-xs text-stone-400">{act.direction}</span>
 														{/if}
 													</div>
 													{#if agentStep.reasoning}
-														<p class="mt-0.5 text-[11px] leading-relaxed text-stone-500">{agentStep.reasoning}</p>
+														<p class="mt-0.5 text-xs leading-relaxed text-stone-500">{agentStep.reasoning}</p>
 													{/if}
 													{#if agentStep.result}
-														<p class="mt-0.5 text-[10px] text-stone-400">{agentStep.result}</p>
+														<p class="mt-0.5 text-xs text-stone-400">{agentStep.result}</p>
 													{/if}
 												</div>
 												{#if agentStep.durationMs}

@@ -6,6 +6,7 @@
 	import RunViewer from '$lib/components/device/RunViewer.svelte';
 	import { EmptyState } from '$lib/components/shared';
 	import { Button } from '$lib/components/ui/button';
+	import { Separator } from '$lib/components/ui/separator';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { getDeviceContext } from '$lib/components/device/context';
 
@@ -26,7 +27,7 @@
 
 <div class="flex flex-col gap-6 lg:flex-row">
 	<!-- ═══════════ Left sidebar ═══════════ -->
-	<div class="w-full shrink-0 space-y-6 lg:w-72 xl:w-80">
+	<div class="w-full shrink-0 space-y-4 lg:w-72 xl:w-80">
 		<!-- Run a task button -->
 		<Button
 			onclick={() => (showBuilder = true)}
@@ -44,6 +45,8 @@
 			selectedRunId={ctx.selectedRunId}
 			onselect={(runId) => ctx.selectRun(runId)}
 		/>
+
+		<Separator class="my-1" />
 
 		<!-- Active Workflows (cached flows) -->
 		<ActiveWorkflows
@@ -72,10 +75,13 @@
 					: null}
 			/>
 		{:else}
-			<EmptyState
-				title="Select a run or start a new task"
-				description="Runs will appear in the sidebar"
-			/>
+			<div class="flex h-full min-h-[300px] items-center justify-center rounded-xl border-2 border-dashed border-stone-200 bg-stone-50/50">
+				<div class="text-center">
+					<Icon icon="solar:layers-bold-duotone" class="mx-auto mb-3 h-10 w-10 text-stone-300" />
+					<p class="text-sm font-medium text-stone-400">Select a run or start a new task</p>
+					<p class="mt-1 text-xs text-stone-300">Runs will appear in the sidebar</p>
+				</div>
+			</div>
 		{/if}
 	</div>
 </div>

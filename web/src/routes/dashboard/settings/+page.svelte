@@ -132,7 +132,14 @@
 	</Card.Content>
 </Card.Root>
 
-<!-- LLM Provider -->
+<!-- AI Configuration -->
+<div class="mb-3 mt-2 flex items-center gap-2">
+	<Icon icon="solar:cpu-bolt-bold-duotone" class="h-4 w-4 text-violet-500" />
+	<div>
+		<p class="text-sm font-medium text-stone-700">AI Configuration</p>
+		<p class="text-xs text-stone-400">Configure your AI model for device automation.</p>
+	</div>
+</div>
 <Card.Root>
 	<Card.Header>
 		<Card.Title class="text-sm">LLM Provider</Card.Title>

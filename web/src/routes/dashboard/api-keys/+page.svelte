@@ -161,7 +161,7 @@
 						class="h-6 gap-1 text-stone-400 hover:text-white hover:bg-stone-700"
 					>
 						<Icon icon="solar:copy-bold-duotone" class="h-3 w-3" />
-						<span class="text-[10px]">Copy</span>
+						<span class="text-xs">Copy</span>
 					</Button>
 				</div>
 				<div class="p-4 text-sm overflow-x-auto">
@@ -191,7 +191,14 @@
 <!-- Existing keys list -->
 <Card.Root>
 	<Card.Header>
-		<Card.Title class="text-sm">Your keys</Card.Title>
+		<div class="flex items-center gap-2">
+			<Card.Title class="text-sm">Your keys</Card.Title>
+			{#await keysPromise then keys}
+				{#if keys && keys.length > 0}
+					<Badge variant="secondary" class="text-xs">{keys.length}</Badge>
+				{/if}
+			{/await}
+		</div>
 	</Card.Header>
 	<Card.Content class="p-0">
 		{#await keysPromise}
@@ -212,23 +219,23 @@
 					{#if i > 0}
 						<Separator />
 					{/if}
-					<div class="flex items-center justify-between px-6 py-4">
+					<div class="flex items-center justify-between px-4 py-3">
 						<div class="flex items-center gap-3">
-							<div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-100">
+							<div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-100">
 								<Icon icon="solar:key-bold-duotone" class="h-4 w-4 text-amber-600" />
 							</div>
 							<div>
 								<div class="flex items-center gap-2">
 									<p class="font-medium text-stone-900">{key.name ?? 'Unnamed Key'}</p>
 									{#if key.type === 'device'}
-										<Badge variant="outline" class="border-blue-200 bg-blue-50 text-blue-700 text-[10px]">Device</Badge>
+										<Badge variant="outline" class="border-blue-200 bg-blue-50 text-blue-700 text-xs">Device</Badge>
 									{:else}
-										<Badge variant="outline" class="border-violet-200 bg-violet-50 text-violet-700 text-[10px]">User</Badge>
+										<Badge variant="outline" class="border-violet-200 bg-violet-50 text-violet-700 text-xs">User</Badge>
 									{/if}
 									{#if key.enabled}
-										<Badge variant="outline" class="border-emerald-200 bg-emerald-50 text-emerald-700 text-[10px]">Active</Badge>
+										<Badge variant="outline" class="border-emerald-200 bg-emerald-50 text-emerald-700 text-xs">Active</Badge>
 									{:else}
-										<Badge variant="secondary" class="text-[10px]">Disabled</Badge>
+										<Badge variant="secondary" class="text-xs">Disabled</Badge>
 									{/if}
 								</div>
 								<div class="mt-0.5 flex items-center gap-3 text-sm text-stone-500">

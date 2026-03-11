@@ -65,7 +65,7 @@
 							</div>
 							<div class="min-w-0 flex-1">
 								<p class="truncate text-xs font-medium text-stone-800">{liveRun.name}</p>
-								<div class="mt-0.5 flex items-center gap-1.5 text-[10px] text-stone-400">
+								<div class="mt-0.5 flex items-center gap-1.5 text-xs text-stone-400">
 									<span>{liveRun.totalSteps} step{liveRun.totalSteps !== 1 ? 's' : ''}</span>
 									{#if liveRun.status === 'running'}
 										<span class="text-stone-300">&middot;</span>
@@ -97,7 +97,7 @@
 							<StatusBadge status={run.status} size="sm" pulse={false} class="mt-0.5" />
 							<div class="min-w-0 flex-1">
 								<p class="truncate text-xs font-medium text-stone-800">{run.name}</p>
-								<div class="mt-0.5 flex items-center gap-1.5 text-[10px] text-stone-400">
+								<div class="mt-0.5 flex items-center gap-1.5 text-xs text-stone-400">
 									<span>{run.totalSteps} step{run.totalSteps !== 1 ? 's' : ''}</span>
 									{#if durMs >= 0}
 										<span class="text-stone-300">&middot;</span>
@@ -123,7 +123,7 @@
 					{#if !liveRun && runs.length === 0}
 						<div class="rounded-xl border border-dashed border-stone-200 px-4 py-6 text-center">
 							<Icon icon="solar:inbox-bold-duotone" class="mx-auto mb-1.5 h-6 w-6 text-stone-300" />
-							<p class="text-[11px] text-stone-400">No runs yet</p>
+							<p class="text-xs text-stone-400">No runs yet</p>
 						</div>
 					{/if}
 				</div>

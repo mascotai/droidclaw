@@ -66,7 +66,7 @@
 			<Icon icon="solar:bolt-bold-duotone" class="h-4 w-4 text-cyan-500" />
 			<Card.Title class="text-sm font-medium text-stone-700">Active Workflows</Card.Title>
 			{#if flows.length > 0}
-				<Badge variant="outline" class="text-[10px]">{flows.length}</Badge>
+				<Badge variant="outline" class="text-xs">{flows.length}</Badge>
 			{/if}
 		</div>
 	</Card.Header>
@@ -107,7 +107,7 @@
 									<div class="min-w-0 flex-1">
 										<p class="truncate text-xs font-medium text-stone-800">{flow.goalKey}</p>
 										{#if flow.appPackage}
-											<Badge variant="outline" class="mt-1 bg-blue-50 text-blue-600 border-blue-200 gap-0.5 text-[10px]">
+											<Badge variant="outline" class="mt-1 bg-blue-50 text-blue-600 border-blue-200 gap-0.5 text-xs">
 												<Icon icon="solar:box-bold-duotone" class="h-2.5 w-2.5" />
 												{flow.appPackage}
 											</Badge>
@@ -117,7 +117,7 @@
 								</div>
 
 								<!-- Stats row -->
-								<div class="mb-3 flex flex-wrap items-center gap-2 text-[10px] text-stone-400">
+								<div class="mb-3 flex flex-wrap items-center gap-2 text-xs text-stone-400">
 									<span>{flow.stepCount} step{flow.stepCount !== 1 ? 's' : ''}</span>
 									<span class="text-stone-200">·</span>
 									<span class="text-emerald-600">{flow.successCount ?? 0} hits</span>
@@ -133,7 +133,7 @@
 
 								<!-- Actions -->
 								<div class="flex items-center gap-2">
-									<Button size="sm" onclick={() => onrun(flow)} class="flex-1 gap-1.5 bg-cyan-600 hover:bg-cyan-500 text-[11px] h-7">
+									<Button size="sm" onclick={() => onrun(flow)} class="flex-1 gap-1.5 bg-cyan-600 hover:bg-cyan-500 text-xs h-7">
 										<Icon icon="solar:play-bold" class="h-3 w-3" />
 										Run
 									</Button>

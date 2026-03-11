@@ -94,13 +94,13 @@
 	const canSubmit = $derived(steps.some((s) => s.goal.trim()) && !disabled && !isRunning);
 </script>
 
-<div class="rounded-2xl bg-white p-5">
+<div class="rounded-xl bg-white p-5">
 	<div class="mb-3 flex items-center justify-between">
 		<p class="text-sm font-medium text-stone-700">
 			{steps.length === 1 ? 'Run a task' : `Workflow · ${steps.length} steps`}
 		</p>
 		{#if steps.length > 1}
-			<span class="text-[10px] text-stone-400">Steps run sequentially</span>
+			<span class="text-xs text-stone-400">Steps run sequentially</span>
 		{/if}
 	</div>
 
@@ -110,7 +110,7 @@
 			<div class="rounded-xl border border-stone-200 bg-stone-50 p-3 transition-colors hover:border-stone-300">
 				<div class="flex gap-2">
 					{#if steps.length > 1}
-						<span class="mt-2 shrink-0 rounded-full bg-stone-200 px-2 py-0.5 font-mono text-[10px] text-stone-500">
+						<span class="mt-2 shrink-0 rounded-full bg-stone-200 px-2 py-0.5 font-mono text-xs text-stone-500">
 							{idx + 1}
 						</span>
 					{/if}
@@ -138,7 +138,7 @@
 						<!-- Advanced params (accordion) -->
 						<Accordion.Root type="single">
 							<Accordion.Item value="advanced-{step._id}" class="border-none">
-								<Accordion.Trigger class="py-1 text-[10px] text-stone-400 hover:text-stone-600 hover:no-underline">
+								<Accordion.Trigger class="py-1 text-xs text-stone-400 hover:text-stone-600 hover:no-underline">
 									<div class="flex items-center gap-1">
 										<Icon icon="solar:tuning-2-bold-duotone" class="h-3 w-3" />
 										Advanced
@@ -147,34 +147,34 @@
 								<Accordion.Content>
 									<div class="flex flex-wrap items-center gap-4 rounded-lg bg-stone-100 px-3 py-2.5">
 										<div class="flex items-center gap-1.5">
-											<Label class="text-[10px] text-stone-500">Max steps</Label>
+											<Label class="text-xs text-stone-500">Max steps</Label>
 											<Input
 												type="number"
 												bind:value={step.maxSteps}
 												min={1}
 												max={50}
 												disabled={isRunning}
-												class="h-6 w-14 text-center text-[10px]"
+												class="h-6 w-14 text-center text-xs"
 											/>
 										</div>
 										<div class="flex items-center gap-1.5">
-											<Label class="text-[10px] text-stone-500">Retries</Label>
+											<Label class="text-xs text-stone-500">Retries</Label>
 											<Input
 												type="number"
 												bind:value={step.retries}
 												min={0}
 												max={5}
 												disabled={isRunning}
-												class="h-6 w-12 text-center text-[10px]"
+												class="h-6 w-12 text-center text-xs"
 											/>
 										</div>
 										<div class="flex items-center gap-1.5">
 											<Switch bind:checked={step.cache} disabled={isRunning} class="scale-75" />
-											<Label class="text-[10px] text-stone-500">Cache</Label>
+											<Label class="text-xs text-stone-500">Cache</Label>
 										</div>
 										<div class="flex items-center gap-1.5">
 											<Switch bind:checked={step.forceStop} disabled={isRunning} class="scale-75" />
-											<Label class="text-[10px] text-stone-500">Force stop</Label>
+											<Label class="text-xs text-stone-500">Force stop</Label>
 										</div>
 									</div>
 								</Accordion.Content>
@@ -213,7 +213,7 @@
 	<!-- Variables section -->
 	{#if variables.length > 0}
 		<div class="mt-4 border-t border-stone-100 pt-3">
-			<p class="mb-2 text-[10px] font-semibold uppercase tracking-wider text-stone-400">Variables</p>
+			<p class="mb-2 text-xs font-semibold uppercase tracking-wider text-stone-400">Variables</p>
 			<div class="space-y-1.5">
 				{#each variables as v, i}
 					<div class="flex gap-2">
@@ -222,14 +222,14 @@
 							bind:value={v.key}
 							placeholder="key"
 							disabled={isRunning}
-							class="w-28 font-mono text-[11px]"
+							class="w-28 font-mono text-xs"
 						/>
 						<Input
 							type="text"
 							bind:value={v.value}
 							placeholder="value"
 							disabled={isRunning}
-							class="flex-1 text-[11px]"
+							class="flex-1 text-xs"
 						/>
 						<Button variant="ghost" size="icon" onclick={() => removeVariable(i)} disabled={isRunning} class="h-8 w-8 text-stone-300 hover:text-red-500">
 							<Icon icon="solar:close-circle-bold-duotone" class="h-3.5 w-3.5" />
@@ -267,12 +267,12 @@
 	<!-- Example goals (only when single step is empty and idle) -->
 	{#if steps.length === 1 && !steps[0].goal.trim() && !isRunning}
 		<div class="mt-4 border-t border-stone-100 pt-3">
-			<p class="mb-2 text-[10px] font-medium text-stone-400">Try an example</p>
+			<p class="mb-2 text-xs font-medium text-stone-400">Try an example</p>
 			<div class="flex flex-wrap gap-1.5">
 				{#each exampleGoals as example}
 					<button
 						onclick={() => (steps[0].goal = example)}
-						class="rounded-full border border-stone-200 bg-stone-50 px-2.5 py-1 text-[11px] text-stone-600 transition-colors hover:border-stone-300 hover:bg-white"
+						class="rounded-full border border-stone-200 bg-stone-50 px-2.5 py-1 text-xs text-stone-600 transition-colors hover:border-stone-300 hover:bg-white"
 					>
 						{example}
 					</button>

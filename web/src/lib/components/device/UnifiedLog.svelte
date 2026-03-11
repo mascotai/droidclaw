@@ -102,9 +102,9 @@
 		</div>
 		<Tabs.Root bind:value={filter}>
 			<Tabs.List class="h-8">
-				<Tabs.Trigger value="all" class="text-[11px] px-2.5 py-1">All</Tabs.Trigger>
-				<Tabs.Trigger value="single" class="text-[11px] px-2.5 py-1">Single</Tabs.Trigger>
-				<Tabs.Trigger value="multi" class="text-[11px] px-2.5 py-1">Multi</Tabs.Trigger>
+				<Tabs.Trigger value="all" class="text-xs px-2.5 py-1">All</Tabs.Trigger>
+				<Tabs.Trigger value="single" class="text-xs px-2.5 py-1">Single</Tabs.Trigger>
+				<Tabs.Trigger value="multi" class="text-xs px-2.5 py-1">Multi</Tabs.Trigger>
 			</Tabs.List>
 		</Tabs.Root>
 	</div>

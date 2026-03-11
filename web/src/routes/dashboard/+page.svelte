@@ -3,6 +3,7 @@
 	import { DASHBOARD_CARD_CLICK } from '$lib/analytics/events';
 	import { getConfig } from '$lib/api/settings.remote';
 	import { listDevices } from '$lib/api/devices.remote';
+	import { dashboardWs } from '$lib/stores/dashboard-ws.svelte';
 	import * as Card from '$lib/components/ui/card';
 	import { Progress } from '$lib/components/ui/progress';
 	import { Badge } from '$lib/components/ui/badge';
@@ -36,7 +37,9 @@
 	// Setup checklist data
 	const [config, devices] = await Promise.all([getConfig(), listDevices()]);
 	const hasConfig = config !== null;
-	const hasDevice = (devices as unknown[]).length > 0;
+	const deviceList = devices as Array<{ status?: string }>;
+	const hasDevice = deviceList.length > 0;
+	const onlineCount = deviceList.filter((d) => d.status === 'online').length;
 
 	const checklist = [
 		{
@@ -65,10 +68,66 @@
 </script>
 
 <h2 class="mb-1 text-xl font-bold md:text-2xl">Dashboard</h2>
-<p class="mb-8 text-stone-500">Welcome back, {data.user.name}.</p>
+<p class="mb-6 text-stone-500">Welcome back, {data.user.name}.</p>
+
+<!-- Stat cards row -->
+<div class="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+	<Card.Root>
+		<Card.Content class="flex items-center gap-3 py-4">
+			<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-100">
+				<Icon icon="solar:smartphone-bold-duotone" class="h-5 w-5 text-emerald-600" />
+			</div>
+			<div>
+				<p class="text-2xl font-bold text-stone-900">{deviceList.length}</p>
+				<p class="text-xs text-stone-500">
+					{#if deviceList.length === 0}
+						No devices
+					{:else}
+						{onlineCount} online
+					{/if}
+				</p>
+			</div>
+		</Card.Content>
+	</Card.Root>
+
+	<Card.Root>
+		<Card.Content class="flex items-center gap-3 py-4">
+			<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-violet-100">
+				<Icon icon="solar:bolt-bold-duotone" class="h-5 w-5 text-violet-600" />
+			</div>
+			<div>
+				<p class="text-2xl font-bold text-stone-900">&mdash;</p>
+				<p class="text-xs text-stone-500">Workflow runs</p>
+			</div>
+		</Card.Content>
+	</Card.Root>
+
+	<Card.Root>
+		<Card.Content class="flex items-center gap-3 py-4">
+			<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full {dashboardWs.connected ? 'bg-emerald-100' : 'bg-stone-100'}">
+				<span class="relative flex h-2.5 w-2.5">
+					{#if dashboardWs.connected}
+						<span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60"></span>
+						<span class="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
+					{:else}
+						<span class="relative inline-flex h-2.5 w-2.5 rounded-full bg-stone-300"></span>
+					{/if}
+				</span>
+			</div>
+			<div>
+				<p class="text-2xl font-bold {dashboardWs.connected ? 'text-emerald-600' : 'text-stone-400'}">
+					{dashboardWs.connected ? 'Live' : '...'}
+				</p>
+				<p class="text-xs text-stone-500">
+					{dashboardWs.connected ? 'Connected' : 'Connecting'}
+				</p>
+			</div>
+		</Card.Content>
+	</Card.Root>
+</div>
 
 {#if data.plan}
-	<Card.Root class="mb-8">
+	<Card.Root class="mb-6">
 		<Card.Content class="flex items-center gap-4 py-4">
 			<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-100">
 				<Icon icon="solar:verified-check-bold-duotone" class="h-5 w-5 text-emerald-600" />
@@ -94,14 +153,14 @@
 			<p class="text-sm font-medium text-stone-500">{completedCount} of {checklist.length} complete</p>
 			<Progress value={progressPercent} class="h-1.5 max-w-[120px]" />
 		</div>
-		<Card.Root>
+		<Card.Root class="bg-gradient-to-b from-stone-50 to-white">
 			{#each checklist as step, i}
 				<a
 					href={step.href}
 					class="flex items-center gap-4 p-5 transition-colors hover:bg-stone-50/80
 						{i > 0 ? 'border-t border-stone-100' : ''}
-						{i === 0 ? 'rounded-t-2xl' : ''}
-						{i === checklist.length - 1 ? 'rounded-b-2xl' : ''}"
+						{i === 0 ? 'rounded-t-xl' : ''}
+						{i === checklist.length - 1 ? 'rounded-b-xl' : ''}"
 				>
 					<div class="flex h-8 w-8 shrink-0 items-center justify-center">
 						{#if step.done}
@@ -119,27 +178,41 @@
 			{/each}
 		</Card.Root>
 	</div>
+{:else}
+	<!-- All complete celebration -->
+	<Card.Root class="mb-6 border-emerald-200 bg-gradient-to-br from-emerald-50 to-white">
+		<Card.Content class="flex items-center gap-4 py-5">
+			<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-100">
+				<Icon icon="solar:star-bold-duotone" class="h-5 w-5 text-emerald-600" />
+			</div>
+			<div>
+				<p class="text-sm font-semibold text-emerald-900">All set!</p>
+				<p class="text-xs text-emerald-600">Your workspace is ready. Start automating your devices.</p>
+			</div>
+		</Card.Content>
+	</Card.Root>
 {/if}
 
-<Card.Root>
-	{#each cards as card, i}
+<!-- Nav cards as individual cards in grid -->
+<div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+	{#each cards as card}
 		<a
 			href={card.href}
 			data-umami-event={DASHBOARD_CARD_CLICK}
 			data-umami-event-section={card.title.toLowerCase().replace(' ', '-')}
-			class="flex items-center gap-4 p-5 transition-all duration-200 hover:bg-stone-50/80
-				{i > 0 ? 'border-t border-stone-100' : ''}
-				{i === 0 ? 'rounded-t-2xl' : ''}
-				{i === cards.length - 1 ? 'rounded-b-2xl' : ''}"
+			class="group block transition-all duration-200 hover:scale-[1.01] hover:shadow-md active:scale-[0.98]"
 		>
-			<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full {card.color}">
-				<Icon icon={card.icon} class="h-5 w-5" />
-			</div>
-			<div class="flex-1">
-				<h3 class="font-semibold text-stone-900">{card.title}</h3>
-				<p class="mt-0.5 text-sm text-stone-500">{card.desc}</p>
-			</div>
-			<Icon icon="solar:alt-arrow-right-linear" class="h-4 w-4 text-stone-300" />
+			<Card.Root class="h-full">
+				<Card.Content class="flex flex-col items-center gap-3 py-6 text-center">
+					<div class="flex h-12 w-12 items-center justify-center rounded-full {card.color} transition-transform group-hover:scale-110">
+						<Icon icon={card.icon} class="h-6 w-6" />
+					</div>
+					<div>
+						<h3 class="font-semibold text-stone-900">{card.title}</h3>
+						<p class="mt-0.5 text-sm text-stone-500">{card.desc}</p>
+					</div>
+				</Card.Content>
+			</Card.Root>
 		</a>
 	{/each}
-</Card.Root>
+</div>

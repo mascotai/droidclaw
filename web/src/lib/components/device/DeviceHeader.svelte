@@ -27,7 +27,7 @@
 	);
 </script>
 
-<div class="mb-6">
+<div class="sticky top-0 z-10 -mx-4 mb-6 bg-background/80 px-4 backdrop-blur-sm md:-mx-8 md:px-8">
 	<!-- Top row: back button + device name + status -->
 	<div class="flex items-center gap-3">
 		<a
@@ -76,7 +76,7 @@
 				<div class="grid gap-4 sm:grid-cols-2">
 					<!-- Device Specs -->
 					<div>
-						<p class="mb-2 text-[10px] font-semibold uppercase tracking-wider text-stone-400">Specs</p>
+						<p class="mb-2 text-xs font-semibold uppercase tracking-wider text-stone-400">Specs</p>
 						<div class="space-y-1.5 text-sm">
 							{#if deviceData?.androidVersion}
 								<div class="flex justify-between">
@@ -109,7 +109,7 @@
 					{#if deviceData && deviceData.installedApps.length > 0}
 						<div>
 							<div class="mb-2 flex items-center justify-between">
-								<p class="text-[10px] font-semibold uppercase tracking-wider text-stone-400">
+								<p class="text-xs font-semibold uppercase tracking-wider text-stone-400">
 									Apps ({deviceData.installedApps.length})
 								</p>
 								<div class="relative">
@@ -118,7 +118,7 @@
 										type="text"
 										bind:value={appSearch}
 										placeholder="Search..."
-										class="w-32 rounded-md border border-stone-200 bg-stone-50 py-1 pl-6 pr-2 text-[10px] focus:border-stone-400 focus:outline-none"
+										class="w-32 rounded-md border border-stone-200 bg-stone-50 py-1 pl-6 pr-2 text-xs focus:border-stone-400 focus:outline-none"
 									/>
 								</div>
 							</div>
@@ -126,13 +126,13 @@
 								{#each filteredApps.slice(0, 50) as app (app.packageName)}
 									<div class="flex items-center justify-between rounded-md px-2 py-1 text-xs hover:bg-stone-50">
 										<span class="font-medium text-stone-800">{app.label}</span>
-										<span class="font-mono text-[10px] text-stone-400">{app.packageName}</span>
+										<span class="font-mono text-xs text-stone-400">{app.packageName}</span>
 									</div>
 								{:else}
-									<p class="py-2 text-[10px] text-stone-400 italic">No apps match</p>
+									<p class="py-2 text-xs text-stone-400 italic">No apps match</p>
 								{/each}
 								{#if filteredApps.length > 50}
-									<p class="py-1 text-[10px] text-stone-400 italic">+{filteredApps.length - 50} more</p>
+									<p class="py-1 text-xs text-stone-400 italic">+{filteredApps.length - 50} more</p>
 								{/if}
 							</div>
 						</div>

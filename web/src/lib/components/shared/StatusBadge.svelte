@@ -100,7 +100,7 @@
 	});
 
 	const showPulse = $derived(pulse ?? (status === 'running' || status === 'online'));
-	const sizeClass = $derived(size === 'sm' ? 'text-[10px] px-1.5 py-0' : 'text-xs px-2.5 py-0.5');
+	const sizeClass = $derived(size === 'sm' ? 'text-xs px-1.5 py-0' : 'text-xs px-2.5 py-0.5');
 </script>
 
 <Badge variant={config.variant} class="inline-flex items-center gap-1.5 font-medium transition-colors duration-300 {config.colorClass} {sizeClass} {cls}">

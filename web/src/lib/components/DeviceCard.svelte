@@ -60,12 +60,12 @@
 	data-umami-event-device={model ?? name}
 	class="group block transition-all duration-200 hover:scale-[1.01] hover:shadow-md active:scale-[0.98]"
 >
-	<Card.Root class="flex min-h-[280px] flex-col overflow-hidden">
+	<Card.Root class="flex flex-col overflow-hidden">
 		<Card.Header class="pb-3">
 			<div class="flex items-center justify-between">
 				<StatusBadge {status} size="sm" />
 				{#if batteryLevel !== null && batteryLevel >= 0}
-					<Badge variant="outline" class="gap-1 text-[11px] {batteryLevel <= 20 ? 'border-red-200 bg-red-50 text-red-600' : 'text-stone-500'}">
+					<Badge variant="outline" class="gap-1 text-xs {batteryLevel <= 20 ? 'border-red-200 bg-red-50 text-red-600' : 'text-stone-500'}">
 						<Icon
 							icon={batteryIcon(batteryLevel, isCharging)}
 							class="h-3.5 w-3.5"
@@ -91,16 +91,21 @@
 			</div>
 
 			<!-- Specs -->
-			<div class="flex flex-wrap gap-1.5">
+			<div class="flex flex-wrap items-center gap-1.5">
 				{#if androidVersion}
-					<Badge variant="secondary" class="text-[10px] font-normal">
+					<Badge variant="secondary" class="text-xs font-normal">
 						Android {androidVersion}
 					</Badge>
 				{/if}
 				{#if screenWidth && screenHeight}
-					<Badge variant="secondary" class="text-[10px] font-normal">
+					<Badge variant="secondary" class="text-xs font-normal">
 						{screenWidth}&times;{screenHeight}
 					</Badge>
+				{/if}
+				{#if lastSeen}
+					<span class="ml-auto text-xs text-stone-400">
+						<TimeAgo date={lastSeen} />
+					</span>
 				{/if}
 			</div>
 		</Card.Content>
