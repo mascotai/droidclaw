@@ -1,0 +1,220 @@
+import { pgTable, text, timestamp, boolean, integer, jsonb } from 'drizzle-orm/pg-core';
+
+export const user = pgTable('user', {
+	id: text('id').primaryKey(),
+	name: text('name').notNull(),
+	email: text('email').notNull().unique(),
+	emailVerified: boolean('email_verified').default(false).notNull(),
+	image: text('image'),
+	plan: text('plan'),
+	polarLicenseKey: text('polar_license_key'),
+	polarCustomerId: text('polar_customer_id'),
+	createdAt: timestamp('created_at').defaultNow().notNull(),
+	updatedAt: timestamp('updated_at')
+		.defaultNow()
+		.$onUpdate(() => new Date())
+		.notNull()
+});
+
+export const session = pgTable('session', {
+	id: text('id').primaryKey(),
+	expiresAt: timestamp('expires_at').notNull(),
+	token: text('token').notNull().unique(),
+	createdAt: timestamp('created_at').defaultNow().notNull(),
+	updatedAt: timestamp('updated_at')
+		.$onUpdate(() => new Date())
+		.notNull(),
+	ipAddress: text('ip_address'),
+	userAgent: text('user_agent'),
+	userId: text('user_id')
+		.notNull()
+		.references(() => user.id, { onDelete: 'cascade' })
+});
+
+export const account = pgTable('account', {
+	id: text('id').primaryKey(),
+	accountId: text('account_id').notNull(),
+	providerId: text('provider_id').notNull(),
+	userId: text('user_id')
+		.notNull()
+		.references(() => user.id, { onDelete: 'cascade' }),
+	accessToken: text('access_token'),
+	refreshToken: text('refresh_token'),
+	idToken: text('id_token'),
+	accessTokenExpiresAt: timestamp('access_token_expires_at'),
+	refreshTokenExpiresAt: timestamp('refresh_token_expires_at'),
+	scope: text('scope'),
+	password: text('password'),
+	createdAt: timestamp('created_at').defaultNow().notNull(),
+	updatedAt: timestamp('updated_at')
+		.$onUpdate(() => new Date())
+		.notNull()
+});
+
+export const verification = pgTable('verification', {
+	id: text('id').primaryKey(),
+	identifier: text('identifier').notNull(),
+	value: text('value').notNull(),
+	expiresAt: timestamp('expires_at').notNull(),
+	createdAt: timestamp('created_at').defaultNow().notNull(),
+	updatedAt: timestamp('updated_at')
+		.defaultNow()
+		.$onUpdate(() => new Date())
+		.notNull()
+});
+
+export const apikey = pgTable('apikey', {
+	id: text('id').primaryKey(),
+	name: text('name'),
+	start: text('start'),
+	prefix: text('prefix'),
+	key: text('key').notNull(),
+	userId: text('user_id')
+		.notNull()
+		.references(() => user.id, { onDelete: 'cascade' }),
+	refillInterval: integer('refill_interval'),
+	refillAmount: integer('refill_amount'),
+	lastRefillAt: timestamp('last_refill_at'),
+	enabled: boolean('enabled').default(true),
+	rateLimitEnabled: boolean('rate_limit_enabled').default(true),
+	rateLimitTimeWindow: integer('rate_limit_time_window').default(86400000),
+	rateLimitMax: integer('rate_limit_max').default(10),
+	requestCount: integer('request_count').default(0),
+	remaining: integer('remaining'),
+	lastRequest: timestamp('last_request'),
+	expiresAt: timestamp('expires_at'),
+	createdAt: timestamp('created_at').notNull(),
+	updatedAt: timestamp('updated_at').notNull(),
+	permissions: text('permissions'),
+	metadata: text('metadata'),
+	type: text('type').default('user') // "user" | "device"
+});
+
+export const llmConfig = pgTable('llm_config', {
+	id: text('id').primaryKey(),
+	userId: text('user_id')
+		.notNull()
+		.references(() => user.id, { onDelete: 'cascade' }),
+	provider: text('provider').notNull(),
+	apiKey: text('api_key').notNull(),
+	model: text('model'),
+	createdAt: timestamp('created_at').defaultNow().notNull(),
+	updatedAt: timestamp('updated_at')
+		.defaultNow()
+		.$onUpdate(() => new Date())
+		.notNull()
+});
+
+export const pairingCode = pgTable('pairing_code', {
+	id: text('id').primaryKey(),
+	code: text('code').notNull().unique(),
+	userId: text('user_id')
+		.notNull()
+		.references(() => user.id, { onDelete: 'cascade' }),
+	expiresAt: timestamp('expires_at').notNull(),
+	createdAt: timestamp('created_at').defaultNow().notNull()
+});
+
+export const device = pgTable('device', {
+	id: text('id').primaryKey(),
+	userId: text('user_id')
+		.notNull()
+		.references(() => user.id, { onDelete: 'cascade' }),
+	name: text('name').notNull(),
+	lastSeen: timestamp('last_seen'),
+	status: text('status').notNull().default('offline'),
+	deviceInfo: jsonb('device_info'),
+	createdAt: timestamp('created_at').defaultNow().notNull()
+});
+
+export const agentSession = pgTable('agent_session', {
+	id: text('id').primaryKey(),
+	userId: text('user_id')
+		.notNull()
+		.references(() => user.id, { onDelete: 'cascade' }),
+	deviceId: text('device_id')
+		.notNull()
+		.references(() => device.id, { onDelete: 'cascade' }),
+	goal: text('goal').notNull(),
+	status: text('status').notNull().default('running'),
+	stepsUsed: integer('steps_used').default(0),
+	startedAt: timestamp('started_at').defaultNow().notNull(),
+	completedAt: timestamp('completed_at'),
+	qstashMessageId: text('qstash_message_id'),
+	scheduledFor: timestamp('scheduled_for'),
+	scheduledDelay: integer('scheduled_delay')
+});
+
+export const agentStep = pgTable('agent_step', {
+	id: text('id').primaryKey(),
+	sessionId: text('session_id')
+		.notNull()
+		.references(() => agentSession.id, { onDelete: 'cascade' }),
+	stepNumber: integer('step_number').notNull(),
+	screenHash: text('screen_hash'),
+	action: jsonb('action'),
+	reasoning: text('reasoning'),
+	result: text('result'),
+	packageName: text('package_name'),
+	durationMs: integer('duration_ms'),
+	timestamp: timestamp('timestamp').defaultNow().notNull()
+});
+
+export const appHint = pgTable('app_hint', {
+	id: text('id').primaryKey(),
+	userId: text('user_id')
+		.notNull()
+		.references(() => user.id, { onDelete: 'cascade' }),
+	packageName: text('package_name').notNull(),
+	hint: text('hint').notNull(),
+	sourceSessionId: text('source_session_id').references(() => agentSession.id, {
+		onDelete: 'set null'
+	}),
+	createdAt: timestamp('created_at').defaultNow().notNull()
+});
+
+export const evalRun = pgTable('eval_run', {
+	id: text('id').primaryKey(),
+	userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+	deviceId: text('device_id').notNull().references(() => device.id, { onDelete: 'cascade' }),
+	name: text('name'),
+	status: text('status').notNull().default('running'),
+	runsPerWorkflow: integer('runs_per_workflow').notNull(),
+	workflowDefs: jsonb('workflow_defs').notNull(),
+	results: jsonb('results'),
+	startedAt: timestamp('started_at').defaultNow().notNull(),
+	completedAt: timestamp('completed_at'),
+});
+
+export const workflowRun = pgTable('workflow_run', {
+	id: text('id').primaryKey(),
+	userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+	deviceId: text('device_id').notNull().references(() => device.id, { onDelete: 'cascade' }),
+	name: text('name').notNull(),
+	type: text('type').notNull().default('workflow'),
+	steps: jsonb('steps').notNull(),
+	status: text('status').notNull().default('running'),
+	currentStep: integer('current_step').default(0),
+	totalSteps: integer('total_steps').notNull(),
+	stepResults: jsonb('step_results'),
+	startedAt: timestamp('started_at').defaultNow().notNull(),
+	completedAt: timestamp('completed_at'),
+	qstashMessageId: text('qstash_message_id'),
+	scheduledFor: timestamp('scheduled_for'),
+	evalRunId: text('eval_run_id').references(() => evalRun.id, { onDelete: 'set null' }),
+});
+
+export const cachedFlow = pgTable('cached_flow', {
+	id: text('id').primaryKey(),
+	userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+	deviceId: text('device_id').notNull().references(() => device.id, { onDelete: 'cascade' }),
+	goalKey: text('goal_key').notNull(),
+	appPackage: text('app_package'),
+	steps: jsonb('steps').notNull(),
+	timeline: jsonb('timeline'),
+	successCount: integer('success_count').default(0),
+	failCount: integer('fail_count').default(0),
+	sourceSessionId: text('source_session_id').references(() => agentSession.id, { onDelete: 'set null' }),
+	createdAt: timestamp('created_at').defaultNow().notNull(),
+	lastUsedAt: timestamp('last_used_at'),
+});
