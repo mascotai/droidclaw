@@ -1,5 +1,8 @@
 <script lang="ts">
 	import Icon from '@iconify/svelte';
+	import { StatusBadge, TimeAgo, DurationDisplay } from '$lib/components/shared';
+	import * as Card from '$lib/components/ui/card';
+	import { Badge } from '$lib/components/ui/badge';
 	import type { WorkflowRun, StepResult, WorkflowStepConfig, WorkflowLiveProgress } from './types';
 
 	interface Props {
@@ -12,18 +15,9 @@
 
 	let { run, liveProgress, onexpand, onstepclick, expanded }: Props = $props();
 
-	function formatTime(d: string | Date) {
-		return (d instanceof Date ? d : new Date(d)).toLocaleString();
-	}
-
-	function formatDuration(startedAt: Date | string, completedAt: Date | string | null): string {
-		if (!completedAt) return 'running...';
-		const ms = new Date(completedAt).getTime() - new Date(startedAt).getTime();
-		const secs = Math.floor(ms / 1000);
-		if (secs < 60) return `${secs}s`;
-		const mins = Math.floor(secs / 60);
-		const remSecs = secs % 60;
-		return `${mins}m${remSecs > 0 ? `${remSecs}s` : ''}`;
+	function durationMs(startedAt: Date | string, completedAt: Date | string | null): number {
+		if (!completedAt) return -1;
+		return new Date(completedAt).getTime() - new Date(startedAt).getTime();
 	}
 
 	function countCacheHits(): number {
@@ -71,9 +65,10 @@
 	}
 
 	const cacheHits = $derived(countCacheHits());
+	const durMs = $derived(durationMs(run.startedAt, run.completedAt));
 </script>
 
-<div class="rounded-2xl bg-white">
+<Card.Root>
 	<!-- Row header -->
 	<button
 		onclick={() => onexpand(run.id)}
@@ -82,22 +77,15 @@
 		<div class="min-w-0 flex-1">
 			<div class="flex items-center gap-2">
 				<Icon
-					icon={run.type === 'flow'
-						? 'solar:programming-bold-duotone'
-						: 'solar:layers-bold-duotone'}
-					class="h-4 w-4 shrink-0 {run.status === 'completed'
-						? 'text-emerald-500'
-						: run.status === 'running'
-							? 'text-amber-500'
-							: 'text-red-500'}"
+					icon={run.type === 'flow' ? 'solar:programming-bold-duotone' : 'solar:layers-bold-duotone'}
+					class="h-4 w-4 shrink-0 {run.status === 'completed' ? 'text-emerald-500' : run.status === 'running' ? 'text-amber-500' : 'text-red-500'}"
 				/>
 				<p class="truncate text-sm font-medium text-stone-900">{run.name}</p>
 			</div>
-			<p class="mt-0.5 flex items-center gap-1.5 pl-6 text-xs text-stone-400">
-				<Icon icon="solar:clock-circle-bold-duotone" class="h-3.5 w-3.5" />
-				{formatTime(run.startedAt)}
+			<div class="mt-0.5 flex items-center gap-1.5 pl-6 text-xs text-stone-400">
+				<TimeAgo date={run.startedAt} />
 				<span class="text-stone-300">&middot;</span>
-				{run.totalSteps} goal{run.totalSteps !== 1 ? 's' : ''}
+				<span>{run.totalSteps} goal{run.totalSteps !== 1 ? 's' : ''}</span>
 				{#if cacheHits > 0}
 					<span class="text-stone-300">&middot;</span>
 					<span class="inline-flex items-center gap-0.5 text-cyan-600">
@@ -106,8 +94,12 @@
 					</span>
 				{/if}
 				<span class="text-stone-300">&middot;</span>
-				{formatDuration(run.startedAt, run.completedAt)}
-			</p>
+				{#if durMs >= 0}
+					<DurationDisplay ms={durMs} />
+				{:else}
+					<span>running...</span>
+				{/if}
+			</div>
 			{#if run.status === 'running' && liveProgress}
 				<p class="mt-1 flex items-center gap-1.5 pl-6 text-xs text-amber-600">
 					<Icon icon="solar:play-circle-bold-duotone" class="h-3.5 w-3.5 animate-pulse" />
@@ -120,32 +112,7 @@
 			{/if}
 		</div>
 		<div class="ml-3 flex shrink-0 items-center gap-2">
-			<span
-				class="flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium
-					{run.status === 'completed'
-					? 'bg-emerald-50 text-emerald-700'
-					: run.status === 'running'
-						? 'bg-amber-50 text-amber-700'
-						: run.status === 'stopped'
-							? 'bg-stone-100 text-stone-500'
-							: 'bg-red-50 text-red-700'}"
-			>
-				<Icon
-					icon={run.status === 'completed'
-						? 'solar:check-circle-bold-duotone'
-						: run.status === 'running'
-							? 'solar:refresh-circle-bold-duotone'
-							: 'solar:close-circle-bold-duotone'}
-					class="h-3.5 w-3.5 {run.status === 'running' ? 'animate-spin' : ''}"
-				/>
-				{run.status === 'completed'
-					? 'Completed'
-					: run.status === 'running'
-						? 'Running'
-						: run.status === 'stopped'
-							? 'Stopped'
-							: 'Failed'}
-			</span>
+			<StatusBadge status={run.status} pulse={run.status === 'running'} />
 			<Icon
 				icon={expanded ? 'solar:alt-arrow-up-linear' : 'solar:alt-arrow-down-linear'}
 				class="h-4 w-4 text-stone-400"
@@ -186,15 +153,9 @@
 						</div>
 						<div class="flex shrink-0 flex-col items-end gap-1">
 							{#if stepResult}
-								<span
-									class="flex items-center gap-1 text-xs font-medium {stepResult.success
-										? 'text-emerald-600'
-										: 'text-red-600'}"
-								>
+								<span class="flex items-center gap-1 text-xs font-medium {stepResult.success ? 'text-emerald-600' : 'text-red-600'}">
 									<Icon
-										icon={stepResult.success
-											? 'solar:check-circle-bold-duotone'
-											: 'solar:close-circle-bold-duotone'}
+										icon={stepResult.success ? 'solar:check-circle-bold-duotone' : 'solar:close-circle-bold-duotone'}
 										class="h-3.5 w-3.5"
 									/>
 									{stepResult.success ? 'OK' : 'Failed'}
@@ -206,25 +167,17 @@
 								{/if}
 								{#if stepResult.resolvedBy}
 									{#if stepResult.resolvedBy === 'cached_flow'}
-										<span
-											class="flex items-center gap-0.5 rounded bg-cyan-100 px-1.5 py-0.5 text-[9px] font-medium text-cyan-700"
-										>
+										<Badge variant="outline" class="bg-cyan-50 text-cyan-700 border-cyan-200 gap-0.5 text-[9px]">
 											<Icon icon="solar:bolt-bold-duotone" class="h-2.5 w-2.5" />
 											cached
-										</span>
+										</Badge>
 									{:else}
-										<span
-											class="rounded bg-stone-200 px-1.5 py-0.5 text-[9px] text-stone-500"
-											>{stepResult.resolvedBy}</span
-										>
+										<Badge variant="outline" class="text-[9px]">{stepResult.resolvedBy}</Badge>
 									{/if}
 								{/if}
 							{:else if isStepActive(stepIdx)}
 								<span class="flex items-center gap-1 text-xs font-medium text-amber-600">
-									<Icon
-										icon="solar:refresh-circle-bold-duotone"
-										class="h-3.5 w-3.5 animate-spin"
-									/>
+									<Icon icon="solar:refresh-circle-bold-duotone" class="h-3.5 w-3.5 animate-spin" />
 									Running
 								</span>
 							{:else}
@@ -235,14 +188,11 @@
 							{/if}
 						</div>
 						{#if stepResult}
-							<Icon
-								icon="solar:alt-arrow-right-linear"
-								class="mt-0.5 h-4 w-4 shrink-0 text-stone-300"
-							/>
+							<Icon icon="solar:alt-arrow-right-linear" class="mt-0.5 h-4 w-4 shrink-0 text-stone-300" />
 						{/if}
 					</button>
 				{/each}
 			</div>
 		</div>
 	{/if}
-</div>
+</Card.Root>

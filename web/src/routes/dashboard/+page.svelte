@@ -3,6 +3,9 @@
 	import { DASHBOARD_CARD_CLICK } from '$lib/analytics/events';
 	import { getConfig } from '$lib/api/settings.remote';
 	import { listDevices } from '$lib/api/devices.remote';
+	import * as Card from '$lib/components/ui/card';
+	import { Progress } from '$lib/components/ui/progress';
+	import { Badge } from '$lib/components/ui/badge';
 
 	let { data } = $props();
 
@@ -58,29 +61,40 @@
 
 	const completedCount = checklist.filter((s) => s.done).length;
 	const allComplete = completedCount === checklist.length;
+	const progressPercent = (completedCount / checklist.length) * 100;
 </script>
 
-<h2 class="mb-1 text-xl md:text-2xl font-bold">Dashboard</h2>
+<h2 class="mb-1 text-xl font-bold md:text-2xl">Dashboard</h2>
 <p class="mb-8 text-stone-500">Welcome back, {data.user.name}.</p>
 
 {#if data.plan}
-	<div class="mb-8 flex items-center gap-4 rounded-2xl bg-white p-4 md:p-5">
-		<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-100">
-			<Icon icon="solar:verified-check-bold-duotone" class="h-5 w-5 text-emerald-600" />
-		</div>
-		<div>
-			<h3 class="font-semibold text-emerald-900">{data.plan === 'ltd' ? 'Lifetime Deal' : data.plan} Plan</h3>
-			<p class="mt-0.5 text-sm text-emerald-700">
-				License: {data.licenseKey ?? 'Active'}
-			</p>
-		</div>
-	</div>
+	<Card.Root class="mb-8">
+		<Card.Content class="flex items-center gap-4 py-4">
+			<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-100">
+				<Icon icon="solar:verified-check-bold-duotone" class="h-5 w-5 text-emerald-600" />
+			</div>
+			<div>
+				<Card.Title class="text-sm">
+					{data.plan === 'ltd' ? 'Lifetime Deal' : data.plan} Plan
+				</Card.Title>
+				<Card.Description>
+					License: {data.licenseKey ?? 'Active'}
+				</Card.Description>
+			</div>
+			<Badge variant="outline" class="ml-auto border-emerald-200 bg-emerald-50 text-emerald-700">
+				Active
+			</Badge>
+		</Card.Content>
+	</Card.Root>
 {/if}
 
 {#if !allComplete}
 	<div class="mb-6">
-		<p class="mb-3 text-sm font-medium text-stone-500">{completedCount} of {checklist.length} complete</p>
-		<div class="rounded-2xl bg-white">
+		<div class="mb-3 flex items-center gap-3">
+			<p class="text-sm font-medium text-stone-500">{completedCount} of {checklist.length} complete</p>
+			<Progress value={progressPercent} class="h-1.5 max-w-[120px]" />
+		</div>
+		<Card.Root>
 			{#each checklist as step, i}
 				<a
 					href={step.href}
@@ -97,17 +111,17 @@
 						{/if}
 					</div>
 					<div class="flex-1">
-						<h3 class="text-sm font-semibold {step.done ? 'text-stone-400' : 'text-stone-900'}">{step.label}</h3>
+						<h3 class="text-sm font-semibold {step.done ? 'text-stone-400 line-through' : 'text-stone-900'}">{step.label}</h3>
 						<p class="mt-0.5 text-xs text-stone-400">{step.desc}</p>
 					</div>
 					<Icon icon="solar:alt-arrow-right-linear" class="h-5 w-5 text-stone-300" />
 				</a>
 			{/each}
-		</div>
+		</Card.Root>
 	</div>
 {/if}
 
-<div class="rounded-2xl bg-white">
+<Card.Root>
 	{#each cards as card, i}
 		<a
 			href={card.href}
@@ -128,4 +142,4 @@
 			<Icon icon="solar:alt-arrow-right-linear" class="h-5 w-5 text-stone-300" />
 		</a>
 	{/each}
-</div>
+</Card.Root>
