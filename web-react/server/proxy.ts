@@ -72,8 +72,8 @@ app.all('/api/*', async (c) => {
 		return c.json({ error: 'Unauthorized' }, 401);
 	}
 
-	// Strip /api prefix → forward to server
-	const path = c.req.path.replace(/^\/api/, '');
+	// Rewrite /api → /v2 prefix for the backend server
+	const path = c.req.path.replace(/^\/api/, '/v2');
 	const url = `${SERVER_URL}${path}${c.req.raw.url.includes('?') ? '?' + c.req.raw.url.split('?')[1] : ''}`;
 
 	const headers: Record<string, string> = {
