@@ -289,11 +289,11 @@ function compileAction(
     case "launch":
       return { launch: String(action.package ?? "") };
 
-    // ── find_and_tap: compile to a regular tap with the query as target ──
+    // ── find_and_tap: keep as its own step type so the flow runner can scroll to find it ──
     case "find_and_tap": {
       const query = action.query as string | undefined;
       if (!query) return null;
-      return { tap: query };
+      return { find_and_tap: query };
     }
 
     // ── Dismiss popup (soft — replayed as optional tap) ──

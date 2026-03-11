@@ -161,6 +161,40 @@ export async function executeFlowStepWs(
         await new Promise((r) => setTimeout(r, 800));
         return { success: true, message: `No popup button "${value}" found, pressed Back to dismiss` };
       }
+      case "find_and_tap": {
+        // Scroll down to find the element, just like the agent skill does
+        const query = String(value).toLowerCase();
+        const maxScrolls = 8;
+
+        // 1. Check current screen
+        const fatScreenRes = await sessions.sendCommand(deviceId, { type: "get_screen" }) as any;
+        let fatElements = (fatScreenRes?.elements ?? []) as FlowUIElement[];
+        let fatEl = fatElements.find((e: FlowUIElement) =>
+          e.text && e.text.toLowerCase().includes(query)
+        );
+
+        // 2. If not found, scroll down and re-check
+        if (!fatEl) {
+          for (let s = 0; s < maxScrolls; s++) {
+            await sessions.sendCommand(deviceId, { type: "scroll", direction: "down" });
+            await new Promise((r) => setTimeout(r, 1200));
+            const freshRes = await sessions.sendCommand(deviceId, { type: "get_screen" }) as any;
+            fatElements = (freshRes?.elements ?? []) as FlowUIElement[];
+            fatEl = fatElements.find((e: FlowUIElement) =>
+              e.text && e.text.toLowerCase().includes(query)
+            );
+            if (fatEl) break;
+          }
+        }
+
+        if (!fatEl) {
+          const available = fatElements.filter((e: FlowUIElement) => e.text).map((e: FlowUIElement) => e.text).slice(0, 10);
+          return { success: false, message: `Element "${value}" not found after scrolling. Available: ${available.join(", ")}` };
+        }
+
+        await sessions.sendCommand(deviceId, { type: "tap", x: fatEl.center[0], y: fatEl.center[1] });
+        return { success: true, message: `Found and tapped "${fatEl.text}" at (${fatEl.center[0]}, ${fatEl.center[1]})` };
+      }
       default:
         return { success: false, message: `Unknown command: ${command}` };
     }
