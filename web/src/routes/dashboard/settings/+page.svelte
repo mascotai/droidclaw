@@ -1,11 +1,10 @@
 <script lang="ts">
 	import { getConfig, updateConfig } from '$lib/api/settings.remote';
-	import { signout } from '$lib/api/auth.remote';
 	import { page } from '$app/state';
 	import Icon from '@iconify/svelte';
 	import { toast } from '$lib/toast';
 	import { track } from '$lib/analytics/track';
-	import { SETTINGS_SAVE, AUTH_SIGNOUT } from '$lib/analytics/events';
+	import { SETTINGS_SAVE } from '$lib/analytics/events';
 	import * as Card from '$lib/components/ui/card';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
@@ -218,17 +217,3 @@
 	</Card.Content>
 </Card.Root>
 
-<!-- Mobile sign out (sidebar hidden on mobile) -->
-<div class="mt-8 md:hidden">
-	<form {...signout}>
-		<Button
-			type="submit"
-			variant="outline"
-			class="w-full gap-2"
-			data-umami-event={AUTH_SIGNOUT}
-		>
-			<Icon icon="solar:logout-2-bold-duotone" class="h-4 w-4" />
-			Sign out
-		</Button>
-	</form>
-</div>
