@@ -392,6 +392,13 @@ class DroidClawAccessibilityService : AccessibilityService() {
                     Log.d(TAG, "  window pkg=$windowPkg -> skipped (overlay)")
                     continue
                 }
+                // Skip system UI (status bar, notification icons, nav bar) — these
+                // pollute the element list and confuse the agent. The agent never
+                // needs to interact with notification icons or battery indicators.
+                if (windowPkg in systemUiPackages) {
+                    Log.d(TAG, "  window pkg=$windowPkg -> skipped (system UI)")
+                    continue
+                }
                 val windowType = window.type
                 val windowLayer = window.layer
                 val root = window.root

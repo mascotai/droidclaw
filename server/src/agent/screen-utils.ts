@@ -2,55 +2,59 @@
  * Screen validation utilities for DroidClaw agent.
  *
  * When the Android accessibility tree is mid-transition (e.g., after tapping
- * a button, during app loading), the `get_screen` command may return only
- * system UI elements — notification labels, status bar, nav bar — instead
- * of the actual app content.
+ * a button, during app loading), the `get_screen` command may return an empty
+ * element list — the app window hasn't rendered yet.
  *
- * Detection uses the `hasAppWindow` flag from the Android side (preferred)
- * with a text-based heuristic fallback for older APK versions.
+ * Since APK v1.0.90+, system UI elements (status bar, notification icons,
+ * nav bar) are filtered out on the Android side. An empty elements array
+ * means no app content is visible.
  *
  * This module provides:
- *   isSystemOnlyScreen() — detect system-only captures
- *   getScreenWithRetry() — retry get_screen when system-only is detected
+ *   isEmptyScreen()       — detect empty captures (no app content)
+ *   getScreenWithRetry()  — retry get_screen when empty
  */
 
 import { sessions } from "../ws/sessions.js";
 
-interface ScreenElement {
-  text: string;
-  editable?: boolean;
-  [key: string]: unknown;
-}
-
 /**
- * Detect if a screen capture contains only system UI elements
- * (notification shade, status bar) and no actual app content.
+ * Detect if a screen capture has no app content.
  *
- * Uses `hasAppWindow` from the Android response when available (v1.0.88+).
- * Falls back to a text heuristic for older APK versions.
+ * Since v1.0.90, Android filters out system UI elements (com.android.systemui).
+ * An empty elements array means the app hasn't rendered its accessibility tree yet.
+ *
+ * For older APK versions, falls back to a text heuristic.
  */
-export function isSystemOnlyScreen(
-  elements: ScreenElement[],
+export function isEmptyScreen(
+  elements: { text?: string; editable?: boolean; [key: string]: unknown }[],
   hasAppWindow?: boolean
 ): boolean {
-  // Preferred: use the Android-side flag (accurate, based on window type)
-  if (hasAppWindow === false && elements.length > 0) return true;
-  if (hasAppWindow === true) return false;
+  // Primary: empty elements means no app content (v1.0.90+ filters system UI)
+  if (elements.length === 0) return true;
 
-  // Fallback heuristic for older APK versions that don't send hasAppWindow:
-  // If ALL text-bearing elements contain "notification" and there are no
-  // editable fields, the screen is system-only.
-  const textElements = elements.filter((el) => el.text?.trim());
-  if (textElements.length === 0) return false; // empty = different problem
-  const allNotifications = textElements.every((el) =>
-    el.text.toLowerCase().includes("notification")
-  );
-  const hasEditable = elements.some((el) => el.editable);
-  return allNotifications && !hasEditable;
+  // hasAppWindow=false means Android found no TYPE_APPLICATION window
+  if (hasAppWindow === false) return true;
+
+  // Fallback heuristic for older APK versions (< 1.0.90) that still send
+  // system UI elements: if ALL text-bearing elements contain "notification"
+  // and there are no editable fields, the screen is system-only.
+  if (hasAppWindow === undefined) {
+    const textElements = elements.filter((el) => el.text?.trim());
+    if (textElements.length === 0) return false;
+    const allNotifications = textElements.every((el) =>
+      el.text!.toLowerCase().includes("notification")
+    );
+    const hasEditable = elements.some((el) => el.editable);
+    if (allNotifications && !hasEditable) return true;
+  }
+
+  return false;
 }
 
+// Backward-compatible alias
+export const isSystemOnlyScreen = isEmptyScreen;
+
 /**
- * Get screen with retry — retries if the capture is system-only.
+ * Get screen with retry — retries if the capture is empty (no app content).
  * Waits up to ~10s total for the app window to appear.
  */
 export async function getScreenWithRetry(
@@ -70,7 +74,7 @@ export async function getScreenWithRetry(
     })) as any;
     const elements = res?.elements ?? [];
 
-    if (!isSystemOnlyScreen(elements, res?.hasAppWindow)) {
+    if (!isEmptyScreen(elements, res?.hasAppWindow)) {
       return {
         elements,
         packageName: res?.packageName,
@@ -82,7 +86,7 @@ export async function getScreenWithRetry(
 
     if (attempt < maxRetries) {
       console.log(
-        `[screen-utils] System-only screen detected (${elements.length} elements, hasAppWindow=${res?.hasAppWindow}), retrying in ${delayMs}ms (${attempt + 1}/${maxRetries})`
+        `[screen-utils] Empty screen (${elements.length} elements, hasAppWindow=${res?.hasAppWindow}), retrying in ${delayMs}ms (${attempt + 1}/${maxRetries})`
       );
       await new Promise((r) => setTimeout(r, delayMs));
     }
@@ -90,7 +94,7 @@ export async function getScreenWithRetry(
 
   // All retries exhausted — return whatever we got
   console.log(
-    `[screen-utils] All ${maxRetries} retries exhausted, returning system-only screen`
+    `[screen-utils] All ${maxRetries} retries exhausted, returning empty screen`
   );
   const finalRes = (await sessions.sendCommand(deviceId, {
     type: "get_screen",
