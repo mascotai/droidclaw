@@ -106,12 +106,14 @@ function DeviceDetailPage() {
 	];
 
 	return (
-		<div className="mx-auto max-w-5xl space-y-6">
-			{/* Device header */}
-			<DeviceHeader device={device} stats={stats ?? null} />
+		<div className="mx-auto flex h-full max-w-5xl flex-col">
+			{/* Device header — fixed */}
+			<div className="shrink-0">
+				<DeviceHeader device={device} stats={stats ?? null} />
+			</div>
 
-			{/* Tab navigation */}
-			<div className="border-b border-stone-200">
+			{/* Tab navigation — fixed */}
+			<div className="shrink-0 border-b border-stone-200 mt-6">
 				<nav className="-mb-px flex gap-6">
 					{tabs.map((t) => (
 						<button
@@ -129,17 +131,19 @@ function DeviceDetailPage() {
 				</nav>
 			</div>
 
-			{/* Tab content */}
-			{tab === 'overview' && (
-				<OverviewTab deviceId={deviceId} device={device} />
-			)}
-			{tab === 'workflows' && (
-				<WorkflowsTab
-					deviceId={deviceId}
-					selectedRunId={runId ?? null}
-					onSelectRun={setSelectedRunId}
-				/>
-			)}
+			{/* Tab content — scrollable */}
+			<div className="min-h-0 flex-1 overflow-y-auto pt-4">
+				{tab === 'overview' && (
+					<OverviewTab deviceId={deviceId} device={device} />
+				)}
+				{tab === 'workflows' && (
+					<WorkflowsTab
+						deviceId={deviceId}
+						selectedRunId={runId ?? null}
+						onSelectRun={setSelectedRunId}
+					/>
+				)}
+			</div>
 		</div>
 	);
 }

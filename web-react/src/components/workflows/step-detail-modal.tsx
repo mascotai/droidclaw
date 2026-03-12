@@ -8,6 +8,8 @@ import {
 	ChevronDown,
 	ChevronUp,
 	X,
+	Eye,
+	EyeOff,
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
@@ -199,7 +201,7 @@ function formatResult(result: string): ReactNode {
 }
 
 /** Format a long goal text into readable, structured blocks */
-function GoalText({ text }: { text: string }) {
+export function GoalText({ text }: { text: string }) {
 	if (!text || text === 'N/A') {
 		return <p className="text-sm text-stone-400 italic">No goal text</p>;
 	}
@@ -365,6 +367,9 @@ export function StepDetailModal({
 	const [screenData, setScreenData] = useState<Record<number, ScreenData | null>>({});
 	const [screenLoading, setScreenLoading] = useState<Set<number>>(new Set());
 	const [expandedElements, setExpandedElements] = useState<Set<string>>(new Set());
+	const [showSensitive, setShowSensitive] = useState(false);
+
+	const mask = useCallback((text: string) => showSensitive ? text : maskSensitive(text), [showSensitive]);
 
 	const toggleElements = useCallback((key: string) => {
 		setExpandedElements((prev) => {
@@ -445,7 +450,7 @@ export function StepDetailModal({
 	if (!open) return null;
 
 	return (
-		<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => onOpenChange(false)}>
+		<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm lg:pl-64" onClick={() => onOpenChange(false)}>
 			<div className="flex h-[94vh] w-[96vw] max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
 			{/* Header */}
 			<div className="flex shrink-0 items-center justify-between border-b border-stone-200 px-6 py-4">
@@ -481,10 +486,20 @@ export function StepDetailModal({
 						) : null}
 					</div>
 				</div>
-				<Button variant="ghost" size="icon-sm" onClick={() => onOpenChange(false)}>
-					<X className="h-4 w-4" />
-					<span className="sr-only">Close</span>
-				</Button>
+				<div className="flex items-center gap-1">
+					<Button
+						variant="ghost"
+						size="icon-sm"
+						onClick={() => setShowSensitive((v) => !v)}
+						title={showSensitive ? 'Hide sensitive data' : 'Reveal sensitive data'}
+					>
+						{showSensitive ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+					</Button>
+					<Button variant="ghost" size="icon-sm" onClick={() => onOpenChange(false)}>
+						<X className="h-4 w-4" />
+						<span className="sr-only">Close</span>
+					</Button>
+				</div>
 			</div>
 
 			{/* Body */}
@@ -495,7 +510,7 @@ export function StepDetailModal({
 						<p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-stone-400">
 							Goal
 						</p>
-						<GoalText text={stepResult.goal ?? config?.goal ?? stepResult.command ?? 'N/A'} />
+						<GoalText text={mask(stepResult.goal ?? config?.goal ?? stepResult.command ?? 'N/A')} />
 					</div>
 
 					{/* Configuration */}
@@ -575,7 +590,7 @@ export function StepDetailModal({
 													) : null}
 													{act.text ? (
 														<span className="rounded bg-white px-1.5 py-0.5 text-stone-700">
-															&quot;{maskSensitive(act.text)}&quot;
+															&quot;{mask(act.text)}&quot;
 														</span>
 													) : null}
 													{act.direction ? (

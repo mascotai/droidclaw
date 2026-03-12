@@ -170,9 +170,9 @@ export function WorkflowsTab({ deviceId, selectedRunId, onSelectRun }: Workflows
 	}
 
 	return (
-		<div className="space-y-4">
+		<div className="flex h-full flex-col">
 			{/* Header with New Workflow button */}
-			<div className="flex items-center justify-between">
+			<div className="flex shrink-0 items-center justify-between pb-4">
 				<div className="flex items-center gap-2">
 					<Clock className="h-4 w-4 text-stone-400" />
 					<h3 className="text-sm font-semibold text-stone-900">Recent Runs</h3>
@@ -193,11 +193,11 @@ export function WorkflowsTab({ deviceId, selectedRunId, onSelectRun }: Workflows
 			</div>
 
 			{/* Side-by-side layout: runs list (left) + detail (right) */}
-			<div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
+			<div className="min-h-0 flex-1 grid grid-cols-1 gap-4 lg:grid-cols-5">
 				{/* Left panel — Runs list */}
-				<div className="lg:col-span-2">
+				<div className="lg:col-span-2 overflow-y-auto">
 					{runs.length > 0 ? (
-						<div className="space-y-1.5 lg:max-h-[calc(100vh-220px)] lg:overflow-y-auto lg:pr-1">
+						<div className="space-y-1.5 pr-1">
 							{/* Live run at top */}
 							{liveRun && liveRun.status === 'running' && (
 								<button
@@ -268,9 +268,9 @@ export function WorkflowsTab({ deviceId, selectedRunId, onSelectRun }: Workflows
 				</div>
 
 				{/* Right panel — Run detail */}
-				<div className="lg:col-span-3">
+				<div className="lg:col-span-3 overflow-y-auto">
 					{selectedRunId ? (
-						<div className="rounded-xl border border-stone-200 bg-white p-4 lg:sticky lg:top-4 lg:max-h-[calc(100vh-220px)] lg:overflow-y-auto">
+						<div className="rounded-xl border border-stone-200 bg-white p-4">
 							<RunViewer
 								run={(runDetail as WorkflowRun | undefined) ?? null}
 								liveRun={viewerLiveRun}
