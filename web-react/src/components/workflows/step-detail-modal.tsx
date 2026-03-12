@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { type ReactNode, useState, useEffect, useCallback } from 'react';
 import {
 	CheckCircle2,
 	XCircle,
@@ -65,28 +65,114 @@ function parseAction(action: unknown): {
 	return { type: 'unknown' };
 }
 
-/** Format a long goal text into readable paragraphs */
-function GoalText({ text }: { text: string }) {
-	// Split on sentence boundaries that look like instructions
-	const sentences = text
-		.split(/(?<=[.!])\s+(?=[A-Z])/)
-		.filter(Boolean);
+/** Render a single text segment with inline formatting */
+function formatInline(text: string): ReactNode[] {
+	// Match: 'quoted UI elements', "double quoted", ALLCAPS_WORDS (3+ chars), action keywords, conditional/sequential markers
+	const parts: ReactNode[] = [];
+	const regex = /(\u2018[^\u2019]+\u2019|'[^']+')|(\"[^\"]+\")|(\b[A-Z][A-Z_]{2,}\b:?)|(\b(?:tap|type|scroll|swipe|clear|wait|launch|click|press|find_and_tap|read_screen|copy_visible_text|submit_message|wait_for_content|open_url|clipboard_set|paste|done|back|home|enter)\b)|((?:^|\.\s+)(?:If you see|If you land|Then:|After (?:tapping|clicking|each|that)))/g;
+	let lastIndex = 0;
+	let match: RegExpExecArray | null;
 
-	if (sentences.length <= 1) {
-		return <p className="whitespace-pre-wrap text-sm leading-relaxed text-stone-800">{text}</p>;
+	while ((match = regex.exec(text)) !== null) {
+		if (match.index > lastIndex) {
+			parts.push(text.slice(lastIndex, match.index));
+		}
+		if (match[1]) {
+			// 'single quoted' → UI element pill
+			parts.push(
+				<span key={match.index} className="rounded bg-violet-50 px-1 py-0.5 font-medium text-violet-700">
+					{match[1].slice(1, -1)}
+				</span>,
+			);
+		} else if (match[2]) {
+			// "double quoted" → value highlight
+			parts.push(
+				<span key={match.index} className="rounded bg-stone-100 px-1 py-0.5 font-mono text-stone-700">
+					{match[2]}
+				</span>,
+			);
+		} else if (match[3]) {
+			// ALLCAPS like IMPORTANT:, NOTE, WARNING, MUST, NOT
+			parts.push(
+				<span key={match.index} className="font-semibold text-amber-700">
+					{match[3]}
+				</span>,
+			);
+		} else if (match[4]) {
+			// Agent action keywords
+			parts.push(
+				<code key={match.index} className="rounded bg-stone-100 px-1 py-0.5 text-[11px] font-medium text-stone-600">
+					{match[4]}
+				</code>,
+			);
+		} else if (match[5]) {
+			// Conditional/sequential markers — subtle emphasis
+			const trimmed = match[5].replace(/^\.\s+/, '');
+			if (match[5].startsWith('.')) parts.push('. ');
+			parts.push(
+				<span key={match.index} className="font-medium text-blue-700">
+					{trimmed}
+				</span>,
+			);
+		}
+		lastIndex = match.index + match[0].length;
+	}
+	if (lastIndex < text.length) {
+		parts.push(text.slice(lastIndex));
+	}
+	return parts;
+}
+
+/** Format a long goal text into readable, structured blocks */
+function GoalText({ text }: { text: string }) {
+	if (!text || text === 'N/A') {
+		return <p className="text-sm text-stone-400 italic">No goal text</p>;
 	}
 
+	// Short text — single line
+	if (text.length < 100) {
+		return <p className="text-sm leading-relaxed text-stone-800">{formatInline(text)}</p>;
+	}
+
+	// Split into sentences/instructions:
+	// - ". " followed by uppercase (sentence boundary)
+	// - " — " (em dash separator)
+	// - "Then: " / "Then, " (instruction separator, keep "Then" with next part)
+	// - "\n" (newlines)
+	// - "If you " at mid-text (conditional instructions — keep "If" with next part)
+	// - "After " at mid-text following a period (sequential instructions)
+	const sentences = text
+		.split(/(?<=[.!?])\s+(?=[A-Z])|(?:\s+—\s+)|(?:\n+)|(?<=\.)\s+(?=Then[:,]\s)|(?<=\.)\s+(?=If you\s)|(?<=\.)\s+(?=After\s)/)
+		.map((s) => s.trim())
+		.filter(Boolean);
+
+	// If only 1 chunk, just render with inline formatting
+	if (sentences.length <= 1) {
+		return <p className="text-sm leading-relaxed text-stone-800">{formatInline(text)}</p>;
+	}
+
+	// Multi-sentence: render as numbered instruction list
 	return (
-		<div className="space-y-1.5">
-			{sentences.map((sentence, i) => (
-				<p key={i} className="text-sm leading-relaxed text-stone-800">
-					{sentence.startsWith('IMPORTANT') || sentence.startsWith('WARNING') || sentence.startsWith('NOTE') ? (
-						<span className="font-medium text-amber-700">{sentence}</span>
-					) : (
-						sentence
-					)}
-				</p>
-			))}
+		<div className="space-y-2 rounded-lg bg-stone-50 px-4 py-3">
+			{sentences.map((sentence, i) => {
+				const isWarning = /^(IMPORTANT|WARNING|NOTE|CRITICAL|MUST)\b/i.test(sentence) || /\bdo NOT\b/.test(sentence);
+				return (
+					<div key={i} className="flex gap-2.5">
+						<span className={cn(
+							'mt-0.5 flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full text-[9px] font-medium',
+							isWarning ? 'bg-amber-100 text-amber-700' : 'bg-stone-200 text-stone-500',
+						)}>
+							{isWarning ? '!' : i + 1}
+						</span>
+						<p className={cn(
+							'text-[13px] leading-relaxed',
+							isWarning ? 'font-medium text-amber-800' : 'text-stone-700',
+						)}>
+							{formatInline(sentence)}
+						</p>
+					</div>
+				);
+			})}
 		</div>
 	);
 }
@@ -270,7 +356,8 @@ export function StepDetailModal({
 	if (!open) return null;
 
 	return (
-		<div className="fixed inset-0 z-50 flex flex-col bg-white">
+		<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => onOpenChange(false)}>
+			<div className="flex h-[94vh] w-[96vw] max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
 			{/* Header */}
 			<div className="flex shrink-0 items-center justify-between border-b border-stone-200 px-6 py-4">
 				<div className="flex items-center gap-3">
@@ -494,6 +581,7 @@ export function StepDetailModal({
 					) : null}
 				</div>
 			</ScrollArea>
+			</div>
 		</div>
 	);
 }
