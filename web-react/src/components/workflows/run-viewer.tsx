@@ -61,14 +61,9 @@ function durationMs(startedAt: Date | string, completedAt: Date | string | null)
 }
 
 function resolvedByLabel(resolvedBy?: string): string {
-	if (resolvedBy === 'cached_flow') return 'Cached';
+	if (resolvedBy === 'cached_flow') return 'cached';
 	if (resolvedBy) return resolvedBy;
-	return 'Agent';
-}
-
-function resolvedByClass(resolvedBy?: string): string {
-	if (resolvedBy === 'cached_flow') return 'bg-cyan-100 text-cyan-700';
-	return 'bg-violet-100 text-violet-700';
+	return 'agent';
 }
 
 function parseAction(action: unknown): {
@@ -203,9 +198,7 @@ export function RunViewer({ run, liveRun, loading, onStop, deviceId, cachedFlowM
 		const isActive = isLive && liveRun?.activeStepIndex === idx && liveRun?.status === 'running';
 
 		let cls = 'rounded-xl transition-all duration-500 ';
-		if (result?.resolvedBy === 'cached_flow') {
-			cls += 'bg-cyan-50 border border-cyan-200 shadow-[0_0_0_1px_rgba(6,182,212,0.1)]';
-		} else if (isActive) {
+		if (isActive) {
 			cls += 'bg-violet-50 border border-violet-200 ring-1 ring-violet-200 shadow-sm';
 		} else if (result) {
 			cls += 'bg-white border border-stone-200 hover:border-stone-300';
@@ -237,7 +230,7 @@ export function RunViewer({ run, liveRun, loading, onStop, deviceId, cachedFlowM
 					<div className="flex items-center justify-between">
 						<div className="flex items-center gap-2.5">
 							{cachedFlowMeta ? (
-								<Zap className="h-4.5 w-4.5 text-cyan-500" />
+								<Zap className="h-4.5 w-4.5 text-stone-400" />
 							) : activeType === 'flow' ? (
 								<Code2 className={cn('h-4.5 w-4.5', activeStatus === 'completed' ? 'text-emerald-500' : activeStatus === 'running' ? 'text-violet-500' : 'text-red-500')} />
 							) : (
@@ -365,8 +358,7 @@ export function RunViewer({ run, liveRun, loading, onStop, deviceId, cachedFlowM
 														<span className="text-xs text-stone-400">{result.stepsUsed} step{result.stepsUsed !== 1 ? 's' : ''}</span>
 													) : null}
 													{result.resolvedBy ? (
-														<span className={cn('flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-medium', resolvedByClass(result.resolvedBy))}>
-															{result.resolvedBy === 'cached_flow' ? <Zap className="h-2.5 w-2.5" /> : null}
+														<span className="rounded bg-stone-100 px-1.5 py-0.5 text-[9px] font-medium text-stone-500">
 															{resolvedByLabel(result.resolvedBy)}
 														</span>
 													) : null}
@@ -465,8 +457,7 @@ export function RunViewer({ run, liveRun, loading, onStop, deviceId, cachedFlowM
 						{summaryStats.cached > 0 ? (
 							<>
 								<span className="text-stone-300">&middot;</span>
-								<span className="flex items-center gap-0.5 text-cyan-600">
-									<Zap className="h-3 w-3" />
+								<span className="text-stone-500">
 									{summaryStats.cached} cached
 								</span>
 							</>

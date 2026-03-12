@@ -100,6 +100,8 @@ interface StepResult {
   sessionId?: string;
   resolvedBy?: string;
   cachedFlowId?: string;
+  cachedSteps?: any[];
+  cachedTimeline?: number[];
   error?: string;
   observations?: ScreenObservation[];
   evalJudgment?: EvalJudgment;
@@ -530,17 +532,30 @@ v2.get("/devices/:deviceId/workflows/runs/:runId/goals/:goalId/steps", async (c)
   }
 
   if (!sessionId) {
-    // For cached flows, look up the saved deterministic steps
-    if (sr?.resolvedBy === "cached_flow" && sr.cachedFlowId) {
-      const cached = await db
-        .select()
-        .from(cachedFlow)
-        .where(eq(cachedFlow.id, sr.cachedFlowId))
-        .limit(1);
+    // For cached flows, use snapshotted steps (preferred) or fall back to DB lookup
+    if (sr?.resolvedBy === "cached_flow") {
+      let flowSteps: any[] | null = null;
+      let timeline: number[] = [];
 
-      if (cached.length > 0) {
-        const flowSteps = (cached[0].steps as any[]) ?? [];
-        const timeline = (cached[0].timeline as number[]) ?? [];
+      // Prefer snapshotted steps (stored at execution time, survive cache deletion/replacement)
+      if (sr.cachedSteps && sr.cachedSteps.length > 0) {
+        flowSteps = sr.cachedSteps;
+        timeline = sr.cachedTimeline ?? [];
+      }
+      // Fall back to DB lookup (for runs before snapshotting was added)
+      else if (sr.cachedFlowId) {
+        const cached = await db
+          .select()
+          .from(cachedFlow)
+          .where(eq(cachedFlow.id, sr.cachedFlowId))
+          .limit(1);
+        if (cached.length > 0) {
+          flowSteps = (cached[0].steps as any[]) ?? [];
+          timeline = (cached[0].timeline as number[]) ?? [];
+        }
+      }
+
+      if (flowSteps && flowSteps.length > 0) {
         return c.json({
           goal: idx,
           goalId: sr?.stepId ?? def?.id ?? null,

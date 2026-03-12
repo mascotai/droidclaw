@@ -6,13 +6,11 @@ import {
 	Clock,
 	ChevronDown,
 	ChevronUp,
-	Zap,
 	Layers,
 	Code2,
 	Package,
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StatusBadge, TimeAgo, DurationDisplay, ActionBadge } from '@/components/shared';
 import { api } from '@/lib/api';
@@ -181,8 +179,7 @@ export function WorkflowRunRow({ run, deviceId, liveProgress, onExpand, expanded
 						{cacheHits > 0 ? (
 							<>
 								<span className="text-stone-300">&middot;</span>
-								<span className="inline-flex items-center gap-0.5 text-cyan-600">
-									<Zap className="h-3 w-3" />
+								<span className="text-stone-500">
 									{cacheHits}/{run.totalSteps} cached
 								</span>
 							</>
@@ -284,14 +281,9 @@ export function WorkflowRunRow({ run, deviceId, liveProgress, onExpand, expanded
 																</span>
 															) : null}
 															{stepResult.resolvedBy ? (
-																stepResult.resolvedBy === 'cached_flow' ? (
-																	<Badge variant="outline" className="gap-0.5 border-cyan-200 bg-cyan-50 text-[9px] text-cyan-700">
-																		<Zap className="h-2.5 w-2.5" />
-																		cached
-																	</Badge>
-																) : (
-																	<Badge variant="outline" className="text-[9px]">{stepResult.resolvedBy}</Badge>
-																)
+																<span className="rounded bg-stone-100 px-1.5 py-0.5 text-[9px] font-medium text-stone-500">
+																	{stepResult.resolvedBy === 'cached_flow' ? 'cached' : stepResult.resolvedBy}
+																</span>
 															) : null}
 														</>
 													) : isActive ? (
