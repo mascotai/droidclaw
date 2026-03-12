@@ -123,12 +123,26 @@ export function formatInline(text: string): ReactNode[] {
 	return parts;
 }
 
-/** Mask sensitive values — passwords, secrets, tokens */
+/** Mask sensitive values — passwords, secrets, tokens, typed credentials */
 export function maskSensitive(text: string): string {
-	return text.replace(
+	let result = text;
+	// 1. Explicit key=value patterns: password: x, secret=x, api_key=x
+	result = result.replace(
 		/(?:password|secret|token|api[_-]?key|totp[_-]?secret)\s*[:=]\s*['"]?([^\s'",:}{]+)/gi,
 		(match, value) => match.replace(value, '•'.repeat(Math.min(value.length, 8))),
 	);
+	// 2. type 'value' after Password/Username field mentions — mask the typed credential
+	// Matches: type 'xxx' when preceded by Password/Username context in same sentence
+	result = result.replace(
+		/(?:(?:password|username|email|mobile)[^.]*?)(?:type|enter)\s+'([^']+)'/gi,
+		(match, value) => match.replace(`'${value}'`, `'${'•'.repeat(Math.min(value.length, 8))}'`),
+	);
+	// 3. TOTP/2FA secrets (base32 strings 16+ chars)
+	result = result.replace(
+		/(?:get_totp|totp|text\s*=\s*)(?:\s*(?:ACTION\s*)?(?:\([^)]*\))?\s*,?\s*(?:text\s*=\s*)?)?'([A-Z2-7]{16,})'/gi,
+		(match, value) => match.replace(value, '•'.repeat(8)),
+	);
+	return result;
 }
 
 /** Parse a result string that might be JSON into readable parts */

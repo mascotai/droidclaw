@@ -16,7 +16,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { StatusBadge, DurationDisplay, EmptyState } from '@/components/shared';
 import { LiveAgentSteps } from '@/components/goals/live-agent-steps';
-import { StepDetailModal } from '@/components/workflows/step-detail-modal';
+import { StepDetailModal, formatInline, maskSensitive } from '@/components/workflows/step-detail-modal';
 import type {
 	WorkflowRun,
 	LiveWorkflowRun,
@@ -97,6 +97,16 @@ export function RunViewer({ run, liveRun, loading, onStop, deviceId, cachedFlowM
 		if (typeof step === 'object' && 'goal' in step) return (step as WorkflowStepConfig).goal;
 		const [cmd, val] = Object.entries(step)[0] ?? [];
 		return cmd ? `${cmd}: ${val}` : `Goal ${stepIdx + 1}`;
+	}
+
+	function getStepGoalFormatted(stepIdx: number): { text: string; truncated: boolean } {
+		const raw = getStepGoal(stepIdx);
+		const masked = maskSensitive(raw);
+		if (masked.length > 120) {
+			const firstSentence = masked.match(/^.{1,120}(?:[.!?]|$)/)?.[0] ?? masked.slice(0, 120);
+			return { text: firstSentence + (firstSentence.length < masked.length ? '…' : ''), truncated: true };
+		}
+		return { text: masked, truncated: false };
 	}
 
 	function getStepApp(stepIdx: number): string | null {
@@ -233,7 +243,12 @@ export function RunViewer({ run, liveRun, loading, onStop, deviceId, cachedFlowM
 
 									{/* Goal + details */}
 									<div className="min-w-0 flex-1">
-										<p className="text-xs leading-relaxed text-stone-800">{getStepGoal(stepIdx)}</p>
+										<p className="text-xs leading-relaxed text-stone-800">
+											{(() => {
+												const { text, truncated } = getStepGoalFormatted(stepIdx);
+												return <>{formatInline(text)}{truncated && <span className="text-stone-400"> …</span>}</>;
+											})()}
+										</p>
 										{app ? (
 											<span className="mt-0.5 inline-flex items-center gap-1 rounded bg-blue-50 px-1.5 py-0.5 text-xs text-blue-600">
 												<Package className="h-2.5 w-2.5" />
