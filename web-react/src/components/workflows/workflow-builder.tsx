@@ -2,6 +2,7 @@ import { useState, useCallback, useMemo } from 'react';
 import { Play, Square, Plus, Trash2, Settings2, X, Code2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import type { WorkflowStepConfig } from '@/types/devices';
@@ -130,8 +131,7 @@ export function WorkflowBuilder({
 								</span>
 							) : null}
 							<div className="min-w-0 flex-1 space-y-2">
-								<Input
-									type="text"
+								<Textarea
 									value={step.goal}
 									onChange={(e) => updateStep(step._id, 'goal', e.target.value)}
 									placeholder={
@@ -141,6 +141,8 @@ export function WorkflowBuilder({
 									}
 									disabled={isRunning}
 									onKeyDown={handleKeydown}
+									rows={3}
+									className="resize-y text-sm"
 								/>
 								<Input
 									type="text"
