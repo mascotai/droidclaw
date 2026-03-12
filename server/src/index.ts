@@ -12,7 +12,7 @@ import { health } from "./routes/health.js";
 import { license } from "./routes/license.js";
 import { pairing } from "./routes/pairing.js";
 import { v2 } from "./routes/v2.js";
-import { startTemporalWorker } from "./temporal/worker.js";
+
 import { db, ensureSchema } from "./db.js";
 import { workflowRun, evalRun } from "./schema.js";
 import { eq } from "drizzle-orm";
@@ -129,7 +129,3 @@ db.update(evalRun)
     console.error("[Startup] Failed to clean stale evals:", err);
   });
 
-// Start embedded Temporal worker (non-blocking — runs in background)
-startTemporalWorker().catch((err) => {
-  console.error("[Temporal] Worker failed:", err);
-});
