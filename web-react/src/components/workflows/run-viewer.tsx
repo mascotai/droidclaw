@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
 	CheckCircle2,
 	XCircle,
@@ -10,8 +10,6 @@ import {
 	Square,
 	Package,
 	FlaskConical,
-	ChevronDown,
-	ChevronUp,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -134,7 +132,6 @@ function EvalPanel({ evalData }: { evalData: EvalResult }) {
 
 export function RunViewer({ run, liveRun, loading, onStop, deviceId, cachedFlowMeta = null }: RunViewerProps) {
 	const [modalStep, setModalStep] = useState<{ idx: number; result: StepResult; config: WorkflowStepConfig | null } | null>(null);
-	const [expandedEvals, setExpandedEvals] = useState<Set<number>>(new Set());
 	const [evalData, setEvalData] = useState<Record<number, EvalResult | null>>({});
 	const [evalLoading, setEvalLoading] = useState<Set<number>>(new Set());
 
@@ -143,39 +140,35 @@ export function RunViewer({ run, liveRun, loading, onStop, deviceId, cachedFlowM
 	// Reset state when run changes
 	useEffect(() => {
 		setModalStep(null);
-		setExpandedEvals(new Set());
 		setEvalData({});
 		setEvalLoading(new Set());
 	}, [run?.id, liveRun?.runId]);
 
-	const fetchEval = useCallback(async (stepIdx: number) => {
-		if (evalData[stepIdx] !== undefined || evalLoading.has(stepIdx)) return;
-		setEvalLoading((prev) => new Set(prev).add(stepIdx));
-		try {
-			const data = await api.getGoalEval(deviceId, runId, stepIdx);
-			setEvalData((prev) => ({ ...prev, [stepIdx]: data as unknown as EvalResult }));
-		} catch {
-			setEvalData((prev) => ({ ...prev, [stepIdx]: null }));
-		}
-		setEvalLoading((prev) => {
-			const next = new Set(prev);
-			next.delete(stepIdx);
-			return next;
-		});
-	}, [deviceId, runId, evalData, evalLoading]);
-
-	const toggleEval = useCallback((stepIdx: number) => {
-		setExpandedEvals((prev) => {
-			const next = new Set(prev);
-			if (next.has(stepIdx)) {
-				next.delete(stepIdx);
-			} else {
-				next.add(stepIdx);
-				fetchEval(stepIdx);
+	// Auto-fetch eval data for all goals that have eval
+	useEffect(() => {
+		if (!runId || !deviceId) return;
+		const results = (run?.stepResults as StepResult[] | null) ?? [];
+		results.forEach((result, idx) => {
+			if (result && result.evalPassed !== undefined && result.evalPassed !== null) {
+				// Fetch eval for this goal
+				setEvalLoading((prev) => new Set(prev).add(idx));
+				api.getGoalEval(deviceId, runId, idx)
+					.then((data) => {
+						setEvalData((prev) => ({ ...prev, [idx]: data as unknown as EvalResult }));
+					})
+					.catch(() => {
+						setEvalData((prev) => ({ ...prev, [idx]: null }));
+					})
+					.finally(() => {
+						setEvalLoading((prev) => {
+							const next = new Set(prev);
+							next.delete(idx);
+							return next;
+						});
+					});
 			}
-			return next;
 		});
-	}, [fetchEval]);
+	}, [runId, deviceId, run?.stepResults]);
 
 	const isLive = !!liveRun;
 	const activeStatus = liveRun?.status ?? run?.status ?? 'pending';
@@ -320,7 +313,6 @@ export function RunViewer({ run, liveRun, loading, onStop, deviceId, cachedFlowM
 						const canOpenModal = !isLive && result != null;
 						const app = getStepApp(stepIdx);
 						const hasEval = result && (result as StepResult).evalPassed !== undefined && (result as StepResult).evalPassed !== null;
-						const isEvalExpanded = expandedEvals.has(stepIdx);
 						const stepEvalData = evalData[stepIdx];
 						const isEvalLoading = evalLoading.has(stepIdx);
 
@@ -388,7 +380,7 @@ export function RunViewer({ run, liveRun, loading, onStop, deviceId, cachedFlowM
 										) : null}
 									</div>
 
-									{/* Right side: status + resolvedBy + eval badge */}
+									{/* Right side: status + resolvedBy */}
 									<div className="flex shrink-0 items-center gap-2">
 										<div className="flex flex-col items-end gap-1">
 											{result ? (
@@ -421,42 +413,30 @@ export function RunViewer({ run, liveRun, loading, onStop, deviceId, cachedFlowM
 									</div>
 								</button>
 
-								{/* Eval toggle button — below the main button */}
+								{/* Eval — always visible when present */}
 								{hasEval ? (
-									<div className="border-t border-stone-100 px-4 py-1.5">
-										<button
-											className="flex items-center gap-1.5 text-[10px] text-stone-500 hover:text-stone-700"
-											onClick={(e) => {
-												e.stopPropagation();
-												toggleEval(stepIdx);
-											}}
-										>
-											<FlaskConical className="h-3 w-3" />
-											<span>Eval</span>
-											<span className={cn(
-												'rounded-full px-1.5 py-0.5 text-[9px] font-medium',
-												(result as StepResult).evalPassed
-													? 'bg-emerald-100 text-emerald-700'
-													: 'bg-red-100 text-red-700',
-											)}>
-												{(result as StepResult).evalPassed ? 'Passed' : 'Failed'}
-											</span>
-											{isEvalExpanded ? <ChevronUp className="h-2.5 w-2.5" /> : <ChevronDown className="h-2.5 w-2.5" />}
-										</button>
-										{isEvalExpanded ? (
-											<div className="mt-1">
-												{isEvalLoading ? (
-													<div className="flex items-center gap-1.5 py-2 text-[10px] text-stone-400">
-														<Loader2 className="h-3 w-3 animate-spin" />
-														Loading eval...
-													</div>
-												) : stepEvalData ? (
-													<EvalPanel evalData={stepEvalData} />
-												) : (
-													<p className="py-1 text-[10px] text-stone-400">No eval data available.</p>
-												)}
+									<div className="border-t border-stone-100 px-4 py-2">
+										{isEvalLoading ? (
+											<div className="flex items-center gap-1.5 py-1 text-[10px] text-stone-400">
+												<Loader2 className="h-3 w-3 animate-spin" />
+												Loading eval...
 											</div>
-										) : null}
+										) : stepEvalData ? (
+											<EvalPanel evalData={stepEvalData} />
+										) : (
+											<div className="flex items-center gap-1.5 text-[10px] text-stone-400">
+												<FlaskConical className="h-3 w-3" />
+												<span>Eval</span>
+												<span className={cn(
+													'rounded-full px-1.5 py-0.5 text-[9px] font-medium',
+													(result as StepResult).evalPassed
+														? 'bg-emerald-100 text-emerald-700'
+														: 'bg-red-100 text-red-700',
+												)}>
+													{(result as StepResult).evalPassed ? 'Passed' : 'Failed'}
+												</span>
+											</div>
+										)}
 									</div>
 								) : null}
 							</div>

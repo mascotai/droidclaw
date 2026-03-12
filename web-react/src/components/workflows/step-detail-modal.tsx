@@ -10,11 +10,13 @@ import {
 	X,
 	Eye,
 	EyeOff,
+	FlaskConical,
+	Clock,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ActionBadge } from '@/components/shared';
 import { api } from '@/lib/api';
-import type { StepResult, WorkflowStepConfig } from '@/types/devices';
+import type { StepResult, WorkflowStepConfig, EvalResult } from '@/types/devices';
 import { cn } from '@/lib/utils';
 
 interface StepDetailModalProps {
@@ -207,7 +209,7 @@ export function GoalText({ text }: { text: string }) {
 
 	// Short text — single line
 	if (text.length < 120) {
-		return <p className="text-sm leading-relaxed text-stone-800">{formatInline(text)}</p>;
+		return <p className="text-sm leading-relaxed text-stone-800" style={{ overflowWrap: 'anywhere' }}>{formatInline(text)}</p>;
 	}
 
 	// Split into logical paragraphs by explicit delimiters:
@@ -230,12 +232,12 @@ export function GoalText({ text }: { text: string }) {
 
 	// If only 1 chunk, just render with inline formatting
 	if (chunks.length <= 1) {
-		return <p className="text-sm leading-relaxed text-stone-800">{formatInline(text)}</p>;
+		return <p className="text-sm leading-relaxed text-stone-800" style={{ overflowWrap: 'anywhere' }}>{formatInline(text)}</p>;
 	}
 
 	// Multi-chunk: render as formatted paragraphs (no numbering)
 	return (
-		<div className="space-y-2 text-sm leading-relaxed text-stone-800">
+		<div className="space-y-2 text-sm leading-relaxed text-stone-800" style={{ overflowWrap: 'anywhere' }}>
 			{chunks.map((chunk, i) => (
 				<p key={i}>{formatInline(chunk)}</p>
 			))}
@@ -306,6 +308,82 @@ function ScreenPanel({ screen }: { screen: ScreenData }) {
 	);
 }
 
+/** Inline eval result panel */
+function EvalPanel({ evalData }: { evalData: EvalResult }) {
+	const { definition, judgment } = evalData;
+	if (!definition?.states) return null;
+
+	const stateKeys = Object.keys(definition.states);
+	const mismatchKeys = new Set((judgment?.mismatches ?? []).map((m) => m.key));
+
+	return (
+		<div className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-2">
+			<div className="mb-1.5 flex items-center gap-1.5">
+				<FlaskConical className="h-3 w-3 text-stone-400" />
+				<span className="text-[10px] font-semibold uppercase tracking-wider text-stone-400">Eval</span>
+				{judgment ? (
+					<span className={cn(
+						'rounded-full px-1.5 py-0.5 text-[9px] font-medium',
+						judgment.success ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700',
+					)}>
+						{judgment.success ? 'Passed' : 'Failed'}
+					</span>
+				) : (
+					<span className="rounded-full bg-stone-200 px-1.5 py-0.5 text-[9px] font-medium text-stone-500">
+						Pending
+					</span>
+				)}
+			</div>
+			<div className="space-y-1">
+				{stateKeys.map((key) => {
+					const def = definition.states[key];
+					const actual = judgment?.stateValues?.[key];
+					const isMismatch = mismatchKeys.has(key);
+					const hasExpected = def.expected !== undefined;
+
+					return (
+						<div key={key} className="flex items-start gap-1.5 text-[11px]">
+							{judgment ? (
+								isMismatch ? (
+									<XCircle className="mt-0.5 h-3 w-3 shrink-0 text-red-500" />
+								) : hasExpected ? (
+									<CheckCircle2 className="mt-0.5 h-3 w-3 shrink-0 text-emerald-500" />
+								) : (
+									<span className="mt-0.5 h-3 w-3 shrink-0 text-center text-[9px] text-stone-400">·</span>
+								)
+							) : (
+								<Clock className="mt-0.5 h-3 w-3 shrink-0 text-stone-300" />
+							)}
+							<div className="min-w-0 flex-1">
+								<span className={cn(
+									'font-mono',
+									isMismatch ? 'text-red-700' : 'text-stone-600',
+								)}>
+									{key}
+								</span>
+								{judgment && actual !== undefined ? (
+									<span className={cn(
+										'ml-1',
+										isMismatch ? 'font-medium text-red-600' : 'text-stone-500',
+									)}>
+										= {String(actual)}
+									</span>
+								) : null}
+								{isMismatch && hasExpected ? (
+									<span className="ml-1 text-stone-400">
+										(expected: {String(def.expected)})
+									</span>
+								) : null}
+								<span className="ml-1.5 text-stone-400">{def.description}</span>
+							</div>
+						</div>
+					);
+				})}
+			</div>
+		</div>
+	);
+}
+
 export function StepDetailModal({
 	open,
 	onOpenChange,
@@ -321,6 +399,8 @@ export function StepDetailModal({
 	const [screenData, setScreenData] = useState<Record<number, ScreenData | null>>({});
 	const [screenLoading, setScreenLoading] = useState<Set<number>>(new Set());
 	const [showSensitive, setShowSensitive] = useState(false);
+	const [evalResult, setEvalResult] = useState<EvalResult | null>(null);
+	const [evalLoading, setEvalLoading] = useState(false);
 
 	const mask = useCallback((text: string) => showSensitive ? text : maskSensitive(text), [showSensitive]);
 
@@ -348,6 +428,27 @@ export function StepDetailModal({
 
 		return () => { document.body.style.overflow = ''; };
 	}, [open, deviceId, runId, stepIdx]);
+
+	// Fetch eval data if this goal has eval
+	useEffect(() => {
+		if (!open) return;
+		setEvalResult(null);
+
+		const hasEval = stepResult.evalPassed !== undefined && stepResult.evalPassed !== null;
+		if (!hasEval) return;
+
+		setEvalLoading(true);
+		api.getGoalEval(deviceId, runId, stepIdx)
+			.then((data) => {
+				setEvalResult(data as unknown as EvalResult);
+			})
+			.catch(() => {
+				setEvalResult(null);
+			})
+			.finally(() => {
+				setEvalLoading(false);
+			});
+	}, [open, deviceId, runId, stepIdx, stepResult.evalPassed]);
 
 	// Escape key handler
 	useEffect(() => {
@@ -497,6 +598,16 @@ export function StepDetailModal({
 									</p>
 								</div>
 							</div>
+						) : null}
+
+						{/* Eval */}
+						{evalLoading ? (
+							<div className="flex items-center gap-1.5 py-2 text-[10px] text-stone-400">
+								<Loader2 className="h-3 w-3 animate-spin" />
+								Loading eval...
+							</div>
+						) : evalResult ? (
+							<EvalPanel evalData={evalResult} />
 						) : null}
 					</div>
 				</div>
