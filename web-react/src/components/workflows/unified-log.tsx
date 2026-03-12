@@ -1,8 +1,7 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { History, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { EmptyState } from '@/components/shared';
 import { WorkflowRunRow } from '@/components/workflows/workflow-run-row';
 import { StepDetailModal } from '@/components/goals/step-detail-modal';
@@ -42,7 +41,6 @@ export function UnifiedLog({
 	onPageChange,
 	loadSessionSteps,
 }: UnifiedLogProps) {
-	const [filter, setFilter] = useState<string>('all');
 	const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
 
 	// Step detail modal state
@@ -53,12 +51,6 @@ export function UnifiedLog({
 	} | null>(null);
 	const [modalSteps, setModalSteps] = useState<Step[]>([]);
 	const [modalStepsLoading, setModalStepsLoading] = useState(false);
-
-	const filteredRuns = useMemo(() => {
-		if (filter === 'all') return runs;
-		if (filter === 'single') return runs.filter((r) => r.totalSteps === 1);
-		return runs.filter((r) => r.totalSteps > 1);
-	}, [runs, filter]);
 
 	function toggleExpand(runId: string) {
 		setExpandedRunId((prev) => (prev === runId ? null : runId));
@@ -94,19 +86,10 @@ export function UnifiedLog({
 
 	return (
 		<div>
-			{/* Header with tabs filter */}
-			<div className="mb-4 flex items-center justify-between">
-				<div className="flex items-center gap-2">
-					<History className="h-4 w-4 text-stone-400" />
-					<p className="text-sm font-medium text-stone-700">Run History</p>
-				</div>
-				<Tabs defaultValue="all" onValueChange={(val) => setFilter(val as string)}>
-					<TabsList className="h-8">
-						<TabsTrigger value="all" className="px-2.5 py-1 text-xs">All</TabsTrigger>
-						<TabsTrigger value="single" className="px-2.5 py-1 text-xs">Single</TabsTrigger>
-						<TabsTrigger value="multi" className="px-2.5 py-1 text-xs">Multi</TabsTrigger>
-					</TabsList>
-				</Tabs>
+			{/* Header */}
+			<div className="mb-4 flex items-center gap-2">
+				<History className="h-4 w-4 text-stone-400" />
+				<p className="text-sm font-medium text-stone-700">Run History</p>
 			</div>
 
 			{/* Content */}
@@ -116,27 +99,12 @@ export function UnifiedLog({
 						<Skeleton key={i} className="h-20 w-full rounded-2xl" />
 					))}
 				</div>
-			) : filteredRuns.length === 0 ? (
-				<>
-					<EmptyState
-						title={
-							filter === 'all'
-								? 'No workflow runs yet.'
-								: `No ${filter === 'single' ? 'single-step' : 'multi-step'} runs found.`
-						}
-					/>
-					{filter !== 'all' ? (
-						<div className="mt-2 text-center">
-							<Button variant="link" size="sm" onClick={() => setFilter('all')}>
-								Show all runs
-							</Button>
-						</div>
-					) : null}
-				</>
+			) : runs.length === 0 ? (
+				<EmptyState title="No workflow runs yet." />
 			) : (
 				<>
 					<div className="space-y-2">
-						{filteredRuns.map((run) => (
+						{runs.map((run) => (
 							<WorkflowRunRow
 								key={run.id}
 								run={run}

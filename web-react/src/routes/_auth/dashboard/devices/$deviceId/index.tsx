@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod/v4';
 import { useCallback, useMemo, useState } from 'react';
 import { api } from '@/lib/api';
-import type { WorkflowRun, WorkflowLiveProgress, Step } from '@/types/devices';
+import type { WorkflowRun, WorkflowLiveProgress, Step, StepResult } from '@/types/devices';
 import type { WsMessage, WorkflowStepDoneEvent, WorkflowCompletedEvent } from '@/stores/websocket';
 import { useWsSubscription } from '@/hooks/use-websocket';
 import { DeviceHeader } from '@/components/devices/device-header';
@@ -35,10 +35,27 @@ function DeviceDetailPage() {
 		refetchInterval: 10000,
 	});
 
-	const { data: stats } = useQuery({
-		queryKey: ['deviceStats', deviceId],
-		queryFn: () => api.getDeviceStats(deviceId),
+	// ── Compute device stats from workflow runs ──
+
+	const { data: allRunsData } = useQuery({
+		queryKey: ['workflowRuns', deviceId],
+		queryFn: () => api.listWorkflowRuns(deviceId),
+		refetchInterval: 30000,
 	});
+
+	const stats = useMemo(() => {
+		const runs = (allRunsData?.items as WorkflowRun[] | undefined) ?? [];
+		if (runs.length === 0) return null;
+		const total = allRunsData?.total ?? runs.length;
+		const completed = runs.filter((r) => r.status === 'completed' || r.status === 'failed');
+		const successful = completed.filter((r) => r.status === 'completed');
+		const successRate = completed.length > 0 ? Math.round((successful.length / completed.length) * 100) : 0;
+		const stepsArr = runs
+			.filter((r) => r.stepResults)
+			.flatMap((r) => (r.stepResults as StepResult[])?.filter((sr) => sr?.stepsUsed != null).map((sr) => sr.stepsUsed!) ?? []);
+		const avgSteps = stepsArr.length > 0 ? Math.round(stepsArr.reduce((a, b) => a + b, 0) / stepsArr.length) : 0;
+		return { totalSessions: total, successRate, avgSteps };
+	}, [allRunsData]);
 
 	// ── Log tab data ──
 
@@ -164,7 +181,7 @@ function DeviceDetailPage() {
 
 	const tabs = [
 		{ key: 'overview' as const, label: 'Overview' },
-		{ key: 'workflows' as const, label: 'Workflows' },
+		{ key: 'workflows' as const, label: 'Runs' },
 		{ key: 'log' as const, label: 'Log' },
 	];
 

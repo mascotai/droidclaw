@@ -192,91 +192,105 @@ export function WorkflowsTab({ deviceId, selectedRunId, onSelectRun }: Workflows
 				</Button>
 			</div>
 
-			{/* Runs list */}
-			{runs.length > 0 ? (
-				<div className="space-y-1.5">
-					{/* Live run at top */}
-					{liveRun && liveRun.status === 'running' && (
-						<button
-							onClick={() => onSelectRun(liveRun.runId)}
-							className={`flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left transition-colors ${
-								selectedRunId === liveRun.runId
-									? 'border-violet-300 bg-violet-50 ring-1 ring-violet-200'
-									: 'border-stone-200 bg-white hover:border-stone-300'
-							}`}
-						>
-							<div className="relative flex h-2 w-2 shrink-0">
-								<span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-violet-400 opacity-75" />
-								<span className="relative inline-flex h-2 w-2 rounded-full bg-violet-500" />
-							</div>
-							<div className="min-w-0 flex-1">
-								<p className="truncate text-sm font-medium text-stone-800">{liveRun.name}</p>
-								<div className="mt-0.5 flex items-center gap-2 text-xs text-stone-400">
-									<span>{liveRun.totalSteps} steps</span>
-									<span className="text-violet-500 font-medium">live</span>
-								</div>
-							</div>
-							<StatusBadge status="running" />
-						</button>
-					)}
-
-					{/* Historical runs */}
-					{runs.map((run) => {
-						// Skip if this is the same as the live run
-						if (liveRun && liveRun.status === 'running' && run.id === liveRun.runId) return null;
-						const isSelected = selectedRunId === run.id;
-						const dur = durationMs(run.startedAt, run.completedAt);
-
-						return (
-							<button
-								key={run.id}
-								onClick={() => onSelectRun(isSelected ? null : run.id)}
-								className={`flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left transition-colors ${
-									isSelected
-										? 'border-stone-300 bg-stone-50 ring-1 ring-stone-200'
-										: 'border-stone-200 bg-white hover:border-stone-300'
-								}`}
-							>
-								<StatusBadge status={run.status} size="sm" />
-								<div className="min-w-0 flex-1">
-									<p className="truncate text-sm font-medium text-stone-800">{run.name}</p>
-									<div className="mt-0.5 flex items-center gap-2 text-xs text-stone-400">
-										<span>{run.totalSteps} step{run.totalSteps !== 1 ? 's' : ''}</span>
-										{dur > 0 && (
-											<>
-												<span>&middot;</span>
-												<DurationDisplay ms={dur} />
-											</>
-										)}
-										<span>&middot;</span>
-										<TimeAgo date={run.startedAt} />
+			{/* Side-by-side layout: runs list (left) + detail (right) */}
+			<div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
+				{/* Left panel — Runs list */}
+				<div className="lg:col-span-2">
+					{runs.length > 0 ? (
+						<div className="space-y-1.5 lg:max-h-[calc(100vh-220px)] lg:overflow-y-auto lg:pr-1">
+							{/* Live run at top */}
+							{liveRun && liveRun.status === 'running' && (
+								<button
+									onClick={() => onSelectRun(liveRun.runId)}
+									className={`flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left transition-colors ${
+										selectedRunId === liveRun.runId
+											? 'border-violet-300 bg-violet-50 ring-1 ring-violet-200'
+											: 'border-stone-200 bg-white hover:border-stone-300'
+									}`}
+								>
+									<div className="relative flex h-2 w-2 shrink-0">
+										<span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-violet-400 opacity-75" />
+										<span className="relative inline-flex h-2 w-2 rounded-full bg-violet-500" />
 									</div>
-								</div>
-							</button>
-						);
-					})}
-				</div>
-			) : (
-				<div className="rounded-xl border border-dashed border-stone-200 bg-white px-6 py-12 text-center">
-					<p className="text-sm text-stone-500">No workflow runs yet</p>
-					<p className="mt-1 text-xs text-stone-400">Click "New run" to create your first workflow</p>
-				</div>
-			)}
+									<div className="min-w-0 flex-1">
+										<p className="truncate text-sm font-medium text-stone-800">{liveRun.name}</p>
+										<div className="mt-0.5 flex items-center gap-2 text-xs text-stone-400">
+											<span>{liveRun.totalSteps} steps</span>
+											<span className="text-violet-500 font-medium">live</span>
+										</div>
+									</div>
+									<StatusBadge status="running" />
+								</button>
+							)}
 
-			{/* Inline run detail — shown below the selected run */}
-			{selectedRunId && (
-				<div className="rounded-xl border border-stone-200 bg-white p-4">
-					<RunViewer
-						run={(runDetail as WorkflowRun | undefined) ?? null}
-						liveRun={viewerLiveRun}
-						loading={runDetailLoading}
-						onStop={() => {
-							track(DEVICE_WORKFLOW_STOP);
-							stopWorkflow.mutate(liveRun?.runId ?? selectedRunId ?? undefined);
-						}}
-					/>
+							{/* Historical runs */}
+							{runs.map((run) => {
+								// Skip if this is the same as the live run
+								if (liveRun && liveRun.status === 'running' && run.id === liveRun.runId) return null;
+								const isSelected = selectedRunId === run.id;
+								const dur = durationMs(run.startedAt, run.completedAt);
+
+								return (
+									<button
+										key={run.id}
+										onClick={() => onSelectRun(isSelected ? null : run.id)}
+										className={`flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left transition-colors ${
+											isSelected
+												? 'border-stone-300 bg-stone-50 ring-1 ring-stone-200'
+												: 'border-stone-200 bg-white hover:border-stone-300'
+										}`}
+									>
+										<StatusBadge status={run.status} size="sm" />
+										<div className="min-w-0 flex-1">
+											<p className="truncate text-sm font-medium text-stone-800">{run.name}</p>
+											<div className="mt-0.5 flex items-center gap-2 text-xs text-stone-400">
+												<span>{run.totalSteps} step{run.totalSteps !== 1 ? 's' : ''}</span>
+												{dur > 0 && (
+													<>
+														<span>&middot;</span>
+														<DurationDisplay ms={dur} />
+													</>
+												)}
+												<span>&middot;</span>
+												<TimeAgo date={run.startedAt} />
+											</div>
+										</div>
+									</button>
+								);
+							})}
+						</div>
+					) : (
+						<div className="rounded-xl border border-dashed border-stone-200 bg-white px-6 py-12 text-center">
+							<p className="text-sm text-stone-500">No workflow runs yet</p>
+							<p className="mt-1 text-xs text-stone-400">Click "New run" to create your first workflow</p>
+						</div>
+					)}
 				</div>
-			)}
+
+				{/* Right panel — Run detail */}
+				<div className="lg:col-span-3">
+					{selectedRunId ? (
+						<div className="rounded-xl border border-stone-200 bg-white p-4 lg:sticky lg:top-4 lg:max-h-[calc(100vh-220px)] lg:overflow-y-auto">
+							<RunViewer
+								run={(runDetail as WorkflowRun | undefined) ?? null}
+								liveRun={viewerLiveRun}
+								loading={runDetailLoading}
+								onStop={() => {
+									track(DEVICE_WORKFLOW_STOP);
+									stopWorkflow.mutate(liveRun?.runId ?? selectedRunId ?? undefined);
+								}}
+							/>
+						</div>
+					) : (
+						<div className="hidden lg:flex rounded-xl border border-dashed border-stone-200 bg-white px-6 py-20 text-center items-center justify-center">
+							<div>
+								<p className="text-sm text-stone-500">Select a run to view details</p>
+								<p className="mt-1 text-xs text-stone-400">Click on any run from the list</p>
+							</div>
+						</div>
+					)}
+				</div>
+			</div>
 
 			{/* Workflow Builder Modal */}
 			<WorkflowBuilderModal
