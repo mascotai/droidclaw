@@ -41,6 +41,7 @@ export interface AgentStepDetail {
 
 export interface StepResult {
 	goal?: string;
+	goalId?: string;
 	command?: string;
 	success: boolean;
 	stepsUsed?: number;
@@ -48,6 +49,8 @@ export interface StepResult {
 	resolvedBy?: string;
 	message?: string;
 	error?: string;
+	evalPassed?: boolean | null;
+	skipped?: boolean;
 	observations?: Array<{
 		stepNumber?: number;
 		elements: unknown[];
@@ -55,6 +58,28 @@ export interface StepResult {
 		activityName?: string;
 	}>;
 	agentSteps?: AgentStepDetail[];
+}
+
+export interface EvalDefinition {
+	states: Record<string, {
+		type: string;
+		description: string;
+		expected?: unknown;
+	}>;
+}
+
+export interface EvalJudgment {
+	success: boolean;
+	stateValues: Record<string, unknown>;
+	mismatches: Array<{ key: string; actual: unknown; expected: unknown }>;
+	trackedOnly: Record<string, unknown>;
+}
+
+export interface EvalResult {
+	goal: number;
+	goalId: string;
+	definition: EvalDefinition;
+	judgment: EvalJudgment | null;
 }
 
 export interface WorkflowRun {

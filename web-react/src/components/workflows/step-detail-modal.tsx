@@ -205,11 +205,9 @@ export function GoalText({ text }: { text: string }) {
 		return <p className="text-sm text-stone-400 italic">No goal text</p>;
 	}
 
-	const masked = maskSensitive(text);
-
 	// Short text — single line
-	if (masked.length < 120) {
-		return <p className="text-sm leading-relaxed text-stone-800">{formatInline(masked)}</p>;
+	if (text.length < 120) {
+		return <p className="text-sm leading-relaxed text-stone-800">{formatInline(text)}</p>;
 	}
 
 	// Split into logical paragraphs by explicit delimiters:
@@ -217,7 +215,7 @@ export function GoalText({ text }: { text: string }) {
 	// - "\n" (newlines)
 	// - "Then:" or "Then," as standalone sentence start after a period
 	// Do NOT split on every ". " — keep related sentences together
-	let chunks = masked
+	let chunks = text
 		.split(/(?:\s+—\s+)|(?:\n+)|(?<=\.)\s+(?=Then[:,]\s)/)
 		.map((s) => s.trim())
 		.filter(Boolean);
@@ -232,7 +230,7 @@ export function GoalText({ text }: { text: string }) {
 
 	// If only 1 chunk, just render with inline formatting
 	if (chunks.length <= 1) {
-		return <p className="text-sm leading-relaxed text-stone-800">{formatInline(masked)}</p>;
+		return <p className="text-sm leading-relaxed text-stone-800">{formatInline(text)}</p>;
 	}
 
 	// Multi-chunk: render as formatted paragraphs (no numbering)

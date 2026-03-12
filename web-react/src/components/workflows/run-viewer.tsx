@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import {
 	CheckCircle2,
 	XCircle,
@@ -9,6 +9,9 @@ import {
 	Code2,
 	Square,
 	Package,
+	FlaskConical,
+	ChevronDown,
+	ChevronUp,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,11 +20,13 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { StatusBadge, DurationDisplay, EmptyState } from '@/components/shared';
 import { LiveAgentSteps } from '@/components/goals/live-agent-steps';
 import { StepDetailModal, maskSensitive, GoalText } from '@/components/workflows/step-detail-modal';
+import { api } from '@/lib/api';
 import type {
 	WorkflowRun,
 	LiveWorkflowRun,
 	StepResult,
 	WorkflowStepConfig,
+	EvalResult,
 } from '@/types/devices';
 import { cn } from '@/lib/utils';
 
@@ -51,13 +56,126 @@ function resolvedByLabel(resolvedBy?: string): string {
 	return 'agent';
 }
 
+/** Inline eval result panel */
+function EvalPanel({ evalData }: { evalData: EvalResult }) {
+	const { definition, judgment } = evalData;
+	if (!definition?.states) return null;
+
+	const stateKeys = Object.keys(definition.states);
+	const mismatchKeys = new Set((judgment?.mismatches ?? []).map((m) => m.key));
+
+	return (
+		<div className="mt-2 rounded-lg border border-stone-200 bg-stone-50 px-3 py-2">
+			<div className="mb-1.5 flex items-center gap-1.5">
+				<FlaskConical className="h-3 w-3 text-stone-400" />
+				<span className="text-[10px] font-semibold uppercase tracking-wider text-stone-400">Eval</span>
+				{judgment ? (
+					<span className={cn(
+						'rounded-full px-1.5 py-0.5 text-[9px] font-medium',
+						judgment.success ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700',
+					)}>
+						{judgment.success ? 'Passed' : 'Failed'}
+					</span>
+				) : (
+					<span className="rounded-full bg-stone-200 px-1.5 py-0.5 text-[9px] font-medium text-stone-500">
+						Pending
+					</span>
+				)}
+			</div>
+			<div className="space-y-1">
+				{stateKeys.map((key) => {
+					const def = definition.states[key];
+					const actual = judgment?.stateValues?.[key];
+					const isMismatch = mismatchKeys.has(key);
+					const hasExpected = def.expected !== undefined;
+
+					return (
+						<div key={key} className="flex items-start gap-1.5 text-[11px]">
+							{judgment ? (
+								isMismatch ? (
+									<XCircle className="mt-0.5 h-3 w-3 shrink-0 text-red-500" />
+								) : hasExpected ? (
+									<CheckCircle2 className="mt-0.5 h-3 w-3 shrink-0 text-emerald-500" />
+								) : (
+									<span className="mt-0.5 h-3 w-3 shrink-0 text-center text-[9px] text-stone-400">·</span>
+								)
+							) : (
+								<Clock className="mt-0.5 h-3 w-3 shrink-0 text-stone-300" />
+							)}
+							<div className="min-w-0 flex-1">
+								<span className={cn(
+									'font-mono',
+									isMismatch ? 'text-red-700' : 'text-stone-600',
+								)}>
+									{key}
+								</span>
+								{judgment && actual !== undefined ? (
+									<span className={cn(
+										'ml-1',
+										isMismatch ? 'font-medium text-red-600' : 'text-stone-500',
+									)}>
+										= {String(actual)}
+									</span>
+								) : null}
+								{isMismatch && hasExpected ? (
+									<span className="ml-1 text-stone-400">
+										(expected: {String(def.expected)})
+									</span>
+								) : null}
+								<span className="ml-1.5 text-stone-400">{def.description}</span>
+							</div>
+						</div>
+					);
+				})}
+			</div>
+		</div>
+	);
+}
+
 export function RunViewer({ run, liveRun, loading, onStop, deviceId, cachedFlowMeta = null }: RunViewerProps) {
 	const [modalStep, setModalStep] = useState<{ idx: number; result: StepResult; config: WorkflowStepConfig | null } | null>(null);
+	const [expandedEvals, setExpandedEvals] = useState<Set<number>>(new Set());
+	const [evalData, setEvalData] = useState<Record<number, EvalResult | null>>({});
+	const [evalLoading, setEvalLoading] = useState<Set<number>>(new Set());
 
-	// Reset modal when run changes
+	const runId = run?.id ?? liveRun?.runId ?? '';
+
+	// Reset state when run changes
 	useEffect(() => {
 		setModalStep(null);
+		setExpandedEvals(new Set());
+		setEvalData({});
+		setEvalLoading(new Set());
 	}, [run?.id, liveRun?.runId]);
+
+	const fetchEval = useCallback(async (stepIdx: number) => {
+		if (evalData[stepIdx] !== undefined || evalLoading.has(stepIdx)) return;
+		setEvalLoading((prev) => new Set(prev).add(stepIdx));
+		try {
+			const data = await api.getGoalEval(deviceId, runId, stepIdx);
+			setEvalData((prev) => ({ ...prev, [stepIdx]: data as unknown as EvalResult }));
+		} catch {
+			setEvalData((prev) => ({ ...prev, [stepIdx]: null }));
+		}
+		setEvalLoading((prev) => {
+			const next = new Set(prev);
+			next.delete(stepIdx);
+			return next;
+		});
+	}, [deviceId, runId, evalData, evalLoading]);
+
+	const toggleEval = useCallback((stepIdx: number) => {
+		setExpandedEvals((prev) => {
+			const next = new Set(prev);
+			if (next.has(stepIdx)) {
+				next.delete(stepIdx);
+			} else {
+				next.add(stepIdx);
+				fetchEval(stepIdx);
+			}
+			return next;
+		});
+	}, [fetchEval]);
 
 	const isLive = !!liveRun;
 	const activeStatus = liveRun?.status ?? run?.status ?? 'pending';
@@ -112,7 +230,7 @@ export function RunViewer({ run, liveRun, loading, onStop, deviceId, cachedFlowM
 		const result = isLive ? liveRun?.stepResults[idx] : (run?.stepResults as StepResult[] | null)?.[idx];
 		const isActive = isLive && liveRun?.activeStepIndex === idx && liveRun?.status === 'running';
 
-		let cls = 'rounded-xl transition-all duration-500 ';
+		let cls = 'rounded-xl transition-all duration-500 overflow-hidden ';
 		if (isActive) {
 			cls += 'bg-violet-50 border border-violet-200 ring-1 ring-violet-200 shadow-sm';
 		} else if (result) {
@@ -201,6 +319,10 @@ export function RunViewer({ run, liveRun, loading, onStop, deviceId, cachedFlowM
 						const isActive = isLive && liveRun?.activeStepIndex === stepIdx && liveRun?.status === 'running';
 						const canOpenModal = !isLive && result != null;
 						const app = getStepApp(stepIdx);
+						const hasEval = result && (result as StepResult).evalPassed !== undefined && (result as StepResult).evalPassed !== null;
+						const isEvalExpanded = expandedEvals.has(stepIdx);
+						const stepEvalData = evalData[stepIdx];
+						const isEvalLoading = evalLoading.has(stepIdx);
 
 						return (
 							<div key={stepIdx} className={stepCardClass(stepIdx)}>
@@ -232,7 +354,7 @@ export function RunViewer({ run, liveRun, loading, onStop, deviceId, cachedFlowM
 									</span>
 
 									{/* Goal + details */}
-									<div className="min-w-0 flex-1">
+									<div className="min-w-0 flex-1 overflow-hidden">
 										<GoalText text={maskSensitive(getStepGoal(stepIdx))} />
 										{app ? (
 											<span className="mt-0.5 inline-flex items-center gap-1 rounded bg-blue-50 px-1.5 py-0.5 text-xs text-blue-600">
@@ -266,7 +388,7 @@ export function RunViewer({ run, liveRun, loading, onStop, deviceId, cachedFlowM
 										) : null}
 									</div>
 
-									{/* Right side: status + resolvedBy */}
+									{/* Right side: status + resolvedBy + eval badge */}
 									<div className="flex shrink-0 items-center gap-2">
 										<div className="flex flex-col items-end gap-1">
 											{result ? (
@@ -298,6 +420,45 @@ export function RunViewer({ run, liveRun, loading, onStop, deviceId, cachedFlowM
 										</div>
 									</div>
 								</button>
+
+								{/* Eval toggle button — below the main button */}
+								{hasEval ? (
+									<div className="border-t border-stone-100 px-4 py-1.5">
+										<button
+											className="flex items-center gap-1.5 text-[10px] text-stone-500 hover:text-stone-700"
+											onClick={(e) => {
+												e.stopPropagation();
+												toggleEval(stepIdx);
+											}}
+										>
+											<FlaskConical className="h-3 w-3" />
+											<span>Eval</span>
+											<span className={cn(
+												'rounded-full px-1.5 py-0.5 text-[9px] font-medium',
+												(result as StepResult).evalPassed
+													? 'bg-emerald-100 text-emerald-700'
+													: 'bg-red-100 text-red-700',
+											)}>
+												{(result as StepResult).evalPassed ? 'Passed' : 'Failed'}
+											</span>
+											{isEvalExpanded ? <ChevronUp className="h-2.5 w-2.5" /> : <ChevronDown className="h-2.5 w-2.5" />}
+										</button>
+										{isEvalExpanded ? (
+											<div className="mt-1">
+												{isEvalLoading ? (
+													<div className="flex items-center gap-1.5 py-2 text-[10px] text-stone-400">
+														<Loader2 className="h-3 w-3 animate-spin" />
+														Loading eval...
+													</div>
+												) : stepEvalData ? (
+													<EvalPanel evalData={stepEvalData} />
+												) : (
+													<p className="py-1 text-[10px] text-stone-400">No eval data available.</p>
+												)}
+											</div>
+										) : null}
+									</div>
+								) : null}
 							</div>
 						);
 					})}
@@ -336,7 +497,7 @@ export function RunViewer({ run, liveRun, loading, onStop, deviceId, cachedFlowM
 					stepResult={modalStep.result}
 					config={modalStep.config}
 					deviceId={deviceId}
-					runId={run?.id ?? liveRun?.runId ?? ''}
+					runId={runId}
 				/>
 			) : null}
 		</div>

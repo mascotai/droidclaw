@@ -225,6 +225,10 @@ export const api = {
 		const data = await request<Record<string, unknown>>(`/devices/${deviceId}/workflows/runs/${runId}/goals/${goalIndex}/steps/${stepNumber}/screen`);
 		return data;
 	},
+	getGoalEval: async (deviceId: string, runId: string, goalIndex: number) => {
+		const data = await request<Record<string, unknown>>(`/devices/${deviceId}/workflows/runs/${runId}/goals/${goalIndex}/eval`);
+		return data;
+	},
 	getQueueState: (_deviceId: string): Promise<{ queue: unknown[] }> =>
 		Promise.resolve({ queue: [] }),
 
