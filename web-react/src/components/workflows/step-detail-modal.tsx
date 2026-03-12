@@ -11,7 +11,6 @@ import {
 	Eye,
 	EyeOff,
 } from 'lucide-react';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { ActionBadge } from '@/components/shared';
 import { api } from '@/lib/api';
@@ -200,7 +199,7 @@ function formatResult(result: string): ReactNode {
 	return maskSensitive(result);
 }
 
-/** Format a long goal text into readable, structured blocks */
+/** Format a long goal text into readable paragraphs with inline formatting */
 export function GoalText({ text }: { text: string }) {
 	if (!text || text === 'N/A') {
 		return <p className="text-sm text-stone-400 italic">No goal text</p>;
@@ -217,7 +216,6 @@ export function GoalText({ text }: { text: string }) {
 	// - " — " (em dash separator)
 	// - "\n" (newlines)
 	// - "Then:" or "Then," as standalone sentence start after a period
-	// For remaining long chunks, split on ". " followed by "If you" or "After" (conditional/sequential)
 	// Do NOT split on every ". " — keep related sentences together
 	let chunks = masked
 		.split(/(?:\s+—\s+)|(?:\n+)|(?<=\.)\s+(?=Then[:,]\s)/)
@@ -237,33 +235,12 @@ export function GoalText({ text }: { text: string }) {
 		return <p className="text-sm leading-relaxed text-stone-800">{formatInline(masked)}</p>;
 	}
 
-	// Multi-chunk: render as numbered instruction list
+	// Multi-chunk: render as formatted paragraphs (no numbering)
 	return (
-		<div className="space-y-2.5 rounded-lg bg-stone-50 px-4 py-3">
-			{chunks.map((chunk, i) => {
-				const isWarning = /\bdo NOT\b/.test(chunk) || /^(IMPORTANT|WARNING|NOTE|CRITICAL)\b/i.test(chunk);
-				const isConditional = /^If you\b/i.test(chunk);
-				return (
-					<div key={i} className="flex gap-2.5">
-						<span className={cn(
-							'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-medium',
-							isWarning ? 'bg-amber-100 text-amber-700'
-								: isConditional ? 'bg-blue-50 text-blue-600'
-								: 'bg-stone-200 text-stone-500',
-						)}>
-							{isWarning ? '!' : isConditional ? '?' : i + 1}
-						</span>
-						<p className={cn(
-							'text-[13px] leading-relaxed',
-							isWarning ? 'font-medium text-amber-800'
-								: isConditional ? 'text-stone-600'
-								: 'text-stone-700',
-						)}>
-							{formatInline(chunk)}
-						</p>
-					</div>
-				);
-			})}
+		<div className="space-y-2 text-sm leading-relaxed text-stone-800">
+			{chunks.map((chunk, i) => (
+				<p key={i}>{formatInline(chunk)}</p>
+			))}
 		</div>
 	);
 }
@@ -297,19 +274,8 @@ function ElementLine({ elem }: { elem: Record<string, unknown> }) {
 	);
 }
 
-function ScreenPanel({
-	screen,
-	expanded,
-	onToggle,
-	maxCollapsed = 15,
-}: {
-	screen: ScreenData;
-	expanded: boolean;
-	onToggle: () => void;
-	maxCollapsed?: number;
-}) {
+function ScreenPanel({ screen }: { screen: ScreenData }) {
 	const elements = screen.elements ?? [];
-	const visibleElements = expanded ? elements : elements.slice(0, maxCollapsed);
 
 	return (
 		<div className="mt-2 rounded-md border border-stone-200 bg-white px-2.5 py-2">
@@ -332,20 +298,10 @@ function ScreenPanel({
 				</span>
 			</div>
 			{elements.length > 0 ? (
-				<div className={cn('mt-1 space-y-0.5', !expanded && 'max-h-24 overflow-y-auto')}>
-					{visibleElements.map((el, idx) => (
+				<div className="mt-1 space-y-0.5">
+					{elements.map((el, idx) => (
 						<ElementLine key={idx} elem={el} />
 					))}
-					{elements.length > maxCollapsed ? (
-						<button
-							className="mt-0.5 cursor-pointer text-[10px] italic text-blue-500 hover:text-blue-700"
-							onClick={onToggle}
-						>
-							{expanded
-								? 'Show fewer elements'
-								: `... +${elements.length - maxCollapsed} more elements`}
-						</button>
-					) : null}
 				</div>
 			) : null}
 		</div>
@@ -366,19 +322,9 @@ export function StepDetailModal({
 	const [expandedScreens, setExpandedScreens] = useState<Set<number>>(new Set());
 	const [screenData, setScreenData] = useState<Record<number, ScreenData | null>>({});
 	const [screenLoading, setScreenLoading] = useState<Set<number>>(new Set());
-	const [expandedElements, setExpandedElements] = useState<Set<string>>(new Set());
 	const [showSensitive, setShowSensitive] = useState(false);
 
 	const mask = useCallback((text: string) => showSensitive ? text : maskSensitive(text), [showSensitive]);
-
-	const toggleElements = useCallback((key: string) => {
-		setExpandedElements((prev) => {
-			const next = new Set(prev);
-			if (next.has(key)) next.delete(key);
-			else next.add(key);
-			return next;
-		});
-	}, []);
 
 	// Fetch agent steps when modal opens
 	useEffect(() => {
@@ -388,7 +334,6 @@ export function StepDetailModal({
 		setExpandedScreens(new Set());
 		setScreenData({});
 		setScreenLoading(new Set());
-		setExpandedElements(new Set());
 
 		// Lock body scroll
 		document.body.style.overflow = 'hidden';
@@ -502,60 +447,65 @@ export function StepDetailModal({
 				</div>
 			</div>
 
-			{/* Body */}
-			<ScrollArea className="flex-1">
-				<div className="mx-auto max-w-3xl space-y-6 px-6 py-6">
-					{/* Goal text */}
-					<div>
-						<p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-stone-400">
-							Goal
-						</p>
-						<GoalText text={mask(stepResult.goal ?? config?.goal ?? stepResult.command ?? 'N/A')} />
-					</div>
-
-					{/* Configuration */}
-					{config ? (
+			{/* Body — split: fixed top (goal/config/error) + scrollable bottom (agent journey) */}
+			<div className="flex min-h-0 flex-1 flex-col">
+				{/* Top section: Goal + Config + Error — does not scroll */}
+				<div className="shrink-0 border-b border-stone-100 px-6 py-4">
+					<div className="mx-auto max-w-3xl space-y-4">
+						{/* Goal text */}
 						<div>
 							<p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-stone-400">
-								Configuration
+								Goal
 							</p>
-							<div className="flex flex-wrap gap-2">
-								{config.app ? (
-									<span className="flex items-center gap-1 rounded-lg bg-blue-50 px-2.5 py-1 text-xs text-blue-700">
-										<Package className="h-3.5 w-3.5" />
-										{config.app}
-									</span>
-								) : null}
-								{config.maxSteps ? (
-									<span className="rounded-lg bg-stone-100 px-2.5 py-1 text-xs text-stone-600">
-										Max {config.maxSteps} steps
-									</span>
-								) : null}
-								{config.retries ? (
-									<span className="rounded-lg bg-stone-100 px-2.5 py-1 text-xs text-stone-600">
-										{config.retries} retries
-									</span>
-								) : null}
-							</div>
+							<GoalText text={mask(stepResult.goal ?? config?.goal ?? stepResult.command ?? 'N/A')} />
 						</div>
-					) : null}
 
-					{/* Error */}
-					{stepResult.error || (stepResult.message && !stepResult.success) ? (
-						<div>
-							<p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-red-400">
-								Error
-							</p>
-							<div className="rounded-lg bg-red-50 px-3 py-2.5">
-								<p className="text-xs text-red-700">
-									{stepResult.error ?? stepResult.message}
+						{/* Configuration */}
+						{config ? (
+							<div>
+								<p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-stone-400">
+									Configuration
 								</p>
+								<div className="flex flex-wrap gap-2">
+									{config.app ? (
+										<span className="flex items-center gap-1 rounded-lg bg-blue-50 px-2.5 py-1 text-xs text-blue-700">
+											<Package className="h-3.5 w-3.5" />
+											{config.app}
+										</span>
+									) : null}
+									{config.maxSteps ? (
+										<span className="rounded-lg bg-stone-100 px-2.5 py-1 text-xs text-stone-600">
+											Max {config.maxSteps} steps
+										</span>
+									) : null}
+									{config.retries ? (
+										<span className="rounded-lg bg-stone-100 px-2.5 py-1 text-xs text-stone-600">
+											{config.retries} retries
+										</span>
+									) : null}
+								</div>
 							</div>
-						</div>
-					) : null}
+						) : null}
 
-					{/* Agent Journey */}
-					<div>
+						{/* Error */}
+						{stepResult.error || (stepResult.message && !stepResult.success) ? (
+							<div>
+								<p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-red-400">
+									Error
+								</p>
+								<div className="rounded-lg bg-red-50 px-3 py-2.5">
+									<p className="text-xs text-red-700">
+										{stepResult.error ?? stepResult.message}
+									</p>
+								</div>
+							</div>
+						) : null}
+					</div>
+				</div>
+
+				{/* Agent Journey — scrollable */}
+				<div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
+					<div className="mx-auto max-w-3xl">
 						<p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-stone-400">
 							Agent Journey
 						</p>
@@ -651,11 +601,7 @@ export function StepDetailModal({
 															Loading screen...
 														</div>
 													) : screen ? (
-														<ScreenPanel
-															screen={screen}
-															expanded={expandedElements.has(`screen-${s.step}`)}
-															onToggle={() => toggleElements(`screen-${s.step}`)}
-														/>
+														<ScreenPanel screen={screen} />
 													) : (
 														<p className="py-1 text-[10px] text-stone-400">No screen data available for this step.</p>
 													)}
@@ -673,18 +619,18 @@ export function StepDetailModal({
 						) : (
 							<p className="text-xs text-stone-400">No step data available.</p>
 						)}
-					</div>
 
-					{/* Session ID */}
-					{stepResult.sessionId ? (
-						<div className="border-t border-stone-100 pt-3">
-							<p className="text-[10px] text-stone-400">
-								Session ID: <span className="font-mono">{stepResult.sessionId}</span>
-							</p>
-						</div>
-					) : null}
+						{/* Session ID */}
+						{stepResult.sessionId ? (
+							<div className="mt-4 border-t border-stone-100 pt-3">
+								<p className="text-[10px] text-stone-400">
+									Session ID: <span className="font-mono">{stepResult.sessionId}</span>
+								</p>
+							</div>
+						) : null}
+					</div>
 				</div>
-			</ScrollArea>
+			</div>
 			</div>
 		</div>
 	);
