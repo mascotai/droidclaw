@@ -66,7 +66,7 @@ function parseAction(action: unknown): {
 }
 
 /** Render a single text segment with inline formatting */
-function formatInline(text: string): ReactNode[] {
+export function formatInline(text: string): ReactNode[] {
 	// Match: 'quoted UI elements', "double quoted", ALLCAPS_WORDS (3+ chars), action keywords, conditional/sequential markers
 	const parts: ReactNode[] = [];
 	const regex = /(\u2018[^\u2019]+\u2019|'[^']+')|(\"[^\"]+\")|(\b[A-Z][A-Z_]{2,}\b:?)|(\b(?:tap|type|scroll|swipe|clear|wait|launch|click|press|find_and_tap|read_screen|copy_visible_text|submit_message|wait_for_content|open_url|clipboard_set|paste|done|back|home|enter)\b)|((?:^|\.\s+)(?:If you see|If you land|Then:|After (?:tapping|clicking|each|that)))/g;
@@ -123,52 +123,127 @@ function formatInline(text: string): ReactNode[] {
 	return parts;
 }
 
+/** Mask sensitive values — passwords, secrets, tokens */
+export function maskSensitive(text: string): string {
+	return text.replace(
+		/(?:password|secret|token|api[_-]?key|totp[_-]?secret)\s*[:=]\s*['"]?([^\s'",:}{]+)/gi,
+		(match, value) => match.replace(value, '•'.repeat(Math.min(value.length, 8))),
+	);
+}
+
+/** Parse a result string that might be JSON into readable parts */
+function formatResult(result: string): ReactNode {
+	// Try to parse as JSON
+	const trimmed = result.trim();
+	if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+		try {
+			const parsed = JSON.parse(trimmed);
+			if (typeof parsed === 'object' && parsed !== null) {
+				const { success, action, details, durationMs, error, ...rest } = parsed as Record<string, unknown>;
+				const parts: ReactNode[] = [];
+				if (success !== undefined) {
+					parts.push(
+						<span key="s" className={cn('font-medium', success ? 'text-emerald-600' : 'text-red-600')}>
+							{success ? '✓' : '✗'}
+						</span>,
+					);
+				}
+				if (action) {
+					parts.push(
+						<code key="a" className="ml-1 rounded bg-stone-100 px-1 py-0.5 text-[10px] text-stone-600">
+							{String(action)}
+						</code>,
+					);
+				}
+				if (details && details !== 'completed') {
+					parts.push(<span key="d" className="ml-1 text-stone-500">{String(details)}</span>);
+				}
+				if (error) {
+					parts.push(<span key="e" className="ml-1 text-red-500">{String(error)}</span>);
+				}
+				if (durationMs) {
+					parts.push(
+						<span key="t" className="ml-1 text-stone-300">{Math.round(Number(durationMs) / 1000)}s</span>,
+					);
+				}
+				// Show remaining keys if any
+				const restKeys = Object.keys(rest).filter((k) => rest[k] != null);
+				if (restKeys.length > 0) {
+					parts.push(
+						<span key="r" className="ml-1 text-stone-400">
+							{restKeys.map((k) => `${k}: ${rest[k]}`).join(', ')}
+						</span>,
+					);
+				}
+				if (parts.length > 0) return <>{parts}</>;
+			}
+		} catch {
+			// Not valid JSON, fall through
+		}
+	}
+	return maskSensitive(result);
+}
+
 /** Format a long goal text into readable, structured blocks */
 function GoalText({ text }: { text: string }) {
 	if (!text || text === 'N/A') {
 		return <p className="text-sm text-stone-400 italic">No goal text</p>;
 	}
 
+	const masked = maskSensitive(text);
+
 	// Short text — single line
-	if (text.length < 100) {
-		return <p className="text-sm leading-relaxed text-stone-800">{formatInline(text)}</p>;
+	if (masked.length < 120) {
+		return <p className="text-sm leading-relaxed text-stone-800">{formatInline(masked)}</p>;
 	}
 
-	// Split into sentences/instructions:
-	// - ". " followed by uppercase (sentence boundary)
+	// Split into logical paragraphs by explicit delimiters:
 	// - " — " (em dash separator)
-	// - "Then: " / "Then, " (instruction separator, keep "Then" with next part)
 	// - "\n" (newlines)
-	// - "If you " at mid-text (conditional instructions — keep "If" with next part)
-	// - "After " at mid-text following a period (sequential instructions)
-	const sentences = text
-		.split(/(?<=[.!?])\s+(?=[A-Z])|(?:\s+—\s+)|(?:\n+)|(?<=\.)\s+(?=Then[:,]\s)|(?<=\.)\s+(?=If you\s)|(?<=\.)\s+(?=After\s)/)
+	// - "Then:" or "Then," as standalone sentence start after a period
+	// For remaining long chunks, split on ". " followed by "If you" or "After" (conditional/sequential)
+	// Do NOT split on every ". " — keep related sentences together
+	let chunks = masked
+		.split(/(?:\s+—\s+)|(?:\n+)|(?<=\.)\s+(?=Then[:,]\s)/)
 		.map((s) => s.trim())
 		.filter(Boolean);
 
-	// If only 1 chunk, just render with inline formatting
-	if (sentences.length <= 1) {
-		return <p className="text-sm leading-relaxed text-stone-800">{formatInline(text)}</p>;
+	// If still only 1 chunk and it's long, try splitting on ". If you" or ". After"
+	if (chunks.length === 1 && chunks[0].length > 200) {
+		chunks = chunks[0]
+			.split(/(?<=\.)\s+(?=(?:If you|After (?:tapping|clicking|each|that|the)))/i)
+			.map((s) => s.trim())
+			.filter(Boolean);
 	}
 
-	// Multi-sentence: render as numbered instruction list
+	// If only 1 chunk, just render with inline formatting
+	if (chunks.length <= 1) {
+		return <p className="text-sm leading-relaxed text-stone-800">{formatInline(masked)}</p>;
+	}
+
+	// Multi-chunk: render as numbered instruction list
 	return (
-		<div className="space-y-2 rounded-lg bg-stone-50 px-4 py-3">
-			{sentences.map((sentence, i) => {
-				const isWarning = /^(IMPORTANT|WARNING|NOTE|CRITICAL|MUST)\b/i.test(sentence) || /\bdo NOT\b/.test(sentence);
+		<div className="space-y-2.5 rounded-lg bg-stone-50 px-4 py-3">
+			{chunks.map((chunk, i) => {
+				const isWarning = /\bdo NOT\b/.test(chunk) || /^(IMPORTANT|WARNING|NOTE|CRITICAL)\b/i.test(chunk);
+				const isConditional = /^If you\b/i.test(chunk);
 				return (
 					<div key={i} className="flex gap-2.5">
 						<span className={cn(
-							'mt-0.5 flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full text-[9px] font-medium',
-							isWarning ? 'bg-amber-100 text-amber-700' : 'bg-stone-200 text-stone-500',
+							'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-medium',
+							isWarning ? 'bg-amber-100 text-amber-700'
+								: isConditional ? 'bg-blue-50 text-blue-600'
+								: 'bg-stone-200 text-stone-500',
 						)}>
-							{isWarning ? '!' : i + 1}
+							{isWarning ? '!' : isConditional ? '?' : i + 1}
 						</span>
 						<p className={cn(
 							'text-[13px] leading-relaxed',
-							isWarning ? 'font-medium text-amber-800' : 'text-stone-700',
+							isWarning ? 'font-medium text-amber-800'
+								: isConditional ? 'text-stone-600'
+								: 'text-stone-700',
 						)}>
-							{formatInline(sentence)}
+							{formatInline(chunk)}
 						</p>
 					</div>
 				);
@@ -486,7 +561,7 @@ export function StepDetailModal({
 													) : null}
 													{act.text ? (
 														<span className="rounded bg-white px-1.5 py-0.5 text-stone-700">
-															&quot;{act.text}&quot;
+															&quot;{maskSensitive(act.text)}&quot;
 														</span>
 													) : null}
 													{act.direction ? (
@@ -528,7 +603,7 @@ export function StepDetailModal({
 											) : null}
 											{s.result ? (
 												<p className="mt-0.5 pl-8 text-xs text-stone-400">
-													&rarr; {s.result}
+													→ {formatResult(s.result)}
 												</p>
 											) : null}
 											{s.package ? (

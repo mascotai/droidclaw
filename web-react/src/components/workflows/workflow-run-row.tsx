@@ -13,7 +13,7 @@ import {
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StatusBadge, TimeAgo, DurationDisplay } from '@/components/shared';
-import { StepDetailModal } from '@/components/workflows/step-detail-modal';
+import { StepDetailModal, formatInline, maskSensitive } from '@/components/workflows/step-detail-modal';
 import { api } from '@/lib/api';
 import type { WorkflowRun, StepResult, WorkflowStepConfig, WorkflowLiveProgress } from '@/types/devices';
 import { cn } from '@/lib/utils';
@@ -29,6 +29,17 @@ interface WorkflowRunRowProps {
 function durationMs(startedAt: Date | string, completedAt: Date | string | null): number {
 	if (!completedAt) return -1;
 	return new Date(completedAt).getTime() - new Date(startedAt).getTime();
+}
+
+function getStepGoalFormatted(run: WorkflowRun, stepIdx: number): { text: string; truncated: boolean } {
+	const raw = getStepGoal(run, stepIdx);
+	const masked = maskSensitive(raw);
+	// Truncate long goal text for list view — show first sentence
+	if (masked.length > 120) {
+		const firstSentence = masked.match(/^.{1,120}(?:[.!?]|$)/)?.[0] ?? masked.slice(0, 120);
+		return { text: firstSentence + (firstSentence.length < masked.length ? '…' : ''), truncated: true };
+	}
+	return { text: masked, truncated: false };
 }
 
 function getStepGoal(run: WorkflowRun, stepIdx: number): string {
@@ -187,7 +198,10 @@ export function WorkflowRunRow({ run, deviceId, liveProgress, onExpand, expanded
 											</span>
 											<div className="min-w-0 flex-1">
 												<p className="text-xs leading-relaxed text-stone-800">
-													{getStepGoal(activeRun, stepIdx)}
+													{(() => {
+														const { text, truncated } = getStepGoalFormatted(activeRun, stepIdx);
+														return <>{formatInline(text)}{truncated && <span className="text-stone-400"> (click for full text)</span>}</>;
+													})()}
 												</p>
 												{(stepResult?.error || (stepResult?.message && !stepResult?.success)) ? (
 													<p className="mt-1 text-xs text-red-500">

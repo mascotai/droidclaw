@@ -46,14 +46,14 @@ function DashboardLayout() {
 	const currentUser = user ?? { id: 'dev', email: 'dev@localhost', name: 'Developer' };
 
 	return (
-		<div className="flex min-h-screen bg-stone-100">
+		<div className="flex h-screen overflow-hidden bg-stone-100">
 			<Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-			<div className="flex flex-1 flex-col">
+			<div className="flex min-w-0 flex-1 flex-col">
 				<Header
 					user={currentUser}
 					onMenuClick={() => setSidebarOpen(true)}
 				/>
-				<main className="flex-1 p-6">
+				<main className="flex-1 overflow-y-auto p-6">
 					<Outlet />
 				</main>
 			</div>
