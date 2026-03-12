@@ -384,6 +384,7 @@ v2.get("/devices/:deviceId/workflows/runs/:runId", async (c) => {
     evalPassed: sr.evalJudgment ? sr.evalJudgment.success : null,
     skipped: sr.skipped ?? false,
     error: sr.error ?? null,
+    sessionId: sr.sessionId ?? null,
   }));
 
   // If running, append the current live goal to the array

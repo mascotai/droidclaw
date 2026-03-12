@@ -221,6 +221,10 @@ export const api = {
 		const data = await request<{ steps: Array<Record<string, unknown>>; totalSteps: number; stepsUsed: number; note?: string }>(`/devices/${deviceId}/workflows/runs/${runId}/goals/${goalIndex}/steps`);
 		return data;
 	},
+	getStepScreen: async (deviceId: string, runId: string, goalIndex: number, stepNumber: number) => {
+		const data = await request<Record<string, unknown>>(`/devices/${deviceId}/workflows/runs/${runId}/goals/${goalIndex}/steps/${stepNumber}/screen`);
+		return data;
+	},
 	getQueueState: (_deviceId: string): Promise<{ queue: unknown[] }> =>
 		Promise.resolve({ queue: [] }),
 
