@@ -99,6 +99,7 @@ interface StepResult {
   stepsUsed: number;
   sessionId?: string;
   resolvedBy?: string;
+  cachedFlowId?: string;
   error?: string;
   observations?: ScreenObservation[];
   evalJudgment?: EvalJudgment;
@@ -529,6 +530,54 @@ v2.get("/devices/:deviceId/workflows/runs/:runId/goals/:goalId/steps", async (c)
   }
 
   if (!sessionId) {
+    // For cached flows, look up the saved deterministic steps
+    if (sr?.resolvedBy === "cached_flow" && sr.cachedFlowId) {
+      const cached = await db
+        .select()
+        .from(cachedFlow)
+        .where(eq(cachedFlow.id, sr.cachedFlowId))
+        .limit(1);
+
+      if (cached.length > 0) {
+        const flowSteps = (cached[0].steps as any[]) ?? [];
+        const timeline = (cached[0].timeline as number[]) ?? [];
+        return c.json({
+          goal: idx,
+          goalId: sr?.stepId ?? def?.id ?? null,
+          status: "completed",
+          stepsUsed: flowSteps.length,
+          totalSteps: flowSteps.length,
+          resolvedBy: "cached_flow",
+          steps: flowSteps.map((fs: any, i: number) => {
+            if (typeof fs === "string") {
+              return {
+                step: i + 1,
+                action: { action: fs },
+                reasoning: null,
+                result: null,
+                package: null,
+                durationMs: timeline[i] ?? 0,
+              };
+            }
+            const entries = Object.entries(fs).filter(([k]) => !k.startsWith("_"));
+            const [actionType, actionValue] = entries[0] ?? ["unknown", null];
+            return {
+              step: i + 1,
+              action: {
+                action: actionType,
+                ...(typeof actionValue === "string" ? { target: actionValue, text: actionType === "type" ? actionValue : undefined } : {}),
+                ...(fs._coords ? { coordinates: fs._coords } : {}),
+              },
+              reasoning: null,
+              result: null,
+              package: null,
+              durationMs: timeline[i] ?? 0,
+            };
+          }),
+        });
+      }
+    }
+
     return c.json({
       goal: idx,
       goalId: sr?.stepId ?? def?.id ?? null,

@@ -240,7 +240,7 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
   const { runId, persistentDeviceId, userId, name, steps, llmConfig, resolvedValues } = options;
   let { deviceId } = options;
   const trackingKey = persistentDeviceId ?? deviceId;
-  const stepResults: Array<{ goal: string; success: boolean; stepsUsed: number; sessionId?: string; resolvedBy?: string; error?: string; observations?: ScreenObservation[]; evalJudgment?: EvalJudgment; skipped?: boolean; skipReason?: string; stepId?: string }> = [];
+  const stepResults: Array<{ goal: string; success: boolean; stepsUsed: number; sessionId?: string; resolvedBy?: string; cachedFlowId?: string; error?: string; observations?: ScreenObservation[]; evalJudgment?: EvalJudgment; skipped?: boolean; skipReason?: string; stepId?: string }> = [];
   const evalStateMap = new Map<string, Record<string, boolean | string | number>>();
 
   wfLog(`[Workflow ${runId}] Starting: persistentDeviceId=${persistentDeviceId ?? "UNDEFINED"}, deviceId=${deviceId}, trackingKey=${trackingKey}`);
@@ -446,6 +446,7 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
                   success: true,
                   stepsUsed: resolvedFlowSteps.length,
                   resolvedBy: "cached_flow",
+                  cachedFlowId: cachedEntry.id,
                 });
                 stepSuccess = true;
                 wfLog(`[Workflow ${runId}] Step ${i}: cached flow replay SUCCESS`);
