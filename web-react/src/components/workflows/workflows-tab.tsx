@@ -13,23 +13,26 @@ import type {
 	WorkflowRun,
 	LiveWorkflowRun,
 	LiveAgentStep,
-	CachedFlowEntry,
 } from '@/types/devices';
-import { RunsList } from '@/components/workflows/runs-list';
 import { RunViewer } from '@/components/workflows/run-viewer';
-import { ActiveWorkflows } from '@/components/workflows/active-workflows';
+import { WorkflowBuilderModal } from '@/components/workflows/workflow-builder-modal';
+import { StatusBadge, DurationDisplay, TimeAgo } from '@/components/shared';
 import { toast } from 'sonner';
 import { track } from '@/lib/analytics/track';
-import { DEVICE_WORKFLOW_STOP } from '@/lib/analytics/events';
+import { DEVICE_WORKFLOW_STOP, DEVICE_WORKFLOW_SUBMIT } from '@/lib/analytics/events';
+import { Plus, Clock } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 interface WorkflowsTabProps {
 	deviceId: string;
+	selectedRunId: string | null;
+	onSelectRun: (runId: string | null) => void;
 }
 
-export function WorkflowsTab({ deviceId }: WorkflowsTabProps) {
+export function WorkflowsTab({ deviceId, selectedRunId, onSelectRun }: WorkflowsTabProps) {
 	const queryClient = useQueryClient();
-	const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
 	const [liveRun, setLiveRun] = useState<LiveWorkflowRun | null>(null);
+	const [builderOpen, setBuilderOpen] = useState(false);
 
 	// ── Data queries ──
 
@@ -42,16 +45,6 @@ export function WorkflowsTab({ deviceId }: WorkflowsTabProps) {
 	const runs = useMemo(
 		() => (runsData?.items as WorkflowRun[] | undefined) ?? [],
 		[runsData],
-	);
-
-	const { data: cachedFlows, isLoading: flowsLoading } = useQuery({
-		queryKey: ['cachedFlows', deviceId],
-		queryFn: () => api.listCachedFlows(deviceId),
-	});
-
-	const selectedRun = useMemo(
-		() => runs.find((r) => r.id === selectedRunId) ?? null,
-		[runs, selectedRunId],
 	);
 
 	// ── Fetch detail for selected historical run ──
@@ -71,27 +64,21 @@ export function WorkflowsTab({ deviceId }: WorkflowsTabProps) {
 		},
 	});
 
-	const runCachedFlow = useMutation({
-		mutationFn: (flow: CachedFlowEntry) =>
+	const submitWorkflow = useMutation({
+		mutationFn: (data: { steps: Array<Record<string, unknown>>; name?: string; variables?: Record<string, string> }) =>
 			api.submitWorkflow({
 				deviceId,
-				name: `Cached: ${flow.goalKey}`,
-				steps: [{ goal: flow.goalKey, ...(flow.appPackage && { app: flow.appPackage }), cache: true }],
+				name: data.name,
+				steps: data.steps,
+				variables: data.variables,
 			}),
 		onSuccess: (result) => {
-			toast.success('Cached flow started', { description: `Run ID: ${result.runId}` });
+			toast.success('Workflow started', { description: `Run ID: ${result.runId}` });
 			queryClient.invalidateQueries({ queryKey: ['workflowRuns', deviceId] });
+			setBuilderOpen(false);
 		},
 		onError: (err) => {
-			toast.error('Failed to start cached flow', { description: err.message });
-		},
-	});
-
-	const deleteCachedFlow = useMutation({
-		mutationFn: (flowId: string) => api.deleteCachedFlow(flowId, deviceId),
-		onSuccess: () => {
-			queryClient.invalidateQueries({ queryKey: ['cachedFlows', deviceId] });
-			toast.success('Cached flow deleted');
+			toast.error('Failed to start workflow', { description: err.message });
 		},
 	});
 
@@ -117,7 +104,7 @@ export function WorkflowsTab({ deviceId }: WorkflowsTabProps) {
 						liveSteps: [],
 					};
 					setLiveRun(newLive);
-					setSelectedRunId(evt.runId);
+					onSelectRun(evt.runId);
 				}
 
 				if (msg.type === 'step' && liveRun?.status === 'running') {
@@ -168,74 +155,153 @@ export function WorkflowsTab({ deviceId }: WorkflowsTabProps) {
 						};
 					});
 					queryClient.invalidateQueries({ queryKey: ['workflowRuns', deviceId] });
-					queryClient.invalidateQueries({ queryKey: ['cachedFlows', deviceId] });
 				}
 			},
-			[liveRun, deviceId, queryClient],
+			[liveRun, deviceId, queryClient, onSelectRun],
 		),
 	);
 
 	// Determine which run to show as "live" in RunViewer
 	const viewerLiveRun = liveRun && selectedRunId === liveRun.runId ? liveRun : null;
 
-	// Cached flow meta for RunViewer header
-	const cachedFlowMeta = useMemo(() => {
-		if (!selectedRun || !cachedFlows) return null;
-		// Try to match by name
-		const match = cachedFlows.find((f) =>
-			selectedRun.name?.includes(f.goalKey),
-		);
-		if (!match) return null;
-		return {
-			goalKey: match.goalKey,
-			stepCount: match.stepCount,
-			successCount: match.successCount ?? 0,
-		};
-	}, [selectedRun, cachedFlows]);
-
-	// The running flow ID for ActiveWorkflows ghost placeholder
-	const runningFlowId = useMemo(() => {
-		if (!liveRun || liveRun.status !== 'running') return null;
-		if (!cachedFlows) return null;
-		const match = cachedFlows.find((f) =>
-			liveRun.name?.includes(f.goalKey),
-		);
-		return match?.id ?? null;
-	}, [liveRun, cachedFlows]);
+	function durationMs(startedAt: string | Date, completedAt: string | Date | null): number {
+		if (!completedAt) return -1;
+		return new Date(completedAt).getTime() - new Date(startedAt).getTime();
+	}
 
 	return (
-		<div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-			{/* Left: Runs list + Cached Flows */}
-			<div className="space-y-4 lg:col-span-1">
-				<RunsList
-					runs={runs}
-					liveRun={liveRun}
-					selectedRunId={selectedRunId}
-					onSelect={setSelectedRunId}
-				/>
-
-				<ActiveWorkflows
-					flows={(cachedFlows as CachedFlowEntry[] | undefined) ?? []}
-					loading={flowsLoading}
-					runningFlowId={runningFlowId}
-					onRun={(flow) => runCachedFlow.mutate(flow)}
-					onDelete={(id) => deleteCachedFlow.mutate(id)}
-				/>
+		<div className="space-y-4">
+			{/* Header with New Workflow button */}
+			<div className="flex items-center justify-between">
+				<div className="flex items-center gap-2">
+					<Clock className="h-4 w-4 text-stone-400" />
+					<h3 className="text-sm font-semibold text-stone-900">Recent Runs</h3>
+					{runsData?.total ? (
+						<span className="rounded-full bg-stone-100 px-2 py-0.5 text-xs text-stone-500">
+							{runsData.total}
+						</span>
+					) : null}
+				</div>
+				<Button
+					onClick={() => setBuilderOpen(true)}
+					size="sm"
+					className="gap-1.5"
+				>
+					<Plus className="h-3.5 w-3.5" />
+					New run
+				</Button>
 			</div>
 
-			{/* Right: Run detail viewer */}
-			<div className="lg:col-span-2">
-				<RunViewer
-					run={(runDetail as WorkflowRun | undefined) ?? null}
-					liveRun={viewerLiveRun}
-					loading={runDetailLoading}
-					onStop={() => {
-						track(DEVICE_WORKFLOW_STOP);
-						stopWorkflow.mutate(liveRun?.runId ?? selectedRunId ?? undefined);
-					}}
-					cachedFlowMeta={cachedFlowMeta}
-				/>
-			</div>
+			{/* Runs list */}
+			{runs.length > 0 ? (
+				<div className="space-y-1.5">
+					{/* Live run at top */}
+					{liveRun && liveRun.status === 'running' && (
+						<button
+							onClick={() => onSelectRun(liveRun.runId)}
+							className={`flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left transition-colors ${
+								selectedRunId === liveRun.runId
+									? 'border-violet-300 bg-violet-50 ring-1 ring-violet-200'
+									: 'border-stone-200 bg-white hover:border-stone-300'
+							}`}
+						>
+							<div className="relative flex h-2 w-2 shrink-0">
+								<span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-violet-400 opacity-75" />
+								<span className="relative inline-flex h-2 w-2 rounded-full bg-violet-500" />
+							</div>
+							<div className="min-w-0 flex-1">
+								<p className="truncate text-sm font-medium text-stone-800">{liveRun.name}</p>
+								<div className="mt-0.5 flex items-center gap-2 text-xs text-stone-400">
+									<span>{liveRun.totalSteps} steps</span>
+									<span className="text-violet-500 font-medium">live</span>
+								</div>
+							</div>
+							<StatusBadge status="running" />
+						</button>
+					)}
+
+					{/* Historical runs */}
+					{runs.map((run) => {
+						// Skip if this is the same as the live run
+						if (liveRun && liveRun.status === 'running' && run.id === liveRun.runId) return null;
+						const isSelected = selectedRunId === run.id;
+						const dur = durationMs(run.startedAt, run.completedAt);
+
+						return (
+							<button
+								key={run.id}
+								onClick={() => onSelectRun(isSelected ? null : run.id)}
+								className={`flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left transition-colors ${
+									isSelected
+										? 'border-stone-300 bg-stone-50 ring-1 ring-stone-200'
+										: 'border-stone-200 bg-white hover:border-stone-300'
+								}`}
+							>
+								<StatusBadge status={run.status} size="sm" />
+								<div className="min-w-0 flex-1">
+									<p className="truncate text-sm font-medium text-stone-800">{run.name}</p>
+									<div className="mt-0.5 flex items-center gap-2 text-xs text-stone-400">
+										<span>{run.totalSteps} step{run.totalSteps !== 1 ? 's' : ''}</span>
+										{dur > 0 && (
+											<>
+												<span>&middot;</span>
+												<DurationDisplay ms={dur} />
+											</>
+										)}
+										<span>&middot;</span>
+										<TimeAgo date={run.startedAt} />
+									</div>
+								</div>
+							</button>
+						);
+					})}
+				</div>
+			) : (
+				<div className="rounded-xl border border-dashed border-stone-200 bg-white px-6 py-12 text-center">
+					<p className="text-sm text-stone-500">No workflow runs yet</p>
+					<p className="mt-1 text-xs text-stone-400">Click "New run" to create your first workflow</p>
+				</div>
+			)}
+
+			{/* Inline run detail — shown below the selected run */}
+			{selectedRunId && (
+				<div className="rounded-xl border border-stone-200 bg-white p-4">
+					<RunViewer
+						run={(runDetail as WorkflowRun | undefined) ?? null}
+						liveRun={viewerLiveRun}
+						loading={runDetailLoading}
+						onStop={() => {
+							track(DEVICE_WORKFLOW_STOP);
+							stopWorkflow.mutate(liveRun?.runId ?? selectedRunId ?? undefined);
+						}}
+					/>
+				</div>
+			)}
+
+			{/* Workflow Builder Modal */}
+			<WorkflowBuilderModal
+				open={builderOpen}
+				onOpenChange={setBuilderOpen}
+				onSubmit={(steps, variables) => {
+					track(DEVICE_WORKFLOW_SUBMIT);
+					const name = steps.length === 1
+						? steps[0].goal
+						: `Workflow · ${steps.length} steps`;
+					submitWorkflow.mutate({
+						name,
+						steps: steps.map((s) => ({
+							goal: s.goal,
+							...(s.app && { app: s.app }),
+							...(s.maxSteps !== undefined && s.maxSteps !== 15 && { maxSteps: s.maxSteps }),
+							...(s.retries !== undefined && s.retries > 0 && { retries: s.retries }),
+							...(s.cache === false && { cache: false }),
+							...(s.forceStop && { forceStop: true }),
+						})),
+						variables,
+					});
+				}}
+				isPending={submitWorkflow.isPending}
+			/>
 		</div>
 	);
 }

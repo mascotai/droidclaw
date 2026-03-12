@@ -8,15 +8,13 @@ import type { WsMessage, WorkflowStepDoneEvent, WorkflowCompletedEvent } from '@
 import { useWsSubscription } from '@/hooks/use-websocket';
 import { DeviceHeader } from '@/components/devices/device-header';
 import { OverviewTab } from '@/components/devices/overview-tab';
-import { GoalsTab } from '@/components/goals/goals-tab';
 import { WorkflowsTab } from '@/components/workflows/workflows-tab';
-import { RunTab } from '@/components/workflows/run-tab';
 import { UnifiedLog } from '@/components/workflows/unified-log';
 import { track } from '@/lib/analytics/track';
 import { DEVICE_TAB_CHANGE } from '@/lib/analytics/events';
 
 const searchSchema = z.object({
-	tab: z.enum(['overview', 'goals', 'workflows', 'run', 'log']).default('overview'),
+	tab: z.enum(['overview', 'workflows', 'log']).default('overview'),
 	runId: z.string().optional(),
 });
 
@@ -27,7 +25,7 @@ export const Route = createFileRoute('/_auth/dashboard/devices/$deviceId/')({
 
 function DeviceDetailPage() {
 	const { deviceId } = Route.useParams();
-	const { tab } = Route.useSearch();
+	const { tab, runId } = Route.useSearch();
 	const navigate = useNavigate();
 	const queryClient = useQueryClient();
 
@@ -117,7 +115,7 @@ function DeviceDetailPage() {
 		[deviceId],
 	);
 
-	function setTab(newTab: 'overview' | 'goals' | 'workflows' | 'run' | 'log') {
+	function setTab(newTab: 'overview' | 'workflows' | 'log') {
 		track(DEVICE_TAB_CHANGE, { tab: newTab });
 		navigate({
 			to: '/dashboard/devices/$deviceId',
@@ -126,6 +124,19 @@ function DeviceDetailPage() {
 			replace: true,
 		});
 	}
+
+	// Deeplink: update URL when selecting a run
+	const setSelectedRunId = useCallback(
+		(newRunId: string | null) => {
+			navigate({
+				to: '/dashboard/devices/$deviceId',
+				params: { deviceId },
+				search: { tab: 'workflows', runId: newRunId ?? undefined },
+				replace: true,
+			});
+		},
+		[navigate, deviceId],
+	);
 
 	if (deviceLoading) {
 		return (
@@ -153,9 +164,7 @@ function DeviceDetailPage() {
 
 	const tabs = [
 		{ key: 'overview' as const, label: 'Overview' },
-		{ key: 'goals' as const, label: 'Goals' },
 		{ key: 'workflows' as const, label: 'Workflows' },
-		{ key: 'run' as const, label: 'Run' },
 		{ key: 'log' as const, label: 'Log' },
 	];
 
@@ -187,9 +196,13 @@ function DeviceDetailPage() {
 			{tab === 'overview' && (
 				<OverviewTab deviceId={deviceId} device={device} />
 			)}
-			{tab === 'goals' && <GoalsTab deviceId={deviceId} />}
-			{tab === 'workflows' && <WorkflowsTab deviceId={deviceId} />}
-			{tab === 'run' && <RunTab deviceId={deviceId} />}
+			{tab === 'workflows' && (
+				<WorkflowsTab
+					deviceId={deviceId}
+					selectedRunId={runId ?? null}
+					onSelectRun={setSelectedRunId}
+				/>
+			)}
 			{tab === 'log' && (
 				<UnifiedLog
 					runs={logRuns}

@@ -193,6 +193,28 @@ export const api = {
 	},
 	getWorkflowRun: async (deviceId: string, runId: string) => {
 		const data = await request<Record<string, unknown>>(`/devices/${deviceId}/workflows/runs/${runId}?expand=steps`);
+		// Map v2 goals[] to stepResults[] + steps[] for frontend compat
+		const goals = data.goals as Array<Record<string, unknown>> | undefined;
+		if (goals && !data.stepResults) {
+			data.steps = goals.map((g) => ({
+				goal: g.text as string,
+				app: g.app as string | undefined,
+			}));
+			data.stepResults = goals.map((g) => ({
+				goal: g.text as string,
+				goalId: g.goalId as string,
+				success: g.success as boolean,
+				stepsUsed: g.stepsUsed as number | undefined,
+				resolvedBy: g.resolvedBy as string | undefined,
+				error: g.error as string | undefined,
+				message: g.message as string | undefined,
+				status: g.status as string,
+				evalPassed: g.evalPassed as boolean | null,
+				skipped: g.skipped as boolean,
+				sessionId: g.sessionId as string | undefined,
+				agentSteps: g.agentSteps as Array<Record<string, unknown>> | undefined,
+			}));
+		}
 		return { ...data, id: data.runId as string } as unknown as WorkflowRun;
 	},
 	getQueueState: (_deviceId: string): Promise<{ queue: unknown[] }> =>
