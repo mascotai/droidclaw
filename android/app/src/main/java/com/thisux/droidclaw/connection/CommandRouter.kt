@@ -102,13 +102,15 @@ class CommandRouter(
     private suspend fun handleGetScreen(requestId: String) {
         updateGestureExecutor()
         val svc = DroidClawAccessibilityService.instance
-        val elements = svc?.getScreenTree() ?: emptyList()
+        val screenResult = svc?.getScreenTree()
+        val elements = screenResult?.elements ?: emptyList()
+        val hasAppWindow = screenResult?.hasAppWindow ?: false
         val packageName = try {
             svc?.rootInActiveWindow?.packageName?.toString()
         } catch (_: Exception) { null }
         val activityName = svc?.getCurrentActivity()
             ?: DroidClawAccessibilityService.currentActivityName
-        Log.d(TAG, "get_screen: packageName=$packageName, activityName=$activityName, elements=${elements.size}")
+        Log.d(TAG, "get_screen: packageName=$packageName, activityName=$activityName, elements=${elements.size}, hasAppWindow=$hasAppWindow")
 
         var screenshot: String? = null
         if (elements.isEmpty()) {
@@ -132,7 +134,8 @@ class CommandRouter(
             screenHash = screenHash,
             screenshot = screenshot,
             packageName = packageName,
-            activityName = activityName
+            activityName = activityName,
+            hasAppWindow = hasAppWindow
         )
         webSocket.sendTyped(response)
     }

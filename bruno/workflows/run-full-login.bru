@@ -59,9 +59,9 @@ body:json {
       },
       {
         "id": "totp",
-        "goal": "Use get_totp with text '{{totpSecret}}' to generate a 6-digit code. Tap the security code input field to focus it, then use paste to paste the code. Tap Continue or Next or Confirm. If you see 'Waiting for approval' or 'Choose a way to confirm', tap 'Try another way', then select 'Authentication app', then tap Continue to get to the code entry screen, then do the get_totp + paste.",
+        "goal": "IMPORTANT: Use the get_totp ACTION (action='get_totp', text='{{totpSecret}}'). Do NOT use clipboard_set — get_totp is a special skill that generates a 6-digit code and copies it to clipboard automatically. After get_totp succeeds, tap the security code input field to focus it, then use paste to paste the code. Tap Continue or Next or Confirm. If you see 'Waiting for approval' or 'Choose a way to confirm', tap 'Try another way', then select 'Authentication app', then tap Continue to get to the code entry screen, then do the get_totp + paste.",
         "maxSteps": 15,
-        "retries": 0,
+        "retries": 4,
         "eval": {
           "states": {
             "past_2fa": {

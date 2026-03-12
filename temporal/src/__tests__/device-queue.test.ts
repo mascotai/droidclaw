@@ -8,10 +8,10 @@
  * A single Worker + TestWorkflowEnvironment is shared across all tests
  * to avoid Bun segfaults from repeated native module setup/teardown.
  *
- * Run:  bun test src/temporal/__tests__/device-queue.test.ts
+ * Run:  npm test
  */
 
-import { describe, it, expect, beforeAll, afterAll } from "bun:test";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import {
   TestWorkflowEnvironment,
   workflowInterceptorModules,

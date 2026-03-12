@@ -8,9 +8,14 @@ import { desc, eq } from "drizzle-orm";
 
 const health = new Hono();
 
+const GIT_SHA = process.env.GIT_SHA ?? "dev";
+const startedAt = new Date().toISOString();
+
 health.get("/", (c) => {
   return c.json({
     status: "ok",
+    version: GIT_SHA,
+    startedAt,
     connectedDevices: sessions.getStats().devices,
   });
 });
