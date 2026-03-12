@@ -217,6 +217,10 @@ export const api = {
 		}
 		return { ...data, id: data.runId as string } as unknown as WorkflowRun;
 	},
+	getGoalSteps: async (deviceId: string, runId: string, goalIndex: number) => {
+		const data = await request<{ steps: Array<Record<string, unknown>>; totalSteps: number; stepsUsed: number; note?: string }>(`/devices/${deviceId}/workflows/runs/${runId}/goals/${goalIndex}/steps`);
+		return data;
+	},
 	getQueueState: (_deviceId: string): Promise<{ queue: unknown[] }> =>
 		Promise.resolve({ queue: [] }),
 

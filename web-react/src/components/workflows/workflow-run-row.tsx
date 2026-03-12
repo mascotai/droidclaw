@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import {
 	CheckCircle2,
 	XCircle,
@@ -6,23 +6,38 @@ import {
 	Clock,
 	ChevronDown,
 	ChevronUp,
-	ChevronRight,
 	Zap,
 	Layers,
 	Code2,
+	Package,
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { StatusBadge, TimeAgo, DurationDisplay } from '@/components/shared';
+import { Skeleton } from '@/components/ui/skeleton';
+import { StatusBadge, TimeAgo, DurationDisplay, ActionBadge } from '@/components/shared';
+import { api } from '@/lib/api';
 import type { WorkflowRun, StepResult, WorkflowStepConfig, WorkflowLiveProgress } from '@/types/devices';
 import { cn } from '@/lib/utils';
 
 interface WorkflowRunRowProps {
 	run: WorkflowRun;
+	deviceId: string;
 	liveProgress?: WorkflowLiveProgress;
 	onExpand: (runId: string) => void;
-	onStepClick: (run: WorkflowRun, stepIdx: number) => void;
 	expanded: boolean;
+}
+
+interface GoalStepData {
+	steps: Array<{
+		step: number;
+		action: Record<string, unknown>;
+		reasoning: string;
+		result: string | null;
+		package: string;
+		durationMs: number;
+	}>;
+	note?: string;
+	loading: boolean;
 }
 
 function durationMs(startedAt: Date | string, completedAt: Date | string | null): number {
@@ -42,13 +57,76 @@ function getStepGoal(run: WorkflowRun, stepIdx: number): string {
 	return cmd ? `${cmd}: ${val}` : `Goal ${stepIdx + 1}`;
 }
 
-export function WorkflowRunRow({ run, liveProgress, onExpand, onStepClick, expanded }: WorkflowRunRowProps) {
+function parseAction(action: unknown): {
+	type: string;
+	coords?: number[];
+	text?: string;
+	direction?: string;
+	target?: string;
+} {
+	if (typeof action === 'string') return { type: action };
+	if (typeof action === 'object' && action !== null) {
+		const a = action as Record<string, unknown>;
+		return {
+			type: (a.action as string) ?? 'unknown',
+			coords: a.coordinates as number[] | undefined,
+			text: a.text as string | undefined,
+			direction: a.direction as string | undefined,
+			target: a.target as string | undefined,
+		};
+	}
+	return { type: 'unknown' };
+}
+
+export function WorkflowRunRow({ run, deviceId, liveProgress, onExpand, expanded }: WorkflowRunRowProps) {
+	const [expandedGoals, setExpandedGoals] = useState<Set<number>>(new Set());
+	const [goalSteps, setGoalSteps] = useState<Record<number, GoalStepData>>({});
+
 	const cacheHits = useMemo(() => {
 		if (!run.stepResults) return 0;
 		return (run.stepResults as StepResult[]).filter((r) => r?.resolvedBy === 'cached_flow').length;
 	}, [run.stepResults]);
 
 	const durMs = durationMs(run.startedAt, run.completedAt);
+
+	const fetchGoalSteps = useCallback(async (goalIdx: number) => {
+		setGoalSteps((prev) => ({
+			...prev,
+			[goalIdx]: { steps: [], loading: true },
+		}));
+
+		try {
+			const data = await api.getGoalSteps(deviceId, run.id, goalIdx);
+			setGoalSteps((prev) => ({
+				...prev,
+				[goalIdx]: {
+					steps: (data.steps ?? []) as GoalStepData['steps'],
+					note: data.note,
+					loading: false,
+				},
+			}));
+		} catch {
+			setGoalSteps((prev) => ({
+				...prev,
+				[goalIdx]: { steps: [], note: 'Failed to load steps', loading: false },
+			}));
+		}
+	}, [deviceId, run.id]);
+
+	function toggleGoal(goalIdx: number) {
+		setExpandedGoals((prev) => {
+			const next = new Set(prev);
+			if (next.has(goalIdx)) {
+				next.delete(goalIdx);
+			} else {
+				next.add(goalIdx);
+				if (!goalSteps[goalIdx]) {
+					fetchGoalSteps(goalIdx);
+				}
+			}
+			return next;
+		});
+	}
 
 	return (
 		<Card>
@@ -113,79 +191,151 @@ export function WorkflowRunRow({ run, liveProgress, onExpand, onStepClick, expan
 							const stepResult = (run.stepResults as StepResult[] | null)?.[stepIdx];
 							const isActive = !!(liveProgress && liveProgress.activeStepIndex === stepIdx && run.status === 'running');
 							const isPending = !stepResult && !isActive;
+							const canExpand = !!stepResult;
+							const isGoalExpanded = expandedGoals.has(stepIdx);
+							const stepsData = goalSteps[stepIdx];
 
 							const badgeClass = stepResult
 								? stepResult.success ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
 								: isActive ? 'bg-amber-100 text-amber-700' : 'bg-stone-200 text-stone-500';
 
 							return (
-								<button
-									key={stepIdx}
-									onClick={() => stepResult ? onStepClick(run, stepIdx) : undefined}
-									disabled={!stepResult}
-									className={cn(
-										'flex w-full items-start gap-2.5 rounded-xl px-3 py-3 text-left transition-colors',
-										isActive ? 'bg-amber-50 ring-1 ring-amber-200' : 'bg-stone-50 hover:bg-stone-100',
-										isPending && 'opacity-50',
-									)}
-								>
-									<span className={cn('mt-0.5 shrink-0 rounded-full px-2 py-0.5 font-mono text-xs', badgeClass)}>
-										{stepIdx + 1}
-									</span>
-									<div className="min-w-0 flex-1">
-										<p className="text-xs leading-relaxed text-stone-800">
-											{getStepGoal(run, stepIdx)}
-										</p>
-										{(stepResult?.error || (stepResult?.message && !stepResult?.success)) ? (
-											<p className="mt-1 text-xs text-red-500">
-												{stepResult?.error ?? stepResult?.message}
-											</p>
-										) : null}
-										{isActive && liveProgress && liveProgress.totalAttempts > 1 ? (
-											<p className="mt-1 text-xs text-amber-600">
-												Attempt {liveProgress.attempt}/{liveProgress.totalAttempts}
-											</p>
-										) : null}
-									</div>
-									<div className="flex shrink-0 flex-col items-end gap-1">
-										{stepResult ? (
-											<>
-												<span className={cn('flex items-center gap-1 text-xs font-medium', stepResult.success ? 'text-emerald-600' : 'text-red-600')}>
-													{stepResult.success ? <CheckCircle2 className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
-													{stepResult.success ? 'OK' : 'Failed'}
-												</span>
-												{stepResult.stepsUsed !== undefined ? (
-													<span className="text-xs text-stone-400">
-														{stepResult.stepsUsed} step{stepResult.stepsUsed !== 1 ? 's' : ''}
-													</span>
-												) : null}
-												{stepResult.resolvedBy ? (
-													stepResult.resolvedBy === 'cached_flow' ? (
-														<Badge variant="outline" className="gap-0.5 border-cyan-200 bg-cyan-50 text-[9px] text-cyan-700">
-															<Zap className="h-2.5 w-2.5" />
-															cached
-														</Badge>
-													) : (
-														<Badge variant="outline" className="text-[9px]">{stepResult.resolvedBy}</Badge>
-													)
-												) : null}
-											</>
-										) : isActive ? (
-											<span className="flex items-center gap-1 text-xs font-medium text-amber-600">
-												<Loader2 className="h-3.5 w-3.5 animate-spin" />
-												Running
-											</span>
-										) : (
-											<span className="flex items-center gap-1 text-xs font-medium text-stone-400">
-												<Clock className="h-3.5 w-3.5" />
-												Pending
-											</span>
+								<div key={stepIdx} className={cn(
+									'rounded-xl transition-colors',
+									isActive ? 'bg-amber-50 ring-1 ring-amber-200' : 'bg-stone-50',
+									isPending && 'opacity-50',
+								)}>
+									<button
+										onClick={() => canExpand ? toggleGoal(stepIdx) : undefined}
+										disabled={!canExpand}
+										className={cn(
+											'flex w-full items-start gap-2.5 px-3 py-3 text-left',
+											canExpand ? 'cursor-pointer hover:bg-stone-100 rounded-xl' : 'cursor-default',
 										)}
-									</div>
-									{stepResult ? (
-										<ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-stone-300" />
+									>
+										<span className={cn('mt-0.5 shrink-0 rounded-full px-2 py-0.5 font-mono text-xs', badgeClass)}>
+											{stepIdx + 1}
+										</span>
+										<div className="min-w-0 flex-1">
+											<p className="text-xs leading-relaxed text-stone-800">
+												{getStepGoal(run, stepIdx)}
+											</p>
+											{(stepResult?.error || (stepResult?.message && !stepResult?.success)) ? (
+												<p className="mt-1 text-xs text-red-500">
+													{stepResult?.error ?? stepResult?.message}
+												</p>
+											) : null}
+											{isActive && liveProgress && liveProgress.totalAttempts > 1 ? (
+												<p className="mt-1 text-xs text-amber-600">
+													Attempt {liveProgress.attempt}/{liveProgress.totalAttempts}
+												</p>
+											) : null}
+										</div>
+										<div className="flex shrink-0 items-center gap-2">
+											<div className="flex flex-col items-end gap-1">
+												{stepResult ? (
+													<>
+														<span className={cn('flex items-center gap-1 text-xs font-medium', stepResult.success ? 'text-emerald-600' : 'text-red-600')}>
+															{stepResult.success ? <CheckCircle2 className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
+															{stepResult.success ? 'OK' : 'Failed'}
+														</span>
+														{stepResult.stepsUsed !== undefined ? (
+															<span className="text-xs text-stone-400">
+																{stepResult.stepsUsed} step{stepResult.stepsUsed !== 1 ? 's' : ''}
+															</span>
+														) : null}
+														{stepResult.resolvedBy ? (
+															stepResult.resolvedBy === 'cached_flow' ? (
+																<Badge variant="outline" className="gap-0.5 border-cyan-200 bg-cyan-50 text-[9px] text-cyan-700">
+																	<Zap className="h-2.5 w-2.5" />
+																	cached
+																</Badge>
+															) : (
+																<Badge variant="outline" className="text-[9px]">{stepResult.resolvedBy}</Badge>
+															)
+														) : null}
+													</>
+												) : isActive ? (
+													<span className="flex items-center gap-1 text-xs font-medium text-amber-600">
+														<Loader2 className="h-3.5 w-3.5 animate-spin" />
+														Running
+													</span>
+												) : (
+													<span className="flex items-center gap-1 text-xs font-medium text-stone-400">
+														<Clock className="h-3.5 w-3.5" />
+														Pending
+													</span>
+												)}
+											</div>
+											{canExpand ? (
+												isGoalExpanded ? (
+													<ChevronUp className="h-3.5 w-3.5 text-stone-300" />
+												) : (
+													<ChevronDown className="h-3.5 w-3.5 text-stone-300" />
+												)
+											) : null}
+										</div>
+									</button>
+
+									{/* Expanded agent steps */}
+									{isGoalExpanded && canExpand ? (
+										<div className="border-t border-stone-200 px-3 pb-3 pt-2">
+											{stepsData?.loading ? (
+												<div className="space-y-2 py-2">
+													<Skeleton className="h-6 w-full" />
+													<Skeleton className="h-6 w-3/4" />
+													<Skeleton className="h-6 w-5/6" />
+												</div>
+											) : stepsData?.note && stepsData.steps.length === 0 ? (
+												<p className="py-2 text-xs text-stone-400 italic">{stepsData.note}</p>
+											) : stepsData && stepsData.steps.length > 0 ? (
+												<div className="space-y-1 border-l-2 border-stone-200 pl-3">
+													{stepsData.steps.map((agentStep) => {
+														const act = parseAction(agentStep.action);
+														return (
+															<div key={agentStep.step} className="flex items-start gap-1.5 py-0.5">
+																<span className="mt-0.5 shrink-0 rounded bg-stone-100 px-1 py-0.5 font-mono text-[9px] text-stone-500">
+																	{agentStep.step}
+																</span>
+																<div className="min-w-0 flex-1">
+																	<div className="flex flex-wrap items-center gap-1.5">
+																		<ActionBadge action={act.type} />
+																		{act.target ? (
+																			<span className="text-xs text-stone-600">{act.target}</span>
+																		) : null}
+																		{act.coords && act.coords.length >= 2 ? (
+																			<span className="font-mono text-xs text-stone-400">({act.coords[0]}, {act.coords[1]})</span>
+																		) : null}
+																		{act.text ? (
+																			<span className="rounded bg-white px-1 py-0.5 text-xs text-stone-700">&quot;{act.text}&quot;</span>
+																		) : null}
+																		{act.direction ? (
+																			<span className="text-xs text-stone-400">{act.direction}</span>
+																		) : null}
+																	</div>
+																	{agentStep.reasoning ? (
+																		<p className="mt-0.5 text-xs leading-relaxed text-stone-500">{agentStep.reasoning}</p>
+																	) : null}
+																	{agentStep.package ? (
+																		<span className="mt-0.5 inline-flex items-center gap-0.5 text-[10px] text-stone-400">
+																			<Package className="h-2.5 w-2.5" />
+																			{agentStep.package}
+																		</span>
+																	) : null}
+																</div>
+																{agentStep.durationMs ? (
+																	<span className="shrink-0 text-[9px] text-stone-300">{Math.round(agentStep.durationMs / 1000)}s</span>
+																) : null}
+															</div>
+														);
+													})}
+												</div>
+											) : (
+												<p className="py-2 text-xs text-stone-400">No step data available.</p>
+											)}
+										</div>
 									) : null}
-								</button>
+								</div>
 							);
 						})}
 					</div>

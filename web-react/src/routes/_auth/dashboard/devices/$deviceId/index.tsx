@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod/v4';
 import { useCallback, useMemo, useState } from 'react';
 import { api } from '@/lib/api';
-import type { WorkflowRun, WorkflowLiveProgress, Step, StepResult } from '@/types/devices';
+import type { WorkflowRun, WorkflowLiveProgress, StepResult } from '@/types/devices';
 import type { WsMessage, WorkflowStepDoneEvent, WorkflowCompletedEvent } from '@/stores/websocket';
 import { useWsSubscription } from '@/hooks/use-websocket';
 import { DeviceHeader } from '@/components/devices/device-header';
@@ -118,20 +118,6 @@ function DeviceDetailPage() {
 		),
 	);
 
-	const loadSessionSteps = useCallback(
-		async (sessionId: string): Promise<Step[]> => {
-			const steps = await api.listSessionSteps(deviceId, sessionId);
-			return steps.map((s) => ({
-				id: s.id,
-				stepNumber: s.stepNumber,
-				action: s.action,
-				reasoning: s.reasoning,
-				result: s.result,
-			}));
-		},
-		[deviceId],
-	);
-
 	function setTab(newTab: 'overview' | 'workflows' | 'log') {
 		track(DEVICE_TAB_CHANGE, { tab: newTab });
 		navigate({
@@ -222,13 +208,13 @@ function DeviceDetailPage() {
 			)}
 			{tab === 'log' && (
 				<UnifiedLog
+					deviceId={deviceId}
 					runs={logRuns}
 					liveProgress={liveProgress}
 					loaded={!logRunsLoading}
 					page={logPage}
 					totalPages={logTotalPages}
 					onPageChange={setLogPage}
-					loadSessionSteps={loadSessionSteps}
 				/>
 			)}
 		</div>

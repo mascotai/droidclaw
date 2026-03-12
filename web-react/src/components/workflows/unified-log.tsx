@@ -1,87 +1,34 @@
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import { History, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/shared';
 import { WorkflowRunRow } from '@/components/workflows/workflow-run-row';
-import { StepDetailModal } from '@/components/goals/step-detail-modal';
-import type {
-	WorkflowRun,
-	WorkflowLiveProgress,
-	StepResult,
-	WorkflowStepConfig,
-	Step,
-} from '@/types/devices';
+import type { WorkflowRun, WorkflowLiveProgress } from '@/types/devices';
 
 interface UnifiedLogProps {
+	deviceId: string;
 	runs: WorkflowRun[];
 	liveProgress: Record<string, WorkflowLiveProgress>;
 	loaded: boolean;
 	page: number;
 	totalPages: number;
 	onPageChange: (page: number) => void;
-	loadSessionSteps: (sessionId: string) => Promise<Step[]>;
-}
-
-function getStepConfig(run: WorkflowRun, stepIdx: number): WorkflowStepConfig | null {
-	const step = run.steps?.[stepIdx];
-	if (!step) return null;
-	if (typeof step === 'string') return { goal: step };
-	if (typeof step === 'object' && 'goal' in step) return step as WorkflowStepConfig;
-	const [cmd, val] = Object.entries(step)[0] ?? [];
-	return cmd ? { goal: `${cmd}: ${val}` } : null;
 }
 
 export function UnifiedLog({
+	deviceId,
 	runs,
 	liveProgress,
 	loaded,
 	page,
 	totalPages,
 	onPageChange,
-	loadSessionSteps,
 }: UnifiedLogProps) {
 	const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
 
-	// Step detail modal state
-	const [modalData, setModalData] = useState<{
-		stepIdx: number;
-		stepResult: StepResult;
-		config: WorkflowStepConfig | null;
-	} | null>(null);
-	const [modalSteps, setModalSteps] = useState<Step[]>([]);
-	const [modalStepsLoading, setModalStepsLoading] = useState(false);
-
 	function toggleExpand(runId: string) {
 		setExpandedRunId((prev) => (prev === runId ? null : runId));
-	}
-
-	const handleStepClick = useCallback(
-		async (run: WorkflowRun, stepIdx: number) => {
-			const stepResult = (run.stepResults as StepResult[] | null)?.[stepIdx];
-			if (!stepResult) return;
-			const config = getStepConfig(run, stepIdx);
-			setModalData({ stepIdx, stepResult, config });
-			setModalSteps([]);
-			setModalStepsLoading(false);
-
-			if (stepResult.sessionId) {
-				setModalStepsLoading(true);
-				try {
-					const steps = await loadSessionSteps(stepResult.sessionId);
-					setModalSteps(steps);
-				} catch {
-					// ignore
-				}
-				setModalStepsLoading(false);
-			}
-		},
-		[loadSessionSteps],
-	);
-
-	function closeModal() {
-		setModalData(null);
-		setModalSteps([]);
 	}
 
 	return (
@@ -108,9 +55,9 @@ export function UnifiedLog({
 							<WorkflowRunRow
 								key={run.id}
 								run={run}
+								deviceId={deviceId}
 								liveProgress={liveProgress[run.id]}
 								onExpand={toggleExpand}
-								onStepClick={handleStepClick}
 								expanded={expandedRunId === run.id}
 							/>
 						))}
@@ -146,16 +93,6 @@ export function UnifiedLog({
 					) : null}
 				</>
 			)}
-
-			{/* Step detail sheet */}
-			{modalData ? (
-				<StepDetailModal
-					data={modalData}
-					steps={modalSteps}
-					stepsLoading={modalStepsLoading}
-					onClose={closeModal}
-				/>
-			) : null}
 		</div>
 	);
 }

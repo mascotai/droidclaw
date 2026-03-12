@@ -275,6 +275,7 @@ export function WorkflowsTab({ deviceId, selectedRunId, onSelectRun }: Workflows
 								run={(runDetail as WorkflowRun | undefined) ?? null}
 								liveRun={viewerLiveRun}
 								loading={runDetailLoading}
+								deviceId={deviceId}
 								onStop={() => {
 									track(DEVICE_WORKFLOW_STOP);
 									stopWorkflow.mutate(liveRun?.runId ?? selectedRunId ?? undefined);

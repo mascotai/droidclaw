@@ -22,16 +22,18 @@ export function WorkflowBuilderModal({
 }: WorkflowBuilderModalProps) {
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="max-w-5xl w-[95vw] max-h-[90vh] overflow-y-auto">
+			<DialogContent className="max-w-[95vw] w-[95vw] h-[90vh] max-h-[90vh] flex flex-col overflow-hidden">
 				<DialogHeader>
 					<DialogTitle>New Workflow Run</DialogTitle>
 				</DialogHeader>
-				<WorkflowBuilder
-					onSubmit={onSubmit}
-					onStop={() => {}}
-					isRunning={isPending}
-					disabled={isPending}
-				/>
+				<div className="flex-1 overflow-y-auto">
+					<WorkflowBuilder
+						onSubmit={onSubmit}
+						onStop={() => {}}
+						isRunning={isPending}
+						disabled={isPending}
+					/>
+				</div>
 			</DialogContent>
 		</Dialog>
 	);
