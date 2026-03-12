@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback, useEffect } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import {
 	CheckCircle2,
 	XCircle,
@@ -8,11 +8,12 @@ import {
 	ChevronUp,
 	Layers,
 	Code2,
-	Package,
+	FileText,
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { StatusBadge, TimeAgo, DurationDisplay, ActionBadge } from '@/components/shared';
+import { StatusBadge, TimeAgo, DurationDisplay } from '@/components/shared';
+import { StepDetailModal } from '@/components/workflows/step-detail-modal';
 import { api } from '@/lib/api';
 import type { WorkflowRun, StepResult, WorkflowStepConfig, WorkflowLiveProgress } from '@/types/devices';
 import { cn } from '@/lib/utils';
@@ -23,19 +24,6 @@ interface WorkflowRunRowProps {
 	liveProgress?: WorkflowLiveProgress;
 	onExpand: (runId: string) => void;
 	expanded: boolean;
-}
-
-interface GoalStepData {
-	steps: Array<{
-		step: number;
-		action: Record<string, unknown>;
-		reasoning: string;
-		result: string | null;
-		package: string;
-		durationMs: number;
-	}>;
-	note?: string;
-	loading: boolean;
 }
 
 function durationMs(startedAt: Date | string, completedAt: Date | string | null): number {
@@ -55,30 +43,8 @@ function getStepGoal(run: WorkflowRun, stepIdx: number): string {
 	return cmd ? `${cmd}: ${val}` : `Goal ${stepIdx + 1}`;
 }
 
-function parseAction(action: unknown): {
-	type: string;
-	coords?: number[];
-	text?: string;
-	direction?: string;
-	target?: string;
-} {
-	if (typeof action === 'string') return { type: action };
-	if (typeof action === 'object' && action !== null) {
-		const a = action as Record<string, unknown>;
-		return {
-			type: (a.action as string) ?? 'unknown',
-			coords: a.coordinates as number[] | undefined,
-			text: a.text as string | undefined,
-			direction: a.direction as string | undefined,
-			target: a.target as string | undefined,
-		};
-	}
-	return { type: 'unknown' };
-}
-
 export function WorkflowRunRow({ run, deviceId, liveProgress, onExpand, expanded }: WorkflowRunRowProps) {
-	const [expandedGoals, setExpandedGoals] = useState<Set<number>>(new Set());
-	const [goalSteps, setGoalSteps] = useState<Record<number, GoalStepData>>({});
+	const [modalStep, setModalStep] = useState<{ idx: number; result: StepResult; config: WorkflowStepConfig | null } | null>(null);
 
 	// Fetch full run detail when expanded (list API doesn't include goals/stepResults)
 	const [detailedRun, setDetailedRun] = useState<WorkflowRun | null>(null);
@@ -101,8 +67,7 @@ export function WorkflowRunRow({ run, deviceId, liveProgress, onExpand, expanded
 	// Reset detail when run changes
 	useEffect(() => {
 		setDetailedRun(null);
-		setExpandedGoals(new Set());
-		setGoalSteps({});
+		setModalStep(null);
 	}, [run.id]);
 
 	// Use detailed run data when available, fall back to list data
@@ -114,45 +79,6 @@ export function WorkflowRunRow({ run, deviceId, liveProgress, onExpand, expanded
 	}, [activeRun.stepResults]);
 
 	const durMs = durationMs(run.startedAt, run.completedAt);
-
-	const fetchGoalSteps = useCallback(async (goalIdx: number) => {
-		setGoalSteps((prev) => ({
-			...prev,
-			[goalIdx]: { steps: [], loading: true },
-		}));
-
-		try {
-			const data = await api.getGoalSteps(deviceId, run.id, goalIdx);
-			setGoalSteps((prev) => ({
-				...prev,
-				[goalIdx]: {
-					steps: (data.steps ?? []) as GoalStepData['steps'],
-					note: data.note,
-					loading: false,
-				},
-			}));
-		} catch {
-			setGoalSteps((prev) => ({
-				...prev,
-				[goalIdx]: { steps: [], note: 'Failed to load steps', loading: false },
-			}));
-		}
-	}, [deviceId, run.id]);
-
-	function toggleGoal(goalIdx: number) {
-		setExpandedGoals((prev) => {
-			const next = new Set(prev);
-			if (next.has(goalIdx)) {
-				next.delete(goalIdx);
-			} else {
-				next.add(goalIdx);
-				if (!goalSteps[goalIdx]) {
-					fetchGoalSteps(goalIdx);
-				}
-			}
-			return next;
-		});
-	}
 
 	const hasStepResults = !!(activeRun.stepResults as StepResult[] | null)?.some((r) => r != null);
 
@@ -227,9 +153,7 @@ export function WorkflowRunRow({ run, deviceId, liveProgress, onExpand, expanded
 								const stepResult = (activeRun.stepResults as StepResult[] | null)?.[stepIdx];
 								const isActive = !!(liveProgress && liveProgress.activeStepIndex === stepIdx && run.status === 'running');
 								const isPending = !stepResult && !isActive;
-								const canExpand = !!stepResult;
-								const isGoalExpanded = expandedGoals.has(stepIdx);
-								const stepsData = goalSteps[stepIdx];
+								const canOpenModal = !!stepResult;
 
 								const badgeClass = stepResult
 									? stepResult.success ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
@@ -242,11 +166,20 @@ export function WorkflowRunRow({ run, deviceId, liveProgress, onExpand, expanded
 										isPending && 'opacity-50',
 									)}>
 										<button
-											onClick={() => canExpand ? toggleGoal(stepIdx) : undefined}
-											disabled={!canExpand}
+											onClick={() => {
+												if (canOpenModal && stepResult) {
+													const stepDef = activeRun.steps?.[stepIdx];
+													const config: WorkflowStepConfig | null =
+														stepDef && typeof stepDef === 'object' && 'goal' in stepDef
+															? (stepDef as WorkflowStepConfig)
+															: null;
+													setModalStep({ idx: stepIdx, result: stepResult, config });
+												}
+											}}
+											disabled={!canOpenModal}
 											className={cn(
 												'flex w-full items-start gap-2.5 px-3 py-3 text-left',
-												canExpand ? 'cursor-pointer hover:bg-stone-100 rounded-xl' : 'cursor-default',
+												canOpenModal ? 'cursor-pointer hover:bg-stone-100 rounded-xl' : 'cursor-default',
 											)}
 										>
 											<span className={cn('mt-0.5 shrink-0 rounded-full px-2 py-0.5 font-mono text-xs', badgeClass)}>
@@ -298,80 +231,30 @@ export function WorkflowRunRow({ run, deviceId, liveProgress, onExpand, expanded
 														</span>
 													)}
 												</div>
-												{canExpand ? (
-													isGoalExpanded ? (
-														<ChevronUp className="h-3.5 w-3.5 text-stone-300" />
-													) : (
-														<ChevronDown className="h-3.5 w-3.5 text-stone-300" />
-													)
+												{canOpenModal ? (
+													<FileText className="h-3.5 w-3.5 text-stone-300" />
 												) : null}
 											</div>
 										</button>
-
-										{/* Expanded agent steps */}
-										{isGoalExpanded && canExpand ? (
-											<div className="border-t border-stone-200 px-3 pb-3 pt-2">
-												{stepsData?.loading ? (
-													<div className="space-y-2 py-2">
-														<Skeleton className="h-6 w-full" />
-														<Skeleton className="h-6 w-3/4" />
-														<Skeleton className="h-6 w-5/6" />
-													</div>
-												) : stepsData?.note && stepsData.steps.length === 0 ? (
-													<p className="py-2 text-xs text-stone-400 italic">{stepsData.note}</p>
-												) : stepsData && stepsData.steps.length > 0 ? (
-													<div className="space-y-1 border-l-2 border-stone-200 pl-3">
-														{stepsData.steps.map((agentStep) => {
-															const act = parseAction(agentStep.action);
-															return (
-																<div key={agentStep.step} className="flex items-start gap-1.5 py-0.5">
-																	<span className="mt-0.5 shrink-0 rounded bg-stone-100 px-1 py-0.5 font-mono text-[9px] text-stone-500">
-																		{agentStep.step}
-																	</span>
-																	<div className="min-w-0 flex-1">
-																		<div className="flex flex-wrap items-center gap-1.5">
-																			<ActionBadge action={act.type} />
-																			{act.target ? (
-																				<span className="text-xs text-stone-600">{act.target}</span>
-																			) : null}
-																			{act.coords && act.coords.length >= 2 ? (
-																				<span className="font-mono text-xs text-stone-400">({act.coords[0]}, {act.coords[1]})</span>
-																			) : null}
-																			{act.text ? (
-																				<span className="rounded bg-white px-1 py-0.5 text-xs text-stone-700">&quot;{act.text}&quot;</span>
-																			) : null}
-																			{act.direction ? (
-																				<span className="text-xs text-stone-400">{act.direction}</span>
-																			) : null}
-																		</div>
-																		{agentStep.reasoning ? (
-																			<p className="mt-0.5 text-xs leading-relaxed text-stone-500">{agentStep.reasoning}</p>
-																		) : null}
-																		{agentStep.package ? (
-																			<span className="mt-0.5 inline-flex items-center gap-0.5 text-[10px] text-stone-400">
-																				<Package className="h-2.5 w-2.5" />
-																				{agentStep.package}
-																			</span>
-																		) : null}
-																	</div>
-																	{agentStep.durationMs ? (
-																		<span className="shrink-0 text-[9px] text-stone-300">{Math.round(agentStep.durationMs / 1000)}s</span>
-																	) : null}
-																</div>
-															);
-														})}
-													</div>
-												) : (
-													<p className="py-2 text-xs text-stone-400">No step data available.</p>
-												)}
-											</div>
-										) : null}
 									</div>
 								);
 							})}
 						</div>
 					)}
 				</div>
+			) : null}
+
+			{/* Step detail modal */}
+			{modalStep ? (
+				<StepDetailModal
+					open={!!modalStep}
+					onOpenChange={(open) => { if (!open) setModalStep(null); }}
+					stepIdx={modalStep.idx}
+					stepResult={modalStep.result}
+					config={modalStep.config}
+					deviceId={deviceId}
+					runId={run.id}
+				/>
 			) : null}
 		</Card>
 	);
