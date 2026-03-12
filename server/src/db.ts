@@ -58,6 +58,10 @@ export async function ensureSchema() {
 
     await client`ALTER TABLE "workflow_run" ADD COLUMN IF NOT EXISTS "eval_run_id" text REFERENCES "eval_run"("id") ON DELETE SET NULL`;
 
+    // cached_flow columns added after initial table creation
+    await client`ALTER TABLE "cached_flow" ADD COLUMN IF NOT EXISTS "timeline" jsonb`;
+    await client`ALTER TABLE "cached_flow" ADD COLUMN IF NOT EXISTS "active" boolean NOT NULL DEFAULT true`;
+
     console.log("[db] Schema ensured (cached_flow, eval_run, agent_step.duration_ms)");
   } catch (err) {
     console.warn("[db] ensureSchema warning:", (err as Error).message);

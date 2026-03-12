@@ -559,27 +559,29 @@
 <!-- Device Header -->
 <DeviceHeader {deviceData} {deviceId} {battery} {charging} />
 
-<!-- Tab Navigation (real SPA routes) -->
-<div class="mb-6 flex gap-1 rounded-full bg-white p-1">
-	{#each tabs as tab}
-		<a
-			href={tab.href}
-			onclick={(e) => { e.preventDefault(); navigateTab(tab); }}
-			class="flex flex-1 items-center justify-center gap-2 rounded-full px-3 py-2 text-sm font-medium transition-colors
-				{activeTab === tab.id
-				? 'bg-stone-900 text-white'
-				: 'text-stone-500 hover:text-stone-700'}"
-		>
-			<Icon
-				icon={tab.icon}
-				class="h-4 w-4 {activeTab === tab.id ? 'text-white' : 'text-stone-400'}"
-			/>
-			{tab.label}
-			{#if tab.id === 'home' && liveWorkflowRun?.status === 'running'}
-				<span class="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400"></span>
-			{/if}
-		</a>
-	{/each}
+<!-- Tab Navigation (shadcn Tabs, URL-driven) -->
+<div class="mb-6">
+	<div class="flex gap-1 rounded-full bg-white p-1">
+		{#each tabs as tab}
+			<a
+				href={tab.href}
+				onclick={(e) => { e.preventDefault(); navigateTab(tab); }}
+				class="flex flex-1 items-center justify-center gap-2 rounded-full px-3 py-2 text-sm font-medium transition-colors
+					{activeTab === tab.id
+					? 'bg-stone-900 text-white'
+					: 'text-stone-500 hover:text-stone-700'}"
+			>
+				<Icon
+					icon={tab.icon}
+					class="h-4 w-4 {activeTab === tab.id ? 'text-white' : 'text-stone-400'}"
+				/>
+				{tab.label}
+				{#if tab.id === 'home' && liveWorkflowRun?.status === 'running'}
+					<span class="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400"></span>
+				{/if}
+			</a>
+		{/each}
+	</div>
 </div>
 
 <!-- Child page (Home or Log) -->

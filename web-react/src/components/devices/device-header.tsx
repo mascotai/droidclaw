@@ -5,7 +5,6 @@ import {
 	WifiOff,
 	Activity,
 	CheckCircle2,
-	Target,
 } from 'lucide-react';
 import type { DeviceInfo, DeviceStats } from '@/lib/api';
 import { formatDistanceToNow } from 'date-fns';
@@ -64,7 +63,7 @@ export function DeviceHeader({ device, stats }: DeviceHeaderProps) {
 
 			{/* Stats row */}
 			<div className="mt-4 grid grid-cols-2 gap-4 border-t border-stone-100 pt-4 sm:grid-cols-4">
-				{device.batteryLevel !== null && (
+				{device.batteryLevel != null && device.batteryLevel > 0 && (
 					<div className="flex items-center gap-2">
 						<Battery className="h-4 w-4 text-stone-400" />
 						<div>
@@ -92,15 +91,6 @@ export function DeviceHeader({ device, stats }: DeviceHeaderProps) {
 								<p className="text-xs text-stone-500">Success rate</p>
 								<p className="text-sm font-medium text-stone-900">
 									{stats.successRate}%
-								</p>
-							</div>
-						</div>
-						<div className="flex items-center gap-2">
-							<Target className="h-4 w-4 text-stone-400" />
-							<div>
-								<p className="text-xs text-stone-500">Avg steps</p>
-								<p className="text-sm font-medium text-stone-900">
-									{stats.avgSteps}
 								</p>
 							</div>
 						</div>

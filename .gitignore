@@ -13,3 +13,9 @@ OPTION1-IMPLEMENTATION.md
 HOSTED-PLAN.md
 CLAUDE.md
 *.jks
+*.png
+!web-react/public/**/*.png
+!android/**/*.png
+.playwright-mcp/
+shadcn-cli-v4-transcript.md
+transcription.txt

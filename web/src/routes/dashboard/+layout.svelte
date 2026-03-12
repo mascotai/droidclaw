@@ -6,14 +6,16 @@
 	import Icon from '@iconify/svelte';
 	import { Toaster } from 'svelte-sonner';
 	import { AUTH_SIGNOUT, NAV_SIDEBAR_CLICK } from '$lib/analytics/events';
+	import { Badge } from '$lib/components/ui/badge';
+	import * as Sidebar from '$lib/components/ui/sidebar';
 
 	let { children, data } = $props();
 
 	const navItems = [
-		{ href: '/dashboard', label: 'Overview', icon: 'solar:home-2-bold-duotone', exact: true, color: 'bg-blue-100 text-blue-600' },
-		{ href: '/dashboard/devices', label: 'Devices', icon: 'solar:smartphone-bold-duotone', color: 'bg-emerald-100 text-emerald-600' },
-		{ href: '/dashboard/api-keys', label: 'API Keys', icon: 'solar:key-bold-duotone', color: 'bg-amber-100 text-amber-600' },
-		{ href: '/dashboard/settings', label: 'Settings', icon: 'solar:settings-bold-duotone', color: 'bg-purple-100 text-purple-600' }
+		{ href: '/dashboard', label: 'Overview', icon: 'solar:home-2-bold-duotone', exact: true },
+		{ href: '/dashboard/devices', label: 'Devices', icon: 'solar:smartphone-bold-duotone' },
+		{ href: '/dashboard/api-keys', label: 'API Keys', icon: 'solar:key-bold-duotone' },
+		{ href: '/dashboard/settings', label: 'Settings', icon: 'solar:settings-bold-duotone' }
 	];
 
 	function isActive(href: string, exact: boolean = false) {
@@ -29,74 +31,125 @@
 	});
 </script>
 
-<div class="flex h-screen overflow-hidden">
-	<aside class="hidden md:flex w-64 flex-col bg-stone-100 p-6 overflow-y-auto">
-		<div class="mb-8">
-			<h1 class="text-lg font-bold tracking-tight">DroidClaw<span class="text-stone-400">.ai</span></h1>
-		</div>
-		<nav class="flex flex-col gap-1.5">
-			{#each navItems as item}
-				<a
-					href={item.href}
-					data-umami-event={NAV_SIDEBAR_CLICK}
-					data-umami-event-section={item.label.toLowerCase().replace(' ', '-')}
-					class="flex items-center gap-3 rounded-full px-3 py-2.5 text-sm font-medium transition-colors
-						{isActive(item.href, item.exact)
-						? 'bg-white text-stone-900'
-						: 'text-stone-600 hover:bg-white/60'}"
-				>
-					<div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full {item.color}">
-						<Icon icon={item.icon} class="h-[18px] w-[18px]" />
-					</div>
-					{item.label}
-				</a>
-			{/each}
-		</nav>
-		<div class="mt-auto pt-8">
+<Sidebar.Provider>
+	<Sidebar.Root collapsible="icon" class="border-r-0">
+		<Sidebar.Header class="p-4">
+			<Sidebar.Menu>
+				<Sidebar.MenuItem>
+					<Sidebar.MenuButton size="lg" class="pointer-events-none">
+						<div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-stone-900 text-white">
+							<Icon icon="solar:claw-bold-duotone" class="h-4 w-4" />
+						</div>
+						<div class="flex flex-col gap-0.5 leading-none">
+							<span class="font-semibold tracking-tight">DroidClaw<span class="text-stone-400">.ai</span></span>
+						</div>
+					</Sidebar.MenuButton>
+				</Sidebar.MenuItem>
+			</Sidebar.Menu>
+		</Sidebar.Header>
+
+		<Sidebar.Content>
+			<Sidebar.Group>
+				<Sidebar.GroupLabel>Navigation</Sidebar.GroupLabel>
+				<Sidebar.GroupContent>
+					<Sidebar.Menu>
+						{#each navItems as item}
+							<Sidebar.MenuItem>
+								<Sidebar.MenuButton
+									isActive={isActive(item.href, item.exact)}
+									tooltipContent={item.label}
+								>
+									{#snippet child({ props })}
+										<a
+											href={item.href}
+											data-umami-event={NAV_SIDEBAR_CLICK}
+											data-umami-event-section={item.label.toLowerCase().replace(' ', '-')}
+											{...props}
+										>
+											<Icon icon={item.icon} class="h-4 w-4" />
+											<span>{item.label}</span>
+										</a>
+									{/snippet}
+								</Sidebar.MenuButton>
+							</Sidebar.MenuItem>
+						{/each}
+					</Sidebar.Menu>
+				</Sidebar.GroupContent>
+			</Sidebar.Group>
+		</Sidebar.Content>
+
+		<Sidebar.Footer>
+			<!-- Connection status -->
+			<Sidebar.Menu>
+				<Sidebar.MenuItem>
+					<Sidebar.MenuButton class="pointer-events-none" size="sm">
+						<span class="relative flex h-2 w-2 shrink-0">
+							{#if dashboardWs.connected}
+								<span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60"></span>
+								<span class="relative inline-flex h-2 w-2 rounded-full bg-emerald-500"></span>
+							{:else}
+								<span class="relative inline-flex h-2 w-2 rounded-full bg-stone-300"></span>
+							{/if}
+						</span>
+						<span class="text-xs {dashboardWs.connected ? 'text-emerald-600' : 'text-stone-400'}">
+							{dashboardWs.connected ? 'Live' : 'Connecting...'}
+						</span>
+					</Sidebar.MenuButton>
+				</Sidebar.MenuItem>
+			</Sidebar.Menu>
+
 			{#if data.plan}
-				<div class="mb-3 flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2">
-					<Icon icon="ph:seal-check-duotone" class="h-4 w-4 text-emerald-600" />
-					<span class="text-xs font-semibold uppercase tracking-wide text-emerald-700">{data.plan === 'ltd' ? 'Lifetime' : data.plan}</span>
-				</div>
+				<Sidebar.Menu>
+					<Sidebar.MenuItem>
+						<Sidebar.MenuButton class="pointer-events-none">
+							<Icon icon="ph:seal-check-duotone" class="h-4 w-4 text-emerald-600" />
+							<Badge variant="outline" class="border-emerald-200 bg-emerald-50 text-emerald-700 text-xs">
+								{data.plan === 'ltd' ? 'Lifetime' : data.plan}
+							</Badge>
+						</Sidebar.MenuButton>
+					</Sidebar.MenuItem>
+				</Sidebar.Menu>
 			{/if}
-			<form {...signout}>
-				<button
-					type="submit"
-					data-umami-event={AUTH_SIGNOUT}
-					class="mt-1 flex w-full items-center gap-3 rounded-full px-3 py-2.5 text-sm text-neutral-400 transition-colors hover:bg-neutral-50 hover:text-neutral-600"
-				>
-					<div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-neutral-100 text-neutral-400">
-						<Icon icon="solar:logout-2-bold-duotone" class="h-[18px] w-[18px]" />
+			<Sidebar.Menu>
+				<Sidebar.MenuItem>
+					<form {...signout}>
+						<Sidebar.MenuButton tooltipContent="Sign out">
+							{#snippet child({ props })}
+								<button
+									type="submit"
+									data-umami-event={AUTH_SIGNOUT}
+									{...props}
+								>
+									<Icon icon="solar:logout-2-bold-duotone" class="h-4 w-4" />
+									<span>Sign out</span>
+								</button>
+							{/snippet}
+						</Sidebar.MenuButton>
+					</form>
+				</Sidebar.MenuItem>
+			</Sidebar.Menu>
+		</Sidebar.Footer>
+
+		<Sidebar.Rail />
+	</Sidebar.Root>
+
+	<Sidebar.Inset>
+		<!-- Mobile header with sidebar trigger -->
+		<header class="flex h-12 items-center gap-2 border-b px-4 md:hidden">
+			<Sidebar.Trigger />
+			<span class="font-semibold tracking-tight text-sm">DroidClaw<span class="text-stone-400">.ai</span></span>
+		</header>
+
+		<main class="flex-1 overflow-auto p-4 pb-8 md:p-8">
+			<div class="mx-auto max-w-5xl">
+				{#key page.url.pathname}
+					<div class="animate-page-enter">
+						{@render children?.()}
 					</div>
-					Sign out
-				</button>
-			</form>
-		</div>
-	</aside>
-
-	<main class="flex-1 overflow-auto p-4 pb-20 md:p-8 md:pb-8">
-		<div class="mx-auto max-w-5xl">
-			{@render children?.()}
-		</div>
-	</main>
-
-	<!-- Mobile bottom tab bar -->
-	<nav class="fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around border-t border-stone-200 bg-stone-100 px-2 pb-6 pt-2 md:hidden">
-		{#each navItems as item}
-			<a
-				href={item.href}
-				data-umami-event={NAV_SIDEBAR_CLICK}
-				data-umami-event-section={item.label.toLowerCase().replace(' ', '-')}
-				class="flex flex-col items-center gap-0.5 rounded-xl px-4 py-1.5 transition-colors
-					{isActive(item.href, item.exact)
-					? 'text-stone-900'
-					: 'text-stone-400'}"
-			>
-				<Icon icon={item.icon} class="h-6 w-6" />
-				<span class="text-[11px] font-medium">{item.label}</span>
-			</a>
-		{/each}
-	</nav>
-</div>
+				{/key}
+			</div>
+		</main>
+	</Sidebar.Inset>
+</Sidebar.Provider>
 
 <Toaster position="bottom-right" />

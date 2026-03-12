@@ -21,7 +21,7 @@
 				<div class="min-w-0 flex-1">
 					<ActionBadge action={agentStep.action} />
 					{#if agentStep.reasoning}
-						<p class="mt-0.5 text-[11px] leading-relaxed text-stone-500">{agentStep.reasoning}</p>
+						<p class="mt-0.5 text-xs leading-relaxed text-stone-500">{agentStep.reasoning}</p>
 					{/if}
 				</div>
 			</div>

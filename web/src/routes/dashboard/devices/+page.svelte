@@ -5,8 +5,13 @@
 	import { dashboardWs } from '$lib/stores/dashboard-ws.svelte';
 	import { onMount } from 'svelte';
 	import DeviceCard from '$lib/components/DeviceCard.svelte';
+	import { EmptyState } from '$lib/components/shared';
 	import Icon from '@iconify/svelte';
 	import { toast } from '$lib/toast';
+	import { Button } from '$lib/components/ui/button';
+	import * as Dialog from '$lib/components/ui/dialog';
+	import * as Alert from '$lib/components/ui/alert';
+	import { Spinner } from '$lib/components/ui/spinner';
 
 	interface DeviceEntry {
 		deviceId: string;
@@ -52,6 +57,8 @@
 	let countdownTimer: ReturnType<typeof setInterval> | null = null;
 	let pollTimer: ReturnType<typeof setInterval> | null = null;
 
+	let dialogOpen = $state(false);
+
 	function clearTimers() {
 		if (countdownTimer) {
 			clearInterval(countdownTimer);
@@ -66,6 +73,7 @@
 	function closeModal() {
 		clearTimers();
 		modalState = 'closed';
+		dialogOpen = false;
 		pairingCode = '';
 		expiresAt = '';
 		secondsLeft = 0;
@@ -121,6 +129,7 @@
 
 	async function generateCode() {
 		modalState = 'loading';
+		dialogOpen = true;
 		try {
 			const result = await createPairingCode();
 			pairingCode = result.code;
@@ -215,22 +224,16 @@
 
 <!-- Page header -->
 <div class="mb-6 flex items-center justify-between">
-	<h2 class="text-xl md:text-2xl font-bold">Devices</h2>
+	<h2 class="text-xl font-bold md:text-2xl">Devices</h2>
 	<div class="flex items-center gap-2">
-		<a
-			href="https://github.com/unitedbyai/droidclaw/releases/download/v0.5.3/app-debug.apk"
-			class="inline-flex items-center gap-1.5 rounded-lg border border-stone-200 px-4 py-2 text-sm font-medium text-stone-600 hover:bg-stone-50"
-		>
+		<Button variant="outline" href="https://github.com/unitedbyai/droidclaw/releases/download/v0.5.3/app-debug.apk">
 			<Icon icon="solar:download-bold-duotone" class="h-4 w-4" />
 			Download APK
-		</a>
-		<button
-			onclick={openPairingModal}
-			class="inline-flex items-center gap-1.5 rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white transition-transform hover:bg-stone-800 active:scale-[0.98]"
-		>
+		</Button>
+		<Button onclick={openPairingModal}>
 			<Icon icon="solar:link-round-bold-duotone" class="h-4 w-4" />
 			Pair Device
-		</button>
+		</Button>
 	</div>
 </div>
 
@@ -238,35 +241,29 @@
 {#if !hasLlmConfig && devices.length > 0}
 	<a
 		href="/dashboard/settings"
-		class="mb-6 flex items-center gap-3 rounded-2xl bg-amber-50 p-4 transition-colors hover:bg-amber-100/80"
+		class="mb-6 block"
 	>
-		<div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-100">
+		<Alert.Root class="border-amber-200 bg-amber-50 hover:bg-amber-100/80 transition-colors">
 			<Icon icon="solar:danger-triangle-bold-duotone" class="h-5 w-5 text-amber-600" />
-		</div>
-		<div class="flex-1">
-			<p class="text-sm font-semibold text-amber-900">Set up your LLM provider</p>
-			<p class="mt-0.5 text-xs text-amber-700">Your device is paired but needs an AI model configured to run tasks.</p>
-		</div>
-		<Icon icon="solar:alt-arrow-right-linear" class="h-5 w-5 text-amber-400" />
+			<Alert.Title class="text-amber-900">Set up your LLM provider</Alert.Title>
+			<Alert.Description class="text-amber-700">
+				Your device is paired but needs an AI model configured to run tasks.
+			</Alert.Description>
+		</Alert.Root>
 	</a>
 {/if}
 
 {#if devices.length === 0}
-	<div class="rounded-2xl bg-white p-6 md:p-10 text-center">
-		<div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-stone-100">
-			<Icon icon="solar:smartphone-bold-duotone" class="h-6 w-6 text-stone-400" />
-		</div>
-		<p class="font-medium text-stone-600">No devices connected</p>
-		<p class="mt-1 text-sm text-stone-400">
-			Install the Android app and pair your device to get started.
-		</p>
-		<button
-			onclick={openPairingModal}
-			class="mt-5 inline-flex items-center gap-1.5 rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white transition-transform hover:bg-stone-800 active:scale-[0.98]"
-		>
+	<div class="rounded-2xl bg-white p-6 text-center md:p-10">
+		<EmptyState
+			icon="solar:smartphone-bold-duotone"
+			title="No devices connected"
+			description="Install the Android app and pair your device to get started."
+		/>
+		<Button onclick={openPairingModal} class="mt-5">
 			<Icon icon="solar:link-round-bold-duotone" class="h-4 w-4" />
 			Pair Device
-		</button>
+		</Button>
 	</div>
 {:else}
 	<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -276,120 +273,102 @@
 	</div>
 {/if}
 
-<!-- Pairing Modal -->
-{#if modalState !== 'closed'}
-	<!-- Backdrop -->
-	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<div
-		class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-		onkeydown={(e) => { if (e.key === 'Escape') closeModal(); }}
-		onclick={(e) => { if (e.target === e.currentTarget) closeModal(); }}
-	>
-		<!-- Modal -->
-		<div class="relative w-full max-w-md rounded-2xl bg-white shadow-xl">
-			<!-- Header -->
-			<div class="flex items-center justify-between border-b border-stone-100 px-6 py-4">
-				<h3 class="text-lg font-semibold text-stone-900">Pair Your Device</h3>
-				<button
-					onclick={closeModal}
-					class="flex h-8 w-8 items-center justify-center rounded-lg text-stone-400 hover:bg-stone-100 hover:text-stone-600"
-				>
-					<Icon icon="solar:close-circle-bold-duotone" class="h-5 w-5" />
-				</button>
-			</div>
+<!-- Pairing Dialog -->
+<Dialog.Root bind:open={dialogOpen} onOpenChange={(open) => { if (!open) closeModal(); }}>
+	<Dialog.Content class="max-w-md max-h-[85vh] overflow-y-auto">
+		<Dialog.Header>
+			<Dialog.Title>Pair Your Device</Dialog.Title>
+			<Dialog.Description>
+				Connect an Android device to your dashboard.
+			</Dialog.Description>
+		</Dialog.Header>
 
-			<!-- Body -->
-			<div class="px-6 py-8">
-				{#if modalState === 'loading'}
-					<!-- Loading state -->
-					<div class="flex flex-col items-center gap-3">
-						<Icon icon="solar:refresh-circle-bold-duotone" class="h-8 w-8 animate-spin text-stone-400" />
-						<p class="text-sm text-stone-500">Generating pairing code...</p>
+		<div class="py-4">
+			{#if modalState === 'loading'}
+				<!-- Loading state -->
+				<div class="flex flex-col items-center gap-3 py-4">
+					<Spinner class="h-8 w-8 text-stone-400" />
+					<p class="text-sm text-stone-500">Generating pairing code...</p>
+				</div>
+			{:else if modalState === 'code'}
+				<!-- Code display state -->
+				<div class="flex flex-col items-center">
+					<p class="mb-6 text-center text-sm text-stone-500">
+						Open DroidClaw on your Android device and enter this code:
+					</p>
+
+					<!-- OTP digits -->
+					<div class="mb-5 flex gap-2">
+						{#each pairingCode.split('') as digit}
+							<div class="flex h-14 w-11 items-center justify-center rounded-xl border-2 border-stone-200 bg-stone-50">
+								<span class="font-mono text-2xl font-bold text-stone-900">{digit}</span>
+							</div>
+						{/each}
 					</div>
-				{:else if modalState === 'code'}
-					<!-- Code display state -->
-					<div class="flex flex-col items-center">
-						<p class="mb-6 text-center text-sm text-stone-500">
-							Open DroidClaw on your Android device and enter this code:
-						</p>
 
-						<!-- OTP digits -->
-						<div class="mb-5 flex gap-2">
-							{#each pairingCode.split('') as digit}
-								<div class="flex h-14 w-11 items-center justify-center rounded-xl border-2 border-stone-200 bg-stone-50">
-									<span class="font-mono text-2xl font-bold text-stone-900">{digit}</span>
-								</div>
-							{/each}
-						</div>
+					<!-- Countdown -->
+					<p class="mb-2 text-sm text-stone-400">
+						Expires in {formatTime(secondsLeft)}
+					</p>
 
-						<!-- Countdown -->
-						<p class="mb-2 text-sm text-stone-400">
-							Expires in {formatTime(secondsLeft)}
-						</p>
-
-						<!-- Copy code button -->
-						<button
-							onclick={() => {
-								navigator.clipboard.writeText(pairingCode);
-								toast.success('Code copied to clipboard');
-							}}
-							class="mb-4 inline-flex items-center gap-1.5 rounded-lg border border-stone-200 px-3 py-1.5 text-sm text-stone-600 transition-all hover:bg-stone-50 active:scale-[0.98]"
-						>
-							<Icon icon="solar:copy-bold-duotone" class="h-4 w-4" />
-							Copy code
-						</button>
-
-						<!-- Waiting indicator -->
-						<div class="flex items-center gap-2 text-sm text-stone-500">
-							<Icon icon="solar:refresh-circle-bold-duotone" class="h-4 w-4 animate-spin" />
-							Waiting for device...
-						</div>
-					</div>
-				{:else if modalState === 'expired'}
-					<!-- Expired state -->
-					<div class="flex flex-col items-center gap-4">
-						<div class="flex h-12 w-12 items-center justify-center rounded-full bg-stone-100">
-							<Icon icon="solar:clock-circle-bold-duotone" class="h-6 w-6 text-stone-400" />
-						</div>
-						<p class="font-medium text-stone-600">Code expired</p>
-						<button
-							onclick={regenerateCode}
-							class="inline-flex items-center gap-1.5 rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white transition-transform hover:bg-stone-800 active:scale-[0.98]"
-						>
-							<Icon icon="solar:refresh-bold-duotone" class="h-4 w-4" />
-							Generate new code
-						</button>
-					</div>
-				{:else if modalState === 'paired'}
-					<!-- Success state -->
-					<div class="flex flex-col items-center gap-4">
-						<div class="flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
-							<Icon icon="solar:check-circle-bold-duotone" class="h-6 w-6 text-green-600" />
-						</div>
-						<p class="text-lg font-semibold text-stone-900">Device Paired!</p>
-						<p class="text-sm text-stone-500">Your device is now connected and ready to use.</p>
-						<button
-							onclick={closeModal}
-							class="inline-flex items-center gap-1.5 rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white transition-transform hover:bg-stone-800 active:scale-[0.98]"
-						>
-							Done
-						</button>
-					</div>
-				{/if}
-			</div>
-
-			<!-- Footer (shown only during code/expired states) -->
-			{#if modalState === 'code' || modalState === 'expired'}
-				<div class="border-t border-stone-100 px-6 py-4">
-					<a
-						href="/dashboard/api-keys"
-						class="flex items-center justify-center gap-1.5 text-sm text-stone-400 hover:text-stone-600"
+					<!-- Copy code button -->
+					<Button
+						variant="outline"
+						size="sm"
+						onclick={() => {
+							navigator.clipboard.writeText(pairingCode);
+							toast.success('Code copied to clipboard');
+						}}
+						class="mb-4"
 					>
-						<Icon icon="solar:key-bold-duotone" class="h-3.5 w-3.5" />
-						Developer? Use API keys for manual setup
-					</a>
+						<Icon icon="solar:copy-bold-duotone" class="h-4 w-4" />
+						Copy code
+					</Button>
+
+					<!-- Waiting indicator -->
+					<div class="flex items-center gap-2 text-sm text-stone-500">
+						<Spinner class="h-4 w-4" />
+						Waiting for device...
+					</div>
+				</div>
+			{:else if modalState === 'expired'}
+				<!-- Expired state -->
+				<div class="flex flex-col items-center gap-4 py-4">
+					<div class="flex h-12 w-12 items-center justify-center rounded-full bg-stone-100">
+						<Icon icon="solar:clock-circle-bold-duotone" class="h-6 w-6 text-stone-400" />
+					</div>
+					<p class="font-medium text-stone-600">Code expired</p>
+					<Button onclick={regenerateCode}>
+						<Icon icon="solar:refresh-bold-duotone" class="h-4 w-4" />
+						Generate new code
+					</Button>
+				</div>
+			{:else if modalState === 'paired'}
+				<!-- Success state -->
+				<div class="flex flex-col items-center gap-4 py-4">
+					<div class="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100">
+						<Icon icon="solar:check-circle-bold-duotone" class="h-6 w-6 text-emerald-600" />
+					</div>
+					<p class="text-lg font-semibold text-stone-900">Device Paired!</p>
+					<p class="text-sm text-stone-500">Your device is now connected and ready to use.</p>
+					<Button onclick={closeModal}>
+						Done
+					</Button>
 				</div>
 			{/if}
 		</div>
-	</div>
-{/if}
+
+		<!-- Footer (shown only during code/expired states) -->
+		{#if modalState === 'code' || modalState === 'expired'}
+			<Dialog.Footer>
+				<a
+					href="/dashboard/api-keys"
+					class="flex w-full items-center justify-center gap-1.5 text-sm text-stone-400 hover:text-stone-600"
+				>
+					<Icon icon="solar:key-bold-duotone" class="h-3.5 w-3.5" />
+					Developer? Use API keys for manual setup
+				</a>
+			</Dialog.Footer>
+		{/if}
+	</Dialog.Content>
+</Dialog.Root>

@@ -1,9 +1,8 @@
 import { Hono } from 'hono';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
-import { auth } from './auth.js';
 import { db } from './db.js';
-import { user as userTable, session as sessionTable } from './schema.js';
+import { user as userTable } from './schema.js';
 import { eq } from 'drizzle-orm';
 import crypto from 'node:crypto';
 import type { IncomingMessage } from 'node:http';
@@ -12,106 +11,69 @@ const app = new Hono();
 
 const SERVER_URL = process.env.SERVER_URL || 'http://localhost:8080';
 const INTERNAL_SECRET = process.env.INTERNAL_SECRET || '';
-const TRUST_PROXY_AUTH = process.env.TRUST_PROXY_AUTH === 'true';
 const PORT = parseInt(process.env.PORT || '3000');
 
-// ── Proxy auth helper (authentik forward-auth headers) ──
+// ── Helper: get or create user from authentik headers ──
 
-async function proxyAuthLogin(
-	email: string,
-	username: string | null,
-	displayName: string | null
-): Promise<{ userId: string; sessionToken: string }> {
+interface AuthUser {
+	id: string;
+	email: string;
+	name: string;
+}
+
+async function getUserFromHeaders(req: Request): Promise<AuthUser | null> {
+	const email = req.headers.get('x-authentik-email');
+	if (!email) return null;
+
+	const username = req.headers.get('x-authentik-username');
+	const displayName = req.headers.get('x-authentik-name');
+
+	// Look up existing user
 	const existing = await db
 		.select()
 		.from(userTable)
 		.where(eq(userTable.email, email))
 		.limit(1);
 
-	let userId: string;
-
 	if (existing.length > 0) {
-		userId = existing[0].id;
-	} else {
-		userId = crypto.randomUUID();
-		const userName = displayName || username || email.split('@')[0];
-		await db.insert(userTable).values({
-			id: userId,
-			email,
-			name: userName,
-			emailVerified: true,
-			createdAt: new Date(),
-			updatedAt: new Date()
-		});
+		return { id: existing[0].id, email: existing[0].email, name: existing[0].name };
 	}
 
-	const sessionToken = crypto.randomUUID();
-	const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-	const sessionId = crypto.randomUUID();
-
-	await db.insert(sessionTable).values({
-		id: sessionId,
-		userId,
-		token: sessionToken,
-		expiresAt,
+	// Auto-create user from authentik headers
+	const userId = crypto.randomUUID();
+	const name = displayName || username || email.split('@')[0];
+	await db.insert(userTable).values({
+		id: userId,
+		email,
+		name,
+		emailVerified: true,
 		createdAt: new Date(),
-		updatedAt: new Date()
+		updatedAt: new Date(),
 	});
 
-	return { userId, sessionToken };
+	return { id: userId, email, name };
 }
 
-// ── Helper: get current user from request ──
+// ── /api/me — return current user info to the SPA ──
 
-async function getUserFromRequest(req: Request): Promise<{ id: string; email: string; name: string } | null> {
-	// Try proxy auth first
-	if (TRUST_PROXY_AUTH) {
-		const proxyEmail = req.headers.get('x-authentik-email');
-		if (proxyEmail) {
-			const existing = await db
-				.select()
-				.from(userTable)
-				.where(eq(userTable.email, proxyEmail))
-				.limit(1);
-			if (existing.length > 0) {
-				return { id: existing[0].id, email: existing[0].email, name: existing[0].name };
-			}
-			// Auto-create
-			const proxyUsername = req.headers.get('x-authentik-username');
-			const proxyName = req.headers.get('x-authentik-name');
-			const { userId } = await proxyAuthLogin(proxyEmail, proxyUsername, proxyName);
-			return { id: userId, email: proxyEmail, name: proxyName || proxyUsername || proxyEmail.split('@')[0] };
-		}
+app.get('/api/me', async (c) => {
+	const user = await getUserFromHeaders(c.req.raw);
+	if (!user) {
+		return c.json({ error: 'Unauthorized' }, 401);
 	}
-
-	// Fall back to better-auth session
-	try {
-		const session = await auth.api.getSession({ headers: req.headers });
-		if (session?.user) {
-			return { id: session.user.id, email: session.user.email, name: session.user.name };
-		}
-	} catch (err) {
-		console.error('[Proxy] getSession error:', err);
-	}
-	return null;
-}
-
-// ── Better Auth routes ──
-
-app.all('/api/auth/*', async (c) => {
-	return auth.handler(c.req.raw);
+	return c.json(user);
 });
 
 // ── API proxy to DroidClaw server ──
 
 app.all('/api/*', async (c) => {
-	const user = await getUserFromRequest(c.req.raw);
+	const user = await getUserFromHeaders(c.req.raw);
 	if (!user) {
 		return c.json({ error: 'Unauthorized' }, 401);
 	}
 
-	// Strip /api prefix → forward to server
-	const path = c.req.path.replace(/^\/api/, '');
+	// Rewrite /api → /v2 prefix for the backend server
+	const path = c.req.path.replace(/^\/api/, '/v2');
 	const url = `${SERVER_URL}${path}${c.req.raw.url.includes('?') ? '?' + c.req.raw.url.split('?')[1] : ''}`;
 
 	const headers: Record<string, string> = {

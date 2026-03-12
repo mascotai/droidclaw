@@ -7,11 +7,8 @@ RUN npm ci
 
 COPY . .
 
-# Build client SPA (Vite → dist/)
+# Build: tsc type-check + Vite SPA (→ dist/) + server TypeScript (→ dist/server/)
 RUN npm run build
-
-# Build server (TypeScript → dist/server/)
-RUN npx tsc -p tsconfig.server.json
 
 # ── Stage 2: Production ──
 FROM node:22-slim
