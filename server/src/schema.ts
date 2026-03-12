@@ -227,6 +227,8 @@ export const cachedFlow = pgTable("cached_flow", {
   successCount: integer("success_count").default(0),
   /** How many times replay failed (triggers re-discovery) */
   failCount: integer("fail_count").default(0),
+  /** Whether this is the active (current) cached flow for this goal — only one per (user, device, goal, app) */
+  active: boolean("active").default(true).notNull(),
   /** Source session ID the flow was compiled from */
   sourceSessionId: text("source_session_id").references(() => agentSession.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),

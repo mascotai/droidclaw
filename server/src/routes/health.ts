@@ -56,8 +56,8 @@ health.get("/debug", async (c) => {
 
 health.delete("/debug/cached-flows/:id", async (c) => {
   const id = c.req.param("id");
-  await db.delete(cachedFlow).where(eq(cachedFlow.id, id));
-  return c.json({ deleted: id });
+  await db.update(cachedFlow).set({ active: false }).where(eq(cachedFlow.id, id));
+  return c.json({ deactivated: id });
 });
 
 export { health };

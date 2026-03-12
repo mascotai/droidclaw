@@ -240,7 +240,7 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
   const { runId, persistentDeviceId, userId, name, steps, llmConfig, resolvedValues } = options;
   let { deviceId } = options;
   const trackingKey = persistentDeviceId ?? deviceId;
-  const stepResults: Array<{ goal: string; success: boolean; stepsUsed: number; sessionId?: string; resolvedBy?: string; cachedFlowId?: string; cachedSteps?: any[]; cachedTimeline?: number[]; error?: string; observations?: ScreenObservation[]; evalJudgment?: EvalJudgment; skipped?: boolean; skipReason?: string; stepId?: string }> = [];
+  const stepResults: Array<{ goal: string; success: boolean; stepsUsed: number; sessionId?: string; resolvedBy?: string; cachedFlowId?: string; error?: string; observations?: ScreenObservation[]; evalJudgment?: EvalJudgment; skipped?: boolean; skipReason?: string; stepId?: string }> = [];
   const evalStateMap = new Map<string, Record<string, boolean | string | number>>();
 
   wfLog(`[Workflow ${runId}] Starting: persistentDeviceId=${persistentDeviceId ?? "UNDEFINED"}, deviceId=${deviceId}, trackingKey=${trackingKey}`);
@@ -417,6 +417,7 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
                   eq(cachedFlow.deviceId, persistentDeviceId),
                   eq(cachedFlow.goalKey, goalKey),
                   appPackage ? eq(cachedFlow.appPackage, appPackage) : sql`${cachedFlow.appPackage} IS NULL`,
+                  eq(cachedFlow.active, true),
                 )
               )
               .limit(1);
@@ -447,20 +448,21 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
                   stepsUsed: resolvedFlowSteps.length,
                   resolvedBy: "cached_flow",
                   cachedFlowId: cachedEntry.id,
-                  cachedSteps: resolvedFlowSteps,
-                  cachedTimeline: cachedTimeline ?? undefined,
                 });
                 stepSuccess = true;
                 wfLog(`[Workflow ${runId}] Step ${i}: cached flow replay SUCCESS`);
                 break; // Success — move to next step
               } else {
-                // Cache replay failed — increment failCount, delete only after 3 consecutive failures
+                // Cache replay failed — increment failCount, deactivate after 3 consecutive failures
                 const newFailCount = (cachedEntry.failCount ?? 0) + 1;
                 const MAX_CONSECUTIVE_FAILS = 3;
 
                 if (newFailCount >= MAX_CONSECUTIVE_FAILS) {
-                  wfLog(`[Workflow ${runId}] Step ${i}: cached flow replay FAILED (${newFailCount}/${MAX_CONSECUTIVE_FAILS} consecutive), deleting stale cache`);
-                  await db.delete(cachedFlow).where(eq(cachedFlow.id, cachedEntry.id));
+                  wfLog(`[Workflow ${runId}] Step ${i}: cached flow replay FAILED (${newFailCount}/${MAX_CONSECUTIVE_FAILS} consecutive), deactivating stale cache`);
+                  await db
+                    .update(cachedFlow)
+                    .set({ failCount: newFailCount, active: false })
+                    .where(eq(cachedFlow.id, cachedEntry.id));
                 } else {
                   wfLog(`[Workflow ${runId}] Step ${i}: cached flow replay FAILED (${newFailCount}/${MAX_CONSECUTIVE_FAILS} consecutive), keeping cache, falling through to AI`);
                   await db
@@ -571,8 +573,8 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
 
                 if (compiled) {
                   const goalKey = normalizeGoalKey(step._goalTemplate ?? step.goal);
-                  // Remove any existing cache entry for this goal (handles re-discovery after failure)
-                  await db.delete(cachedFlow).where(
+                  // Deactivate any existing cache entries for this goal (keep for history, mark inactive)
+                  await db.update(cachedFlow).set({ active: false }).where(
                     and(
                       eq(cachedFlow.userId, userId),
                       eq(cachedFlow.deviceId, persistentDeviceId),
