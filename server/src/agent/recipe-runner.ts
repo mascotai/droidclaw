@@ -1,25 +1,32 @@
+/**
+ * recipe-runner — executes a deterministic recipe (sequence of RecipeSteps)
+ * on a device via WebSocket, without any LLM calls.
+ *
+ * Each recipe step is dispatched to the device as a command (tap, type,
+ * scroll, etc.) and the result is recorded in the DB + pushed to the
+ * dashboard over WS.
+ */
+
 import { sessions } from "../ws/sessions.js";
 import { db } from "../db.js";
 import { workflowRun } from "../schema.js";
 import { eq } from "drizzle-orm";
-import { findElementByText, findElementById } from "./session-to-flow.js";
+import { findElementByText, findElementById } from "./recipe-compiler.js";
 import { getScreenWithRetry } from "./screen-utils.js";
-import type { FlowStep } from "./session-to-flow.js";
-export { findElementByText } from "./session-to-flow.js";
-export type { FlowStep } from "./session-to-flow.js";
-
-export interface RunFlowOptions {
+import type { RecipeStep } from "./recipe-compiler.js";
+export { findElementByText } from "./recipe-compiler.js";
+export interface RunRecipeOptions {
   runId: string;
   deviceId: string;
   persistentDeviceId?: string;
   userId: string;
   name: string;
-  steps: FlowStep[];
+  steps: RecipeStep[];
   appId?: string;
   signal: AbortSignal;
 }
 
-interface FlowUIElement {
+interface RecipeUIElement {
   text: string;
   hint?: string;
   id?: string;
@@ -30,16 +37,16 @@ interface FlowUIElement {
 /** Helper to tap an element and return a success result */
 async function tapElement(
   deviceId: string,
-  el: FlowUIElement,
+  el: RecipeUIElement,
   message: string,
 ): Promise<{ success: boolean; message: string }> {
   await sessions.sendCommand(deviceId, { type: "tap", x: el.center[0], y: el.center[1] });
   return { success: true, message };
 }
 
-export async function executeFlowStepWs(
+export async function executeRecipeStep(
   deviceId: string,
-  step: FlowStep,
+  step: RecipeStep,
   appId?: string
 ): Promise<{ success: boolean; message: string }> {
   if (typeof step === "string") {
@@ -61,7 +68,7 @@ export async function executeFlowStepWs(
         await sessions.sendCommand(deviceId, { type: "clear" });
         return { success: true, message: "clear" };
       case "done":
-        return { success: true, message: "Flow complete" };
+        return { success: true, message: "Recipe complete" };
       default:
         return { success: false, message: `Unknown step: ${step}` };
     }
@@ -80,7 +87,7 @@ export async function executeFlowStepWs(
           return { success: true, message: `Tapped (${value[0]}, ${value[1]})` };
         }
         const screenRes = await getScreenWithRetry(deviceId);
-        const elements = (screenRes?.elements ?? []) as FlowUIElement[];
+        const elements = (screenRes?.elements ?? []) as RecipeUIElement[];
 
         // 1. ID first (stable across sessions)
         const id = stepObj._id as string | undefined;
@@ -91,7 +98,7 @@ export async function executeFlowStepWs(
         //    the screen probably hasn't transitioned yet. Report failure so the
         //    retry logic in replayCachedFlow can wait and try again.
         if (!el) {
-          const available = elements.filter((e: FlowUIElement) => e.text).map((e: FlowUIElement) => e.text).slice(0, 10);
+          const available = elements.filter((e: RecipeUIElement) => e.text).map((e: RecipeUIElement) => e.text).slice(0, 10);
           return { success: false, message: `Element "${value}" not found. Available: ${available.join(", ")}` };
         }
         return await tapElement(deviceId, el, `Tapped "${el.text}" at (${el.center[0]}, ${el.center[1]})`);
@@ -102,7 +109,7 @@ export async function executeFlowStepWs(
           return { success: true, message: `Long-pressed (${value[0]}, ${value[1]})` };
         }
         const lpScreenRes = await getScreenWithRetry(deviceId);
-        const lpElements = (lpScreenRes?.elements ?? []) as FlowUIElement[];
+        const lpElements = (lpScreenRes?.elements ?? []) as RecipeUIElement[];
         const lpId = stepObj._id as string | undefined;
         let lpEl = lpId ? findElementById(lpElements, lpId) : null;
         if (!lpEl) lpEl = findElementByText(lpElements, String(value));
@@ -140,9 +147,9 @@ export async function executeFlowStepWs(
       case "dismiss_popup": {
         // Soft action — always succeeds. Try to tap dismiss button, fallback to Back.
         const dpScreenRes = await getScreenWithRetry(deviceId);
-        const dpElements = (dpScreenRes?.elements ?? []) as FlowUIElement[];
+        const dpElements = (dpScreenRes?.elements ?? []) as RecipeUIElement[];
         const queryLower = String(value).toLowerCase();
-        const dpEl = dpElements.find((e: FlowUIElement) =>
+        const dpEl = dpElements.find((e: RecipeUIElement) =>
           e.text && e.text.toLowerCase().includes(queryLower)
         );
         if (dpEl) {
@@ -161,8 +168,8 @@ export async function executeFlowStepWs(
 
         // 1. Check current screen
         const fatScreenRes = await getScreenWithRetry(deviceId);
-        let fatElements = (fatScreenRes?.elements ?? []) as FlowUIElement[];
-        let fatEl = fatElements.find((e: FlowUIElement) =>
+        let fatElements = (fatScreenRes?.elements ?? []) as RecipeUIElement[];
+        let fatEl = fatElements.find((e: RecipeUIElement) =>
           e.text && e.text.toLowerCase().includes(query)
         );
 
@@ -172,8 +179,8 @@ export async function executeFlowStepWs(
             await sessions.sendCommand(deviceId, { type: "scroll", direction: "down" });
             await new Promise((r) => setTimeout(r, 1200));
             const freshRes = await getScreenWithRetry(deviceId);
-            fatElements = (freshRes?.elements ?? []) as FlowUIElement[];
-            fatEl = fatElements.find((e: FlowUIElement) =>
+            fatElements = (freshRes?.elements ?? []) as RecipeUIElement[];
+            fatEl = fatElements.find((e: RecipeUIElement) =>
               e.text && e.text.toLowerCase().includes(query)
             );
             if (fatEl) break;
@@ -181,7 +188,7 @@ export async function executeFlowStepWs(
         }
 
         if (!fatEl) {
-          const available = fatElements.filter((e: FlowUIElement) => e.text).map((e: FlowUIElement) => e.text).slice(0, 10);
+          const available = fatElements.filter((e: RecipeUIElement) => e.text).map((e: RecipeUIElement) => e.text).slice(0, 10);
           return { success: false, message: `Element "${value}" not found after scrolling. Available: ${available.join(", ")}` };
         }
 
@@ -196,7 +203,7 @@ export async function executeFlowStepWs(
   return { success: false, message: `Invalid step: ${JSON.stringify(step)}` };
 }
 
-export async function runFlowServer(options: RunFlowOptions): Promise<void> {
+export async function runRecipe(options: RunRecipeOptions): Promise<void> {
   const { runId, deviceId, persistentDeviceId, userId, name, steps, appId, signal } = options;
   const stepResults: Array<{ command: string; success: boolean; message: string }> = [];
 
@@ -208,7 +215,7 @@ export async function runFlowServer(options: RunFlowOptions): Promise<void> {
   };
 
   // Notify device so it hides the overlay / shows running state
-  sendToDevice({ type: "goal_started", goal: `Flow: ${name}` });
+  sendToDevice({ type: "goal_started", goal: `Recipe: ${name}` });
 
   sessions.notifyDashboard(userId, {
     type: "workflow_started",
@@ -245,7 +252,7 @@ export async function runFlowServer(options: RunFlowOptions): Promise<void> {
     } as any);
 
     try {
-      const result = await executeFlowStepWs(deviceId, step, appId);
+      const result = await executeRecipeStep(deviceId, step, appId);
       stepResults.push({ command: label, success: result.success, message: result.message });
 
       await db.update(workflowRun).set({
@@ -314,3 +321,4 @@ export async function runFlowServer(options: RunFlowOptions): Promise<void> {
   } as any);
   sendToDevice({ type: "goal_completed", success: true, stepsUsed: stepResults.length });
 }
+

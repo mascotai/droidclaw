@@ -49,7 +49,8 @@ function durationMs(startedAt: Date | string, completedAt: Date | string | null)
 }
 
 function resolvedByLabel(resolvedBy?: string): string {
-	if (resolvedBy === 'cached_flow') return 'cached';
+	if (resolvedBy === 'cached_flow' || resolvedBy === 'recipe') return 'recipe';
+	if (resolvedBy === 'discovery') return 'discovery';
 	if (resolvedBy) return resolvedBy;
 	return 'agent';
 }
@@ -187,7 +188,7 @@ export function RunViewer({ run, liveRun, loading, onStop, deviceId, cachedFlowM
 		const results = liveRun ? liveRun.stepResults : ((run?.stepResults as StepResult[]) ?? []);
 		const completed = results.filter((r) => r != null);
 		const success = completed.filter((r) => r?.success);
-		const cached = completed.filter((r) => r?.resolvedBy === 'cached_flow');
+		const cached = completed.filter((r) => r?.resolvedBy === 'cached_flow' || r?.resolvedBy === 'recipe');
 		return {
 			total: activeTotalSteps,
 			completed: completed.length,
@@ -454,7 +455,7 @@ export function RunViewer({ run, liveRun, loading, onStop, deviceId, cachedFlowM
 							<>
 								<span className="text-stone-300">&middot;</span>
 								<span className="text-stone-500">
-									{summaryStats.cached} cached
+									{summaryStats.cached} recipe
 								</span>
 							</>
 						) : null}

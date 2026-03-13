@@ -12,9 +12,11 @@ import { health } from "./routes/health.js";
 import { license } from "./routes/license.js";
 import { pairing } from "./routes/pairing.js";
 import { v2 } from "./routes/v2.js";
+import { goalCrud } from "./routes/goal-crud.js";
+import { workflowCrud } from "./routes/workflow-crud.js";
 
 import { db, ensureSchema } from "./db.js";
-import { workflowRun, evalRun } from "./schema.js";
+import { workflowRun, evalBatch } from "./schema.js";
 import { eq } from "drizzle-orm";
 
 const app = new Hono();
@@ -40,6 +42,8 @@ app.route("/health", health);
 app.route("/license", license);
 app.route("/pairing", pairing);
 app.route("/v2", v2);
+app.route("/v2/goals", goalCrud);
+app.route("/v2/workflows", workflowCrud);
 
 // Start server with WebSocket support
 const server = Bun.serve<WebSocketData>({
@@ -119,9 +123,9 @@ db.update(workflowRun)
   });
 
 // Clean up stale "running" eval runs from previous crashes/restarts
-db.update(evalRun)
+db.update(evalBatch)
   .set({ status: "stopped", completedAt: new Date() })
-  .where(eq(evalRun.status, "running"))
+  .where(eq(evalBatch.status, "running"))
   .then(() => {
     console.log(`[Startup] Marked stale running evals as stopped`);
   })

@@ -1,11 +1,14 @@
 import { useState, useCallback, useMemo } from 'react';
-import { Play, Square, Plus, Trash2, Settings2, X, Code2 } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { Play, Square, Plus, Trash2, Settings2, X, Code2, Library, PenLine } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import type { WorkflowStepConfig } from '@/types/devices';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import type { WorkflowStepConfig, Goal } from '@/types/devices';
+import { api } from '@/lib/api';
 
 interface WorkflowBuilderProps {
 	disabled?: boolean;
@@ -16,11 +19,14 @@ interface WorkflowBuilderProps {
 
 interface BuilderStep extends WorkflowStepConfig {
 	_id: string;
+	_source: 'inline' | 'library';
+	_goalId?: string;
 }
 
 function makeStep(): BuilderStep {
 	return {
 		_id: crypto.randomUUID(),
+		_source: 'inline',
 		goal: '',
 		app: '',
 		maxSteps: 15,
@@ -46,6 +52,12 @@ export function WorkflowBuilder({
 	const [steps, setSteps] = useState<BuilderStep[]>([makeStep()]);
 	const [variables, setVariables] = useState<Array<{ key: string; value: string }>>([]);
 	const [expandedAdvanced, setExpandedAdvanced] = useState<Set<string>>(new Set());
+
+	// Fetch saved goals for library picker
+	const { data: savedGoals } = useQuery({
+		queryKey: ['goals'],
+		queryFn: () => api.listGoals(),
+	});
 
 	const canSubmit = useMemo(
 		() => steps.some((s) => s.goal.trim()) && !disabled && !isRunning,
@@ -76,6 +88,29 @@ export function WorkflowBuilder({
 			else next.add(id);
 			return next;
 		});
+	}, []);
+
+	const selectGoalFromLibrary = useCallback((stepId: string, goalId: string) => {
+		const goal = savedGoals?.find((g: Goal) => g.id === goalId);
+		if (!goal) return;
+		setSteps((s) => s.map((st) => st._id === stepId ? {
+			...st,
+			_source: 'library' as const,
+			_goalId: goal.id,
+			goal: goal.name,
+			app: goal.app ?? '',
+			maxSteps: goal.maxSteps ?? 15,
+			retries: goal.retries ?? 0,
+			cache: goal.cache !== false,
+		} : st));
+	}, [savedGoals]);
+
+	const switchToInline = useCallback((stepId: string) => {
+		setSteps((s) => s.map((st) => st._id === stepId ? {
+			...st,
+			_source: 'inline' as const,
+			_goalId: undefined,
+		} : st));
 	}, []);
 
 	function handleSubmit() {
@@ -131,19 +166,77 @@ export function WorkflowBuilder({
 								</span>
 							) : null}
 							<div className="min-w-0 flex-1 space-y-2">
-								<Textarea
-									value={step.goal}
-									onChange={(e) => updateStep(step._id, 'goal', e.target.value)}
-									placeholder={
-										idx === 0
-											? 'e.g., Open YouTube and search for lofi beats'
-											: 'Goal for this step'
-									}
-									disabled={isRunning}
-									onKeyDown={handleKeydown}
-									rows={3}
-									className="resize-y text-sm"
-								/>
+								{/* Source toggle: Library vs Inline */}
+								{savedGoals && savedGoals.length > 0 ? (
+									<div className="flex items-center gap-1.5 mb-1">
+										<button
+											type="button"
+											onClick={() => switchToInline(step._id)}
+											disabled={isRunning}
+											className={`flex items-center gap-1 rounded-md px-2 py-0.5 text-xs transition-colors ${
+												step._source === 'inline'
+													? 'bg-stone-200 text-stone-700'
+													: 'text-stone-400 hover:text-stone-600'
+											}`}
+										>
+											<PenLine className="h-3 w-3" />
+											Inline
+										</button>
+										<button
+											type="button"
+											onClick={() => {
+												setSteps((s) => s.map((st) => st._id === step._id ? { ...st, _source: 'library' as const } : st));
+											}}
+											disabled={isRunning}
+											className={`flex items-center gap-1 rounded-md px-2 py-0.5 text-xs transition-colors ${
+												step._source === 'library'
+													? 'bg-stone-200 text-stone-700'
+													: 'text-stone-400 hover:text-stone-600'
+											}`}
+										>
+											<Library className="h-3 w-3" />
+											Library
+										</button>
+									</div>
+								) : null}
+
+								{step._source === 'library' && savedGoals && savedGoals.length > 0 ? (
+									<Select
+										value={step._goalId ?? ''}
+										onValueChange={(val) => selectGoalFromLibrary(step._id, val)}
+										disabled={isRunning}
+									>
+										<SelectTrigger className="text-sm">
+											<SelectValue placeholder="Pick a saved goal..." />
+										</SelectTrigger>
+										<SelectContent>
+											{savedGoals.map((g: Goal) => (
+												<SelectItem key={g.id} value={g.id}>
+													<span className="flex items-center gap-2">
+														<span>{g.name}</span>
+														{g.app ? (
+															<span className="text-xs text-stone-400">{g.app}</span>
+														) : null}
+													</span>
+												</SelectItem>
+											))}
+										</SelectContent>
+									</Select>
+								) : (
+									<Textarea
+										value={step.goal}
+										onChange={(e) => updateStep(step._id, 'goal', e.target.value)}
+										placeholder={
+											idx === 0
+												? 'e.g., Open YouTube and search for lofi beats'
+												: 'Goal for this step'
+										}
+										disabled={isRunning}
+										onKeyDown={handleKeydown}
+										rows={3}
+										className="resize-y text-sm"
+									/>
+								)}
 								<Input
 									type="text"
 									value={step.app ?? ''}

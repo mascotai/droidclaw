@@ -3,6 +3,8 @@
  * All requests go through /api/* which the proxy forwards to the Hono backend.
  */
 
+import type { Goal, Workflow, GoalRun, RecipeEntry } from '../types/devices';
+
 class ApiError extends Error {
 	status: number;
 	constructor(
@@ -289,4 +291,50 @@ export const api = {
 	// Diagnostics
 	diagnoseDevice: (deviceId: string) =>
 		request(`/devices/${deviceId}/diagnose`, { method: 'POST' }),
+
+	// ── Goals CRUD ── (under /v2/goals via proxy /api/goals)
+	listGoals: () => request<Goal[]>('/goals'),
+	createGoal: (data: Partial<Goal>) =>
+		request<Goal>('/goals', {
+			method: 'POST',
+			body: JSON.stringify(data),
+		}),
+	updateGoal: (id: string, data: Partial<Goal>) =>
+		request<Goal>(`/goals/${id}`, {
+			method: 'PUT',
+			body: JSON.stringify(data),
+		}),
+	deleteGoal: (id: string) =>
+		request<void>(`/goals/${id}`, { method: 'DELETE' }),
+	runGoal: (goalId: string, deviceId: string, variables?: Record<string, string>) =>
+		request<{ runId: string; status: string }>(`/goals/${goalId}/run`, {
+			method: 'POST',
+			body: JSON.stringify({ deviceId, variables }),
+		}),
+
+	// ── Workflows CRUD ── (under /v2/workflows via proxy /api/workflows)
+	listWorkflowTemplates: () => request<Workflow[]>('/workflows'),
+	createWorkflowTemplate: (data: { name: string; steps: Record<string, unknown>[]; variables?: Record<string, string> }) =>
+		request<Workflow>('/workflows', {
+			method: 'POST',
+			body: JSON.stringify(data),
+		}),
+	updateWorkflowTemplate: (id: string, data: Partial<Workflow>) =>
+		request<Workflow>(`/workflows/${id}`, {
+			method: 'PUT',
+			body: JSON.stringify(data),
+		}),
+	deleteWorkflowTemplate: (id: string) =>
+		request<void>(`/workflows/${id}`, { method: 'DELETE' }),
+	runWorkflowTemplate: (workflowId: string, deviceId: string, variables?: Record<string, string>) =>
+		request<{ runId: string; status: string }>(`/workflows/${workflowId}/run`, {
+			method: 'POST',
+			body: JSON.stringify({ deviceId, variables }),
+		}),
+
+	// ── Recipes ── (replaces cached flows, under /v2/devices/:id/recipes)
+	listRecipes: (deviceId: string) =>
+		request<RecipeEntry[]>(`/devices/${deviceId}/recipes`),
+	deleteRecipe: (deviceId: string, recipeId: string) =>
+		request<void>(`/devices/${deviceId}/recipes/${recipeId}`, { method: 'DELETE' }),
 };

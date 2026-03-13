@@ -2,11 +2,11 @@
  * Workflow Caching System — Unit Tests
  *
  * Tests the three main caching layers:
- *   1. compileSessionToFlow  — compiles AI agent steps → deterministic flows
- *   2. normalizeGoalKey      — normalises goal strings into cache lookup keys
- *   3. findElementByText     — element matching used during flow replay
- *   4. resolveFlowVariables  — {{variable}} placeholder substitution
- *   5. isCacheable           — determines if a workflow step is cache-eligible
+ *   1. compileGoalRunToRecipe  — compiles AI agent steps → deterministic recipes
+ *   2. normalizeGoalKey        — normalises goal strings into cache lookup keys
+ *   3. findElementByText       — element matching used during recipe replay
+ *   4. resolveRecipeVariables  — {{variable}} placeholder substitution
+ *   5. isCacheable             — determines if a workflow step is cache-eligible
  *
  * All functions under test are pure (no DB/WS) — no mocking required.
  *
@@ -15,13 +15,13 @@
 
 import { describe, it, expect } from "bun:test";
 import {
-  compileSessionToFlow,
+  compileGoalRunToRecipe,
   normalizeGoalKey,
   isCacheable,
-  resolveFlowVariables,
+  resolveRecipeVariables,
   findElementByText,
-} from "../session-to-flow.js";
-import type { CacheableWorkflowStep, FlowStep } from "../session-to-flow.js";
+} from "../recipe-compiler.js";
+import type { CacheableWorkflowStep, RecipeStep } from "../recipe-compiler.js";
 
 // ─── Helpers ────────────────────────────────────────────────
 
@@ -58,10 +58,10 @@ function el(text: string, center: [number, number] = [100, 200], extras?: { hint
 }
 
 // ═══════════════════════════════════════════════════════════
-//  1. compileSessionToFlow
+//  1. compileGoalRunToRecipe
 // ═══════════════════════════════════════════════════════════
 
-describe("compileSessionToFlow", () => {
+describe("compileGoalRunToRecipe", () => {
   describe("basic compilation", () => {
     it("compiles a simple tap-type-tap session into a flow", () => {
       const steps = [
@@ -70,7 +70,7 @@ describe("compileSessionToFlow", () => {
         okStep({ action: "tap", target: "Submit" }),
       ];
 
-      const result = compileSessionToFlow(steps);
+      const result = compileGoalRunToRecipe(steps);
       expect(result).not.toBeNull();
       expect(result!.steps).toEqual([
         { tap: "Search" },
@@ -86,7 +86,7 @@ describe("compileSessionToFlow", () => {
         okStep({ action: "tap", target: "Settings" }),
       ];
 
-      const result = compileSessionToFlow(steps, "com.example.app");
+      const result = compileGoalRunToRecipe(steps, "com.example.app");
       expect(result).not.toBeNull();
       expect(result!.steps[0]).toEqual({ launch: "com.example.app" });
       expect(result!.steps).toHaveLength(3); // launch + 2 taps
@@ -100,7 +100,7 @@ describe("compileSessionToFlow", () => {
         okStep({ action: "tap", target: "Item" }),
       ];
 
-      const result = compileSessionToFlow(steps);
+      const result = compileGoalRunToRecipe(steps);
       expect(result!.steps).toEqual([
         { tap: "Search" },
         { scroll: "down" },
@@ -116,7 +116,7 @@ describe("compileSessionToFlow", () => {
         okStep({ action: "enter" }),
       ];
 
-      const result = compileSessionToFlow(steps);
+      const result = compileGoalRunToRecipe(steps);
       expect(result!.steps).toEqual([
         { tap: "Email" },
         { type: "test@example.com" },
@@ -131,7 +131,7 @@ describe("compileSessionToFlow", () => {
         okStep({ action: "tap", target: "OK" }),
       ];
 
-      const result = compileSessionToFlow(steps);
+      const result = compileGoalRunToRecipe(steps);
       expect(result!.steps).toEqual([
         { tap: "Menu" },
         { longpress: "Copy" },
@@ -148,7 +148,7 @@ describe("compileSessionToFlow", () => {
         okStepJson({ action: "tap", target: "Use another profile", coordinates: [540, 1404] }),
       ];
 
-      const result = compileSessionToFlow(steps, "com.instagram.android");
+      const result = compileGoalRunToRecipe(steps, "com.instagram.android");
       expect(result).not.toBeNull();
       expect(result!.steps).toEqual([
         { launch: "com.instagram.android" },
@@ -166,7 +166,7 @@ describe("compileSessionToFlow", () => {
         okStepJson({ action: "tap", target: "Submit", coordinates: [300, 400] }),
       ];
 
-      const result = compileSessionToFlow(steps);
+      const result = compileGoalRunToRecipe(steps);
       expect(result!.steps).toEqual([
         { tap: "Correct" },
         { tap: "Submit" },
@@ -182,7 +182,7 @@ describe("compileSessionToFlow", () => {
         okStep({ action: "tap", target: "Submit" }),
       ];
 
-      const result = compileSessionToFlow(steps);
+      const result = compileGoalRunToRecipe(steps);
       expect(result!.steps).toEqual([
         { tap: "Correct" },
         { tap: "Submit" },
@@ -199,7 +199,7 @@ describe("compileSessionToFlow", () => {
         okStep({ action: "tap", target: "Confirm" }),
       ];
 
-      const result = compileSessionToFlow(steps);
+      const result = compileGoalRunToRecipe(steps);
       expect(result!.steps).toEqual([
         { tap: "Start" },
         { tap: "Confirm" },
@@ -213,7 +213,7 @@ describe("compileSessionToFlow", () => {
         okStep({ action: "tap", target: "OK" }),
       ];
 
-      const result = compileSessionToFlow(steps);
+      const result = compileGoalRunToRecipe(steps);
       expect(result!.steps).toEqual([
         { tap: "Button" },
         { tap: "OK" },
@@ -230,7 +230,7 @@ describe("compileSessionToFlow", () => {
         okStep({ action: "tap", target: "Correct" }),
       ];
 
-      const result = compileSessionToFlow(steps);
+      const result = compileGoalRunToRecipe(steps);
       // back should be excluded (error recovery)
       // the failed tap is also excluded (result != OK)
       expect(result!.steps).toEqual([
@@ -247,7 +247,7 @@ describe("compileSessionToFlow", () => {
         okStep({ action: "tap", target: "Bluetooth" }),
       ];
 
-      const result = compileSessionToFlow(steps);
+      const result = compileGoalRunToRecipe(steps);
       expect(result!.steps).toEqual([
         { tap: "Settings" },
         { tap: "Wi-Fi" },
@@ -265,7 +265,7 @@ describe("compileSessionToFlow", () => {
         okStep({ action: "tap", target: "Go" }),
       ];
 
-      const result = compileSessionToFlow(steps, undefined, { query: "lofi beats" });
+      const result = compileGoalRunToRecipe(steps, undefined, { query: "lofi beats" });
       expect(result!.steps).toEqual([
         { tap: "Search" },
         { type: "{{query}}" },
@@ -280,7 +280,7 @@ describe("compileSessionToFlow", () => {
         okStep({ action: "tap", target: "Go" }),
       ];
 
-      const result = compileSessionToFlow(steps, undefined, { query: "lofi beats" });
+      const result = compileGoalRunToRecipe(steps, undefined, { query: "lofi beats" });
       expect(result!.steps).toEqual([
         { tap: "Search" },
         { type: "some random text" },
@@ -297,7 +297,7 @@ describe("compileSessionToFlow", () => {
         okStep({ action: "tap", target: "Login" }),
       ];
 
-      const result = compileSessionToFlow(steps, undefined, {
+      const result = compileGoalRunToRecipe(steps, undefined, {
         username: "john",
         password: "secret123",
       });
@@ -318,7 +318,7 @@ describe("compileSessionToFlow", () => {
         okStep({ action: "tap", target: "Button" }),
       ];
 
-      expect(compileSessionToFlow(steps)).toBeNull();
+      expect(compileGoalRunToRecipe(steps)).toBeNull();
     });
 
     it("returns null when more than half the steps are scroll/swipe", () => {
@@ -329,7 +329,7 @@ describe("compileSessionToFlow", () => {
         okStep({ action: "scroll", direction: "down" }),
       ];
 
-      expect(compileSessionToFlow(steps)).toBeNull();
+      expect(compileGoalRunToRecipe(steps)).toBeNull();
     });
 
     it("returns null when there are no text-based taps", () => {
@@ -339,7 +339,7 @@ describe("compileSessionToFlow", () => {
         okStep({ action: "type", text: "world" }),
       ];
 
-      expect(compileSessionToFlow(steps)).toBeNull();
+      expect(compileGoalRunToRecipe(steps)).toBeNull();
     });
 
     it("does not count the prepended launch toward the 2-step minimum", () => {
@@ -348,7 +348,7 @@ describe("compileSessionToFlow", () => {
         okStep({ action: "tap", target: "Only one" }),
       ];
 
-      expect(compileSessionToFlow(steps, "com.app")).toBeNull();
+      expect(compileGoalRunToRecipe(steps, "com.app")).toBeNull();
     });
 
     it("returns a valid flow with exactly 2 meaningful steps", () => {
@@ -357,7 +357,7 @@ describe("compileSessionToFlow", () => {
         okStep({ action: "tap", target: "Second" }),
       ];
 
-      const result = compileSessionToFlow(steps);
+      const result = compileGoalRunToRecipe(steps);
       expect(result).not.toBeNull();
       expect(result!.steps).toHaveLength(2);
     });
@@ -374,7 +374,7 @@ describe("compileSessionToFlow", () => {
         okStepAt({ action: "tap", target: "Submit" }, new Date(t0.getTime() + 6000)),
       ];
 
-      const result = compileSessionToFlow(steps);
+      const result = compileGoalRunToRecipe(steps);
       expect(result).not.toBeNull();
       expect(result!.timeline).toEqual([0, 3500, 2500]);
     });
@@ -387,7 +387,7 @@ describe("compileSessionToFlow", () => {
         okStepAt({ action: "tap", target: "C" }, new Date(t0.getTime() + 30100)), // 30000ms gap → clamped to 8000
       ];
 
-      const result = compileSessionToFlow(steps);
+      const result = compileGoalRunToRecipe(steps);
       expect(result).not.toBeNull();
       expect(result!.timeline).toEqual([0, 800, 8000]);
     });
@@ -399,7 +399,7 @@ describe("compileSessionToFlow", () => {
         okStep({ action: "tap", target: "Submit" }),
       ];
 
-      const result = compileSessionToFlow(steps);
+      const result = compileGoalRunToRecipe(steps);
       expect(result).not.toBeNull();
       // No timestamps → defaults: [0, 2000, 2000]
       expect(result!.timeline).toEqual([0, 2000, 2000]);
@@ -411,7 +411,7 @@ describe("compileSessionToFlow", () => {
         okStep({ action: "tap", target: "Go" }),
       ];
 
-      const result = compileSessionToFlow(steps, "com.app");
+      const result = compileGoalRunToRecipe(steps, "com.app");
       expect(result).not.toBeNull();
       // launch (0) + search (default 2000) + go (default 2000)
       expect(result!.timeline).toEqual([0, 2000, 2000]);
@@ -426,7 +426,7 @@ describe("compileSessionToFlow", () => {
         okStepAt({ action: "tap", target: "Submit" }, new Date(t0.getTime() + 5000)),
       ];
 
-      const result = compileSessionToFlow(steps);
+      const result = compileGoalRunToRecipe(steps);
       expect(result).not.toBeNull();
       expect(result!.steps).toHaveLength(2);
       // Gap is from Search (t0) to Submit (t0+5000) = 5000ms
@@ -569,18 +569,18 @@ describe("findElementByText", () => {
 });
 
 // ═══════════════════════════════════════════════════════════
-//  4. resolveFlowVariables
+//  4. resolveRecipeVariables
 // ═══════════════════════════════════════════════════════════
 
-describe("resolveFlowVariables", () => {
+describe("resolveRecipeVariables", () => {
   it("replaces {{placeholder}} with resolved values", () => {
-    const steps: FlowStep[] = [
+    const steps: RecipeStep[] = [
       { tap: "Search" },
       { type: "{{query}}" },
       { tap: "Go" },
     ];
 
-    const resolved = resolveFlowVariables(steps, { query: "lofi beats" });
+    const resolved = resolveRecipeVariables(steps, { query: "lofi beats" });
     expect(resolved).toEqual([
       { tap: "Search" },
       { type: "lofi beats" },
@@ -589,22 +589,22 @@ describe("resolveFlowVariables", () => {
   });
 
   it("handles multiple placeholders in the same step", () => {
-    const steps: FlowStep[] = [
+    const steps: RecipeStep[] = [
       { type: "{{greeting}} {{name}}" },
     ];
 
-    const resolved = resolveFlowVariables(steps, { greeting: "Hello", name: "World" });
+    const resolved = resolveRecipeVariables(steps, { greeting: "Hello", name: "World" });
     expect(resolved).toEqual([
       { type: "Hello World" },
     ]);
   });
 
   it("leaves unknown placeholders intact", () => {
-    const steps: FlowStep[] = [
+    const steps: RecipeStep[] = [
       { type: "{{known}} and {{unknown}}" },
     ];
 
-    const resolved = resolveFlowVariables(steps, { known: "resolved" });
+    const resolved = resolveRecipeVariables(steps, { known: "resolved" });
     expect(resolved).toEqual([
       { type: "resolved and {{unknown}}" },
     ]);
@@ -617,7 +617,7 @@ describe("resolveFlowVariables", () => {
       { type: "{{query}}" },
     ];
 
-    const resolved = resolveFlowVariables(steps, { query: "test" });
+    const resolved = resolveRecipeVariables(steps, { query: "test" });
     expect(resolved).toEqual([
       "enter",
       "back",
@@ -632,19 +632,19 @@ describe("resolveFlowVariables", () => {
       { type: "{{query}}" },
     ];
 
-    const resolved = resolveFlowVariables(steps, { query: "test" });
+    const resolved = resolveRecipeVariables(steps, { query: "test" });
     expect(resolved[0]).toEqual({ tap: [100, 200] });
     expect(resolved[1]).toEqual({ wait: 3 });
     expect(resolved[2]).toEqual({ type: "test" });
   });
 
   it("returns steps unchanged when no resolved values", () => {
-    const steps: FlowStep[] = [
+    const steps: RecipeStep[] = [
       { tap: "Search" },
       { type: "{{query}}" },
     ];
 
-    const resolved = resolveFlowVariables(steps, {});
+    const resolved = resolveRecipeVariables(steps, {});
     expect(resolved).toEqual(steps);
   });
 });
@@ -700,7 +700,7 @@ describe("end-to-end: compile → resolve cycle", () => {
     ];
 
     // Step 1: compile with variables → produces {{placeholder}} tokens
-    const compiled = compileSessionToFlow(
+    const compiled = compileGoalRunToRecipe(
       sessionSteps,
       "com.google.maps",
       { query: "coffee shops" },
@@ -716,7 +716,7 @@ describe("end-to-end: compile → resolve cycle", () => {
     ]);
 
     // Step 2: On a later run with different variable value, resolve placeholders
-    const resolved = resolveFlowVariables(compiled!.steps, { query: "pizza" });
+    const resolved = resolveRecipeVariables(compiled!.steps, { query: "pizza" });
     expect(resolved).toEqual([
       { launch: "com.google.maps" },
       { tap: "Search" },
@@ -749,7 +749,7 @@ describe("end-to-end: compile → resolve cycle", () => {
       okStep({ action: "done" }),          // skipped
     ];
 
-    const result = compileSessionToFlow(sessionSteps, "com.instagram.android");
+    const result = compileGoalRunToRecipe(sessionSteps, "com.instagram.android");
     expect(result).not.toBeNull();
     // Should contain: launch, tap, type, tap, scroll, tap, tap
     // Should NOT contain: wait, screenshot, done

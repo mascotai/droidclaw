@@ -7,7 +7,7 @@
  */
 
 import { db } from "../db.js";
-import { evalRun, workflowRun } from "../schema.js";
+import { evalBatch, workflowRun } from "../schema.js";
 import { eq } from "drizzle-orm";
 import { sessions } from "../ws/sessions.js";
 import { runWorkflowServer, type WorkflowStep } from "./workflow-runner.js";
@@ -156,7 +156,7 @@ export async function runEval(options: RunEvalOptions): Promise<void> {
         steps: resolvedSteps,
         status: "running",
         totalSteps: resolvedSteps.length,
-        evalRunId: evalId,
+        evalBatchId: evalId,
       });
 
       // Notify progress
@@ -215,7 +215,7 @@ export async function runEval(options: RunEvalOptions): Promise<void> {
 
       // Update partial results in DB after each run
       const partialResults = buildResults(workflowResults, workflow.name, runs, totalRuns, totalSuccesses, Date.now() - evalStart);
-      await db.update(evalRun).set({ results: partialResults }).where(eq(evalRun.id, evalId));
+      await db.update(evalBatch).set({ results: partialResults }).where(eq(evalBatch.id, evalId));
     }
 
     // Compute per-step pass rates for this workflow
@@ -274,11 +274,11 @@ export async function runEval(options: RunEvalOptions): Promise<void> {
   };
 
   const finalStatus = signal.aborted ? "stopped" : "completed";
-  await db.update(evalRun).set({
+  await db.update(evalBatch).set({
     status: finalStatus,
     results: finalResults,
     completedAt: new Date(),
-  }).where(eq(evalRun.id, evalId));
+  }).where(eq(evalBatch.id, evalId));
 
   sessions.notifyDashboard(userId, {
     type: "eval_completed",

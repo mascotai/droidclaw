@@ -127,6 +127,7 @@ export const device = pgTable("device", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+/** @deprecated Use `goalRun` table instead. Kept for backward compatibility with existing DB queries. */
 export const agentSession = pgTable("agent_session", {
   id: text("id").primaryKey(),
   userId: text("user_id")
@@ -146,6 +147,7 @@ export const agentSession = pgTable("agent_session", {
   scheduledDelay: integer("scheduled_delay"),
 });
 
+/** @deprecated Use `step` table instead. Kept for backward compatibility with existing DB queries. */
 export const agentStep = pgTable("agent_step", {
   id: text("id").primaryKey(),
   sessionId: text("session_id")
@@ -161,6 +163,7 @@ export const agentStep = pgTable("agent_step", {
   timestamp: timestamp("timestamp").defaultNow().notNull(),
 });
 
+/** @deprecated Kept for backward compatibility. The `appHint` table references `agentSession` via FK. */
 export const appHint = pgTable("app_hint", {
   id: text("id").primaryKey(),
   userId: text("user_id")
@@ -175,19 +178,7 @@ export const appHint = pgTable("app_hint", {
 });
 
 // ── Eval Run Tracking ──
-
-export const evalRun = pgTable("eval_run", {
-  id: text("id").primaryKey(),
-  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
-  deviceId: text("device_id").notNull().references(() => device.id, { onDelete: "cascade" }),
-  name: text("name"),
-  status: text("status").notNull().default("running"),  // running | completed | stopped
-  runsPerWorkflow: integer("runs_per_workflow").notNull(),
-  workflowDefs: jsonb("workflow_defs").notNull(),         // Workflow[] with eval fields
-  results: jsonb("results"),                               // EvalResults
-  startedAt: timestamp("started_at").defaultNow().notNull(),
-  completedAt: timestamp("completed_at"),
-});
+// (evalRun table removed — replaced by evalBatch)
 
 // ── Workflow Execution Tracking ──
 
@@ -206,11 +197,22 @@ export const workflowRun = pgTable("workflow_run", {
   completedAt: timestamp("completed_at"),
   qstashMessageId: text("qstash_message_id"),
   scheduledFor: timestamp("scheduled_for"),
-  evalRunId: text("eval_run_id").references(() => evalRun.id, { onDelete: "set null" }),
+  /** @deprecated Use evalBatchId instead */
+  evalRunId: text("eval_run_id"),
+  // ── Goals-First Redesign — New Columns ──
+  /** Link to saved workflow template (nullable — inline runs have no template) */
+  workflowId: text("workflow_id"),
+  /** Resolved variable values for this run */
+  variables: jsonb("variables"),
+  /** Total duration in ms */
+  durationMs: integer("duration_ms"),
+  /** Link to eval batch (nullable) */
+  evalBatchId: text("eval_batch_id"),
 });
 
 // ── Cached Deterministic Flows ──
 
+/** @deprecated Use `recipe` table instead. Kept for backward compatibility with existing DB queries. */
 export const cachedFlow = pgTable("cached_flow", {
   id: text("id").primaryKey(),
   userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
@@ -233,4 +235,134 @@ export const cachedFlow = pgTable("cached_flow", {
   sourceSessionId: text("source_session_id").references(() => agentSession.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   lastUsedAt: timestamp("last_used_at"),
+});
+
+// ══════════════════════════════════════════════════════════════════════
+// ── Goals-First Redesign — New Tables
+// ══════════════════════════════════════════════════════════════════════
+
+// ── Saved Templates ──
+
+/** Reusable goal template — "Login to Instagram", "Open Settings", etc. */
+export const goal = pgTable("goal", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  app: text("app"),
+  maxSteps: integer("max_steps").default(15),
+  retries: integer("retries").default(0),
+  cache: boolean("cache").default(true),
+  eval: jsonb("eval"), // { states: { on_feed: { type: "boolean", expected: true } } }
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at")
+    .defaultNow()
+    .$onUpdate(() => new Date())
+    .notNull(),
+});
+
+/** Saved workflow template — ordered list of goals with optional variables */
+export const workflow = pgTable("workflow", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  /** Array<{ goalId?: string, goal?: string, app?, maxSteps?, retries?, cache?, eval? }> */
+  steps: jsonb("steps").notNull(),
+  /** Template variables — { username: "default_user", password: "" } */
+  variables: jsonb("variables"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at")
+    .defaultNow()
+    .$onUpdate(() => new Date())
+    .notNull(),
+});
+
+// ── Recipes (compiled replays — replaces cached_flow) ──
+
+/** Compiled deterministic replay from a successful discovery run */
+export const recipe = pgTable("recipe", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  deviceId: text("device_id").notNull().references(() => device.id, { onDelete: "cascade" }),
+  /** Normalized goal text (lowercase, trimmed) — lookup key */
+  goalKey: text("goal_key").notNull(),
+  appPackage: text("app_package"),
+  /** RecipeStep[] — deterministic replay steps */
+  steps: jsonb("steps").notNull(),
+  /** Delay ms before each step — recorded from original run timing */
+  timeline: jsonb("timeline"),
+  active: boolean("active").default(true).notNull(),
+  successCount: integer("success_count").default(0),
+  failCount: integer("fail_count").default(0),
+  /** The goal run this recipe was compiled from */
+  sourceGoalRunId: text("source_goal_run_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  lastUsedAt: timestamp("last_used_at"),
+});
+
+// ── Execution ──
+
+/** A single goal execution — either standalone or part of a workflow run */
+export const goalRun = pgTable("goal_run", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  deviceId: text("device_id").notNull().references(() => device.id, { onDelete: "cascade" }),
+  /** Link to saved goal template (nullable — inline goals have no template) */
+  goalId: text("goal_id").references(() => goal.id, { onDelete: "set null" }),
+  /** Link to parent workflow run (nullable — standalone goals have no workflow) */
+  workflowRunId: text("workflow_run_id"),
+  /** Position within workflow (0-based), null for standalone */
+  stepIndex: integer("step_index"),
+  /** Resolved goal text (with variables substituted) */
+  goal: text("goal").notNull(),
+  app: text("app"),
+  maxSteps: integer("max_steps").default(15),
+  /** running | completed | failed | skipped */
+  status: text("status").notNull().default("running"),
+  /** "discovery" | "recipe" | "parser" | "classifier" */
+  resolvedBy: text("resolved_by"),
+  recipeId: text("recipe_id").references(() => recipe.id, { onDelete: "set null" }),
+  stepsUsed: integer("steps_used").default(0),
+  durationMs: integer("duration_ms"),
+  // Eval (inline — no separate table needed)
+  evalDefinition: jsonb("eval_definition"),
+  evalPassed: boolean("eval_passed"),
+  evalStateValues: jsonb("eval_state_values"),
+  evalMismatches: jsonb("eval_mismatches"),
+  // Scheduling
+  scheduledFor: timestamp("scheduled_for"),
+  startedAt: timestamp("started_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+});
+
+/** Single agent action within a goal run */
+export const step = pgTable("step", {
+  id: text("id").primaryKey(),
+  goalRunId: text("goal_run_id").notNull().references(() => goalRun.id, { onDelete: "cascade" }),
+  stepNumber: integer("step_number").notNull(),
+  screenHash: text("screen_hash"),
+  action: jsonb("action"),
+  reasoning: text("reasoning"),
+  result: text("result"),
+  packageName: text("package_name"),
+  activityName: text("activity_name"),
+  elements: jsonb("elements"),
+  durationMs: integer("duration_ms"),
+  timestamp: timestamp("timestamp").defaultNow().notNull(),
+});
+
+// ── Eval Batches (replaces eval_run) ──
+
+/** Batch eval run — runs workflows N times and aggregates results */
+export const evalBatch = pgTable("eval_batch", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  deviceId: text("device_id").notNull().references(() => device.id, { onDelete: "cascade" }),
+  name: text("name"),
+  /** running | completed | stopped */
+  status: text("status").notNull().default("running"),
+  runsPerWorkflow: integer("runs_per_workflow").notNull(),
+  workflowDefs: jsonb("workflow_defs").notNull(),
+  results: jsonb("results"),
+  startedAt: timestamp("started_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
 });

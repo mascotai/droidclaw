@@ -28,6 +28,7 @@ import {
   workflowRun,
   agentStep,
   cachedFlow,
+  recipe,
 } from "../schema.js";
 import { activeSessions } from "../agent/active-sessions.js";
 import { getWorkflowDebugLog } from "../agent/workflow-runner.js";
@@ -531,25 +532,43 @@ v2.get("/devices/:deviceId/workflows/runs/:runId/goals/:goalId/steps", async (c)
   }
 
   if (!sessionId) {
-    // For cached flows, look up the saved deterministic steps (rows are never deleted, only deactivated)
-    if (sr?.resolvedBy === "cached_flow" && sr.cachedFlowId) {
-      const cached = await db
+    // For cached flows/recipes, look up the saved deterministic steps (rows are never deleted, only deactivated)
+    if ((sr?.resolvedBy === "cached_flow" || sr?.resolvedBy === "recipe") && sr.cachedFlowId) {
+      // Try recipe table first, then fall back to cachedFlow
+      let cachedSteps: any[] | null = null;
+      let cachedTimeline: number[] | null = null;
+
+      const recipeRows = await db
         .select()
-        .from(cachedFlow)
-        .where(eq(cachedFlow.id, sr.cachedFlowId))
+        .from(recipe)
+        .where(eq(recipe.id, sr.cachedFlowId))
         .limit(1);
 
-      if (cached.length > 0) {
-        const flowSteps = (cached[0].steps as any[]) ?? [];
-        const timeline = (cached[0].timeline as number[]) ?? [];
+      if (recipeRows.length > 0) {
+        cachedSteps = (recipeRows[0].steps as any[]) ?? [];
+        cachedTimeline = (recipeRows[0].timeline as number[]) ?? [];
+      } else {
+        const cached = await db
+          .select()
+          .from(cachedFlow)
+          .where(eq(cachedFlow.id, sr.cachedFlowId))
+          .limit(1);
+
+        if (cached.length > 0) {
+          cachedSteps = (cached[0].steps as any[]) ?? [];
+          cachedTimeline = (cached[0].timeline as number[]) ?? [];
+        }
+      }
+
+      if (cachedSteps) {
         return c.json({
           goal: idx,
           goalId: sr?.stepId ?? def?.id ?? null,
           status: "completed",
-          stepsUsed: flowSteps.length,
-          totalSteps: flowSteps.length,
-          resolvedBy: "cached_flow",
-          steps: flowSteps.map((fs: any, i: number) => {
+          stepsUsed: cachedSteps.length,
+          totalSteps: cachedSteps.length,
+          resolvedBy: sr.resolvedBy,
+          steps: cachedSteps.map((fs: any, i: number) => {
             if (typeof fs === "string") {
               return {
                 step: i + 1,
@@ -557,7 +576,7 @@ v2.get("/devices/:deviceId/workflows/runs/:runId/goals/:goalId/steps", async (c)
                 reasoning: null,
                 result: null,
                 package: null,
-                durationMs: timeline[i] ?? 0,
+                durationMs: cachedTimeline?.[i] ?? 0,
               };
             }
             const entries = Object.entries(fs).filter(([k]) => !k.startsWith("_"));
@@ -572,7 +591,7 @@ v2.get("/devices/:deviceId/workflows/runs/:runId/goals/:goalId/steps", async (c)
               reasoning: null,
               result: null,
               package: null,
-              durationMs: timeline[i] ?? 0,
+              durationMs: cachedTimeline?.[i] ?? 0,
             };
           }),
         });
@@ -585,8 +604,8 @@ v2.get("/devices/:deviceId/workflows/runs/:runId/goals/:goalId/steps", async (c)
       stepsUsed: sr?.stepsUsed ?? 0,
       totalSteps: sr?.stepsUsed ?? 0,
       steps: [],
-      note: sr?.resolvedBy === "cached_flow"
-        ? "Resolved by cached flow replay — no agent steps recorded"
+      note: (sr?.resolvedBy === "cached_flow" || sr?.resolvedBy === "recipe")
+        ? "Resolved by recipe replay — no agent steps recorded"
         : sr?.skipped
           ? `Skipped: ${sr.skipReason}`
           : "No session recorded for this goal",
@@ -821,6 +840,52 @@ v2.get("/devices/:deviceId/workflows/cached", async (c) => {
 v2.delete("/devices/:deviceId/workflows/cached/:id", async (c) => {
   const id = c.req.param("id");
   await db.update(cachedFlow).set({ active: false }).where(eq(cachedFlow.id, id));
+  return c.json({ deactivated: id });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  RECIPES (new — replaces cached flows)
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ── GET /v2/devices/:deviceId/recipes ──
+v2.get("/devices/:deviceId/recipes", async (c) => {
+  const user = c.get("user");
+  const deviceId = c.req.param("deviceId");
+
+  const recipes = await db
+    .select({
+      id: recipe.id,
+      goalKey: recipe.goalKey,
+      appPackage: recipe.appPackage,
+      rawSteps: recipe.steps,
+      active: recipe.active,
+      successCount: recipe.successCount,
+      failCount: recipe.failCount,
+      createdAt: recipe.createdAt,
+      lastUsedAt: recipe.lastUsedAt,
+    })
+    .from(recipe)
+    .where(and(eq(recipe.userId, user.id), eq(recipe.deviceId, deviceId), eq(recipe.active, true)))
+    .orderBy(desc(recipe.createdAt));
+
+  return c.json({
+    recipes: recipes.map((r) => ({
+      id: r.id,
+      goalKey: r.goalKey,
+      appPackage: r.appPackage,
+      stepsCount: Array.isArray(r.rawSteps) ? (r.rawSteps as any[]).length : 0,
+      successCount: r.successCount,
+      failCount: r.failCount,
+      createdAt: r.createdAt?.toISOString() ?? null,
+      lastUsedAt: r.lastUsedAt?.toISOString() ?? null,
+    })),
+  });
+});
+
+// ── DELETE /v2/devices/:deviceId/recipes/:id ──
+v2.delete("/devices/:deviceId/recipes/:id", async (c) => {
+  const id = c.req.param("id");
+  await db.update(recipe).set({ active: false }).where(eq(recipe.id, id));
   return c.json({ deactivated: id });
 });
 

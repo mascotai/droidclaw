@@ -12,7 +12,7 @@ import { eq, and, desc } from "drizzle-orm";
 import { sessionMiddleware, type AuthEnv } from "../middleware/auth.js";
 import { sessions } from "../ws/sessions.js";
 import { db } from "../db.js";
-import { evalRun, llmConfig as llmConfigTable } from "../schema.js";
+import { evalBatch, llmConfig as llmConfigTable } from "../schema.js";
 import { activeSessions } from "../agent/active-sessions.js";
 import { runEval, type WorkflowDef } from "../agent/eval-runner.js";
 import type { LLMConfig } from "../agent/llm.js";
@@ -88,7 +88,7 @@ evals.post("/run", async (c) => {
   const evalId = crypto.randomUUID();
   const abort = new AbortController();
 
-  await db.insert(evalRun).values({
+  await db.insert(evalBatch).values({
     id: evalId,
     userId: user.id,
     deviceId: device.persistentDeviceId ?? device.deviceId,
@@ -121,9 +121,9 @@ evals.post("/run", async (c) => {
 // ── GET /evals — List eval runs ──
 evals.get("/", async (c) => {
   const user = c.get("user");
-  const rows = await db.select().from(evalRun)
-    .where(eq(evalRun.userId, user.id))
-    .orderBy(desc(evalRun.startedAt))
+  const rows = await db.select().from(evalBatch)
+    .where(eq(evalBatch.userId, user.id))
+    .orderBy(desc(evalBatch.startedAt))
     .limit(50);
 
   return c.json(rows.map(r => ({
@@ -144,8 +144,8 @@ evals.get("/:id", async (c) => {
   const user = c.get("user");
   const evalId = c.req.param("id");
 
-  const rows = await db.select().from(evalRun)
-    .where(and(eq(evalRun.id, evalId), eq(evalRun.userId, user.id)))
+  const rows = await db.select().from(evalBatch)
+    .where(and(eq(evalBatch.id, evalId), eq(evalBatch.userId, user.id)))
     .limit(1);
 
   if (rows.length === 0) return c.json({ error: "Eval run not found" }, 404);
@@ -170,8 +170,8 @@ evals.post("/:id/stop", async (c) => {
   const evalId = c.req.param("id");
 
   // Verify ownership
-  const rows = await db.select().from(evalRun)
-    .where(and(eq(evalRun.id, evalId), eq(evalRun.userId, user.id)))
+  const rows = await db.select().from(evalBatch)
+    .where(and(eq(evalBatch.id, evalId), eq(evalBatch.userId, user.id)))
     .limit(1);
 
   if (rows.length === 0) return c.json({ error: "Eval run not found" }, 404);

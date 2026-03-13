@@ -6,6 +6,8 @@ import {
 	Settings,
 	X,
 	Cog,
+	Target,
+	Workflow,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -17,6 +19,8 @@ interface SidebarProps {
 const navItems = [
 	{ label: 'Dashboard', to: '/dashboard', icon: LayoutDashboard },
 	{ label: 'Devices', to: '/dashboard/devices', icon: Smartphone },
+	{ label: 'Goals', to: '/dashboard/goals', icon: Target },
+	{ label: 'Workflows', to: '/dashboard/workflows', icon: Workflow },
 	{ label: 'API Keys', to: '/dashboard/api-keys', icon: Key },
 	{ label: 'Settings', to: '/dashboard/settings', icon: Settings },
 ] as const;

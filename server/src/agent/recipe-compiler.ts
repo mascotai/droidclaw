@@ -1,17 +1,17 @@
 /**
- * Compiles a successful AI agent session into a deterministic flow
- * that can be replayed by the flow-runner without any LLM calls.
+ * Compiles a successful goal run into a deterministic recipe
+ * that can be replayed by the recipe-runner without any LLM calls.
  *
  * The compiler filters out non-actionable steps, converts coordinate-based
  * taps into text-based targets, substitutes resolved variables back into
  * placeholders, and validates the result is stable enough to cache.
  */
 
-export type FlowStep = string | FlowStepObject;
+export type RecipeStep = string | RecipeStepObject;
 
-/** Object-form flow step. Simple steps have one key (e.g. {tap: "Log in"}).
+/** Object-form recipe step. Simple steps have one key (e.g. {tap: "Log in"}).
  *  Tap/longpress carry a stable resource ID fallback for resilient replay. */
-export interface FlowStepObject {
+export interface RecipeStepObject {
   [key: string]: string | number | [number, number] | undefined;
   /** Android resource ID of the element (e.g. "com.instagram.android:id/login_username").
    *  Most stable identifier — doesn't change between sessions. */
@@ -22,7 +22,7 @@ export interface FlowStepObject {
 }
 
 // ── Element matching utility ────────────────────────────────────────────
-// Pure function used by flow-runner during replay and available for testing.
+// Pure function used by recipe-runner during replay and available for testing.
 
 /** Minimal shape required by findElementByText */
 export interface TextMatchElement {
@@ -61,7 +61,7 @@ export function findElementById<T extends TextMatchElement>(elements: T[], id: s
   return elements.find((el) => el.id === id) ?? null;
 }
 
-/** Action types that are observation-only and should not appear in a replay flow. */
+/** Action types that are observation-only and should not appear in a replay recipe. */
 const SKIP_ACTIONS = new Set([
   "wait",
   "done",
@@ -74,19 +74,19 @@ const SKIP_ACTIONS = new Set([
 ]);
 
 /**
- * Compile an agent session's steps into a deterministic flow for the flow-runner.
+ * Compile a goal run's steps into a deterministic recipe for the recipe-runner.
  *
  * @param steps - Raw agent steps (action + result pairs from the agent_step table).
  * @param appPackage - Optional app package name; if provided, a `launch` step is prepended.
  * @param resolvedVariables - Optional map of variable name → resolved value.
  *   When a `type` action's text matches a resolved value, the compiled step
  *   uses the `{{variableName}}` placeholder instead of the literal value.
- * @returns An array of FlowStep objects ready for the flow-runner, or `null`
+ * @returns An array of RecipeStep objects ready for the recipe-runner, or `null`
  *   if the session is too short, too unstable, or has no reliable tap targets.
  */
-/** Result of compiling a session into a cacheable flow */
-export interface CompiledFlow {
-  steps: FlowStep[];
+/** Result of compiling a goal run into a cacheable recipe */
+export interface CompiledRecipe {
+  steps: RecipeStep[];
   /** Delay in ms to wait BEFORE executing each step (based on original session timing) */
   timeline: number[];
 }
@@ -104,7 +104,7 @@ const MIN_STEP_DELAY_MS = 800;
  */
 const MAX_STEP_DELAY_MS = 8_000;
 
-export function compileSessionToFlow(
+export function compileGoalRunToRecipe(
   steps: Array<{
     action: Record<string, unknown> | null;
     result: string | null;
@@ -112,14 +112,14 @@ export function compileSessionToFlow(
   }>,
   appPackage?: string,
   resolvedVariables?: Record<string, string>,
-): CompiledFlow | null {
-  const flow: FlowStep[] = [];
-  /** Timestamps of each compiled flow step (from the original session) */
+): CompiledRecipe | null {
+  const recipe: RecipeStep[] = [];
+  /** Timestamps of each compiled recipe step (from the original session) */
   const compiledTimestamps: (number | null)[] = [];
 
   // Prepend launch step if an app package is provided
   if (appPackage) {
-    flow.push({ launch: appPackage });
+    recipe.push({ launch: appPackage });
     compiledTimestamps.push(null); // no original timestamp for synthetic launch step
   }
 
@@ -149,19 +149,19 @@ export function compileSessionToFlow(
 
     const compiled = compileAction(actionType, action, i, steps, valueToPlaceholder);
     if (compiled !== null) {
-      flow.push(compiled);
+      recipe.push(compiled);
       compiledTimestamps.push(timestamp ? new Date(timestamp).getTime() : null);
     }
   }
 
-  // ── Validation: ensure the flow is worth caching ──
+  // ── Validation: ensure the recipe is worth caching ──
 
   // Count meaningful steps (exclude the prepended launch)
-  const meaningfulSteps = appPackage ? flow.length - 1 : flow.length;
+  const meaningfulSteps = appPackage ? recipe.length - 1 : recipe.length;
   if (meaningfulSteps < 2) return null;
 
   // Count scroll/swipe vs total
-  const scrollSwipeCount = flow.filter((s) => {
+  const scrollSwipeCount = recipe.filter((s) => {
     if (typeof s === "object") {
       const key = Object.keys(s)[0];
       return key === "scroll" || key === "swipe";
@@ -169,10 +169,10 @@ export function compileSessionToFlow(
     return false;
   }).length;
 
-  if (scrollSwipeCount > flow.length / 2) return null;
+  if (scrollSwipeCount > recipe.length / 2) return null;
 
   // Must have at least one text-based tap
-  const hasTapWithTarget = flow.some(
+  const hasTapWithTarget = recipe.some(
     (s) => typeof s === "object" && ("tap" in s || "longpress" in s),
   );
   if (!hasTapWithTarget) return null;
@@ -180,7 +180,7 @@ export function compileSessionToFlow(
   // ── Build timeline: delay in ms before each step ──
   const timeline = buildTimeline(compiledTimestamps);
 
-  return { steps: flow, timeline };
+  return { steps: recipe, timeline };
 }
 
 /**
@@ -220,9 +220,9 @@ function buildTimeline(timestamps: (number | null)[]): number[] {
 }
 
 /**
- * Compile a single action into a FlowStep.
+ * Compile a single action into a RecipeStep.
  *
- * @returns A FlowStep, or `null` if the action should be skipped.
+ * @returns A RecipeStep, or `null` if the action should be skipped.
  */
 function compileAction(
   actionType: string,
@@ -230,7 +230,7 @@ function compileAction(
   index: number,
   allSteps: Array<{ action: Record<string, unknown> | null; result: string | null }>,
   valueToPlaceholder: Map<string, string>,
-): FlowStep | null {
+): RecipeStep | null {
   switch (actionType) {
     // ── Tap ──
     case "tap": {
@@ -240,7 +240,7 @@ function compileAction(
       const resolved = action._resolved as { matchedId?: string; matchedCenter?: [number, number] } | undefined;
       const id = resolved?.matchedId;
       const coords = resolved?.matchedCenter;
-      const step: FlowStepObject = { tap: target };
+      const step: RecipeStepObject = { tap: target };
       if (id) step._id = id;
       if (coords) step._coords = coords;
       return step;
@@ -253,7 +253,7 @@ function compileAction(
       const resolved = action._resolved as { matchedId?: string; matchedCenter?: [number, number] } | undefined;
       const id = resolved?.matchedId;
       const coords = resolved?.matchedCenter;
-      const step: FlowStepObject = { longpress: target };
+      const step: RecipeStepObject = { longpress: target };
       if (id) step._id = id;
       if (coords) step._coords = coords;
       return step;
@@ -289,7 +289,7 @@ function compileAction(
     case "launch":
       return { launch: String(action.package ?? "") };
 
-    // ── find_and_tap: keep as its own step type so the flow runner can scroll to find it ──
+    // ── find_and_tap: keep as its own step type so the recipe-runner can scroll to find it ──
     case "find_and_tap": {
       const query = action.query as string | undefined;
       if (!query) return null;
@@ -372,7 +372,7 @@ export interface CacheableWorkflowStep {
 }
 
 /**
- * Determine if a workflow step is eligible for deterministic flow caching.
+ * Determine if a workflow step is eligible for deterministic recipe caching.
  *
  * Returns false for:
  * - Steps with `cache: false` (explicit opt-out)
@@ -383,15 +383,15 @@ export function isCacheable(step: CacheableWorkflowStep): boolean {
 }
 
 /**
- * Resolve `{{variable}}` placeholders in cached flow steps using the resolved values map.
+ * Resolve `{{variable}}` placeholders in cached recipe steps using the resolved values map.
  */
-export function resolveFlowVariables(
-  flowSteps: FlowStep[],
+export function resolveRecipeVariables(
+  recipeSteps: RecipeStep[],
   resolvedValues: Record<string, string>,
-): FlowStep[] {
-  if (Object.keys(resolvedValues).length === 0) return flowSteps;
+): RecipeStep[] {
+  if (Object.keys(resolvedValues).length === 0) return recipeSteps;
 
-  return flowSteps.map((step) => {
+  return recipeSteps.map((step) => {
     if (typeof step === "string") return step;
     if (typeof step !== "object" || step === null) return step;
 

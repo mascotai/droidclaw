@@ -28,11 +28,12 @@ import {
 import { formatAppHints } from "./hints.js";
 import { isSkillAction, executeSkill } from "./skills.js";
 import { createStuckDetector } from "./stuck.js";
-import { findElementByText } from "./flow-runner.js";
+import { findElementByText } from "./recipe-compiler.js";
 import { getScreenWithRetry } from "./screen-utils.js";
 import { db } from "../db.js";
-import { agentSession, agentStep, device as deviceTable } from "../schema.js";
+import { device as deviceTable } from "../schema.js";
 import { eq } from "drizzle-orm";
+import { createGoalRun, recordStep, completeGoalRun, updateStep as updateGoalRunStep } from "./goal-run-manager.js";
 import type { UIElement, ActionDecision } from "@droidclaw/shared";
 
 // ─── Structured Step Result ─────────────────────────────────────
@@ -327,19 +328,17 @@ export async function runAgentLoop(
     }
   }
 
-  // Persist session to DB
+  // Persist goal_run to DB
+  let goalRunId: string | undefined;
   if (persistentDeviceId) {
     try {
-      await db.insert(agentSession).values({
-        id: sessionId,
+      goalRunId = await createGoalRun({
         userId,
         deviceId: persistentDeviceId,
         goal: originalGoal ?? goal,
-        status: "running",
-        stepsUsed: 0,
       });
     } catch (err) {
-      console.error(`[Agent ${sessionId}] Failed to create DB session: ${err}`);
+      console.error(`[Agent ${sessionId}] Failed to create goal_run: ${err}`);
     }
   }
 
@@ -594,21 +593,24 @@ export async function runAgentLoop(
 
       // ── 8b. Persist step to DB ────────────────────────────────
       const stepId = crypto.randomUUID();
+      let goalRunStepId: string | undefined;
       if (persistentDeviceId) {
-        db.insert(agentStep)
-          .values({
-            id: stepId,
-            sessionId,
+        // Record step in goal_run tables
+        if (goalRunId) {
+          recordStep(goalRunId, {
             stepNumber: step + 1,
             screenHash,
             action: action as unknown as Record<string, unknown>,
             reasoning: action.reason ?? "",
             packageName: packageName ?? null,
+            activityName: activityName ?? null,
             durationMs: Date.now() - stepStartTime,
           })
-          .catch((err) =>
-            console.error(`[Agent ${sessionId}] Failed to save step ${step + 1}: ${err}`)
-          );
+            .then((id) => { goalRunStepId = id; })
+            .catch((err) =>
+              console.error(`[Agent ${sessionId}] Failed to save goal_run step ${step + 1}: ${err}`)
+            );
+        }
       }
 
       // ── 8c. Done check (after persist so the step is saved) ──
@@ -724,12 +726,13 @@ export async function runAgentLoop(
         // The DB insert at 8b fires before text resolution (9a), so we patch
         // the action column with _resolved data (contains matchedId for caching)
         if (persistentDeviceId && (action as any)._resolved) {
-          db.update(agentStep)
-            .set({ action: action as unknown as Record<string, unknown> })
-            .where(eq(agentStep.id, stepId))
-            .catch((err) =>
-              console.error(`[Agent ${sessionId}] Failed to update step ${step + 1} with _resolved: ${err}`)
-            );
+          // Update goal_run step with _resolved
+          if (goalRunStepId) {
+            updateGoalRunStep(goalRunStepId, { action: action as unknown as Record<string, unknown> })
+              .catch((err) =>
+                console.error(`[Agent ${sessionId}] Failed to update goal_run step ${step + 1} with _resolved: ${err}`)
+              );
+          }
         }
 
         // Append result to last history entry
@@ -740,8 +743,11 @@ export async function runAgentLoop(
         // Update step result in DB
         if (persistentDeviceId) {
           structuredResult!.durationMs = Date.now() - stepStartTime;
-          db.update(agentStep).set({ result: JSON.stringify(structuredResult), durationMs: Date.now() - stepStartTime }).where(eq(agentStep.id, stepId))
-            .catch(() => {});
+          // Update goal_run step result
+          if (goalRunStepId) {
+            updateGoalRunStep(goalRunStepId, { result: JSON.stringify(structuredResult), durationMs: Date.now() - stepStartTime })
+              .catch(() => {});
+          }
         }
       } catch (err) {
         lastActionFeedback = `${actionSig} -> FAILED: ${(err as Error).message}`;
@@ -749,8 +755,11 @@ export async function runAgentLoop(
         structuredResult.durationMs = Date.now() - stepStartTime;
         console.log(`[Agent ${sessionId}] Step ${step + 1} result: ${lastActionFeedback}`);
         if (persistentDeviceId) {
-          db.update(agentStep).set({ result: JSON.stringify(structuredResult), durationMs: Date.now() - stepStartTime }).where(eq(agentStep.id, stepId))
-            .catch(() => {});
+          // Update goal_run step result on error
+          if (goalRunStepId) {
+            updateGoalRunStep(goalRunStepId, { result: JSON.stringify(structuredResult), durationMs: Date.now() - stepStartTime })
+              .catch(() => {});
+          }
         }
         console.error(
           `[Agent ${sessionId}] Command error at step ${step + 1}: ${(err as Error).message}`
@@ -767,18 +776,17 @@ export async function runAgentLoop(
 
   const result: AgentResult = { success, stepsUsed, sessionId, observations };
 
-  // Update session in DB
+  // Update goal_run in DB
   if (persistentDeviceId) {
-    db.update(agentSession)
-      .set({
+    if (goalRunId) {
+      completeGoalRun(goalRunId, {
         status: success ? "completed" : "failed",
+        resolvedBy: "discovery",
         stepsUsed,
-        completedAt: new Date(),
-      })
-      .where(eq(agentSession.id, sessionId))
-      .catch((err) =>
-        console.error(`[Agent ${sessionId}] Failed to update DB session: ${err}`)
+      }).catch((err) =>
+        console.error(`[Agent ${sessionId}] Failed to complete goal_run: ${err}`)
       );
+    }
   }
 
   sessions.notifyDashboard(userId, {

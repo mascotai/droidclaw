@@ -46,7 +46,7 @@ export interface StepResult {
 	success: boolean;
 	stepsUsed?: number;
 	sessionId?: string;
-	resolvedBy?: string;
+	resolvedBy?: "agent" | "cached_flow" | "discovery" | "recipe" | "parser" | "classifier";
 	message?: string;
 	error?: string;
 	evalPassed?: boolean | null;
@@ -119,7 +119,7 @@ export interface LiveWorkflowRun {
 	stepResults: Array<{
 		success: boolean;
 		stepsUsed?: number;
-		resolvedBy?: string;
+		resolvedBy?: "agent" | "cached_flow" | "discovery" | "recipe" | "parser" | "classifier";
 		error?: string;
 		message?: string;
 	} | null>;
@@ -166,4 +166,62 @@ export interface QueueItem {
 export interface QueueState {
 	running: WorkflowRun | null;
 	queued: QueueItem[];
+}
+
+// ── Goals-First Redesign Types ──
+
+/** Saved goal template */
+export interface Goal {
+	id: string;
+	name: string;
+	app?: string;
+	maxSteps?: number;
+	retries?: number;
+	cache?: boolean;
+	eval?: Record<string, unknown>;
+	createdAt: string;
+	updatedAt: string;
+}
+
+/** Saved workflow template */
+export interface Workflow {
+	id: string;
+	name: string;
+	steps: WorkflowStepConfig[];
+	variables?: Record<string, string>;
+	createdAt: string;
+	updatedAt: string;
+}
+
+/** Goal run execution record */
+export interface GoalRun {
+	id: string;
+	goalId?: string;
+	workflowRunId?: string;
+	stepIndex?: number;
+	goal: string;
+	app?: string;
+	status: "running" | "completed" | "failed" | "skipped";
+	resolvedBy?: "discovery" | "recipe" | "parser" | "classifier";
+	recipeId?: string;
+	stepsUsed: number;
+	durationMs?: number;
+	evalPassed?: boolean;
+	evalStateValues?: Record<string, unknown>;
+	evalMismatches?: Array<{ key: string; expected: unknown; actual: unknown }>;
+	startedAt: string;
+	completedAt?: string;
+}
+
+/** Recipe entry (compiled replay) */
+export interface RecipeEntry {
+	id: string;
+	goalKey: string;
+	appPackage?: string;
+	stepCount: number;
+	active: boolean;
+	successCount: number;
+	failCount: number;
+	createdAt: string;
+	lastUsedAt?: string;
 }

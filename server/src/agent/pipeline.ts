@@ -14,14 +14,13 @@ import { sessions } from "../ws/sessions.js";
 import { db } from "../db.js";
 import {
   device as deviceTable,
-  agentSession,
-  agentStep,
 } from "../schema.js";
 import { eq } from "drizzle-orm";
 import { parseGoal, buildCapabilities } from "./parser.js";
 import { classifyGoal } from "./classifier.js";
 import { runAgentLoop, type AgentLoopOptions, type AgentResult, type ScreenObservation } from "./loop.js";
 import type { LLMConfig } from "./llm.js";
+import { createGoalRun, recordStep, completeGoalRun } from "./goal-run-manager.js";
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -41,7 +40,7 @@ export interface PipelineResultFinal {
   success: boolean;
   stepsUsed: number;
   sessionId: string;
-  resolvedBy: "parser" | "classifier" | "ui_agent";
+  resolvedBy: "parser" | "classifier" | "discovery";
   observations: ScreenObservation[];
 }
 
@@ -117,27 +116,30 @@ async function persistQuickSession(
   action: Record<string, unknown>
 ): Promise<string> {
   const sessionId = crypto.randomUUID();
+
+  // Create goal_run + step in new tables
   try {
-    await db.insert(agentSession).values({
-      id: sessionId,
+    const goalRunId = await createGoalRun({
       userId,
       deviceId: persistentDeviceId,
       goal,
-      status: "completed",
-      stepsUsed: 1,
-      completedAt: new Date(),
+      app: undefined,
     });
-    await db.insert(agentStep).values({
-      id: crypto.randomUUID(),
-      sessionId,
+    await recordStep(goalRunId, {
       stepNumber: 1,
       action,
       reasoning: `${stage}: direct action`,
       result: "OK",
     });
+    await completeGoalRun(goalRunId, {
+      status: "completed",
+      resolvedBy: stage === "parser" ? "parser" : "classifier",
+      stepsUsed: 1,
+    });
   } catch (err) {
-    console.error(`[Pipeline] Failed to persist session: ${err}`);
+    console.error(`[Pipeline] Failed to create goal_run for quick session: ${err}`);
   }
+
   return sessionId;
 }
 
@@ -235,24 +237,24 @@ export async function runPipeline(
         onStep,
         onComplete,
       });
-      return { ...loopResult, resolvedBy: "ui_agent" as const };
+      return { ...loopResult, resolvedBy: "discovery" as const };
     } else {
       // Persist the scheduled session in DB
       const sessionId = crypto.randomUUID();
       const scheduledFor = new Date(Date.now() + classResult.delay * 1000);
 
       if (persistentDeviceId) {
-        await db.insert(agentSession).values({
-          id: sessionId,
-          userId,
-          deviceId: persistentDeviceId,
-          goal: classResult.goal,
-          status: "scheduled",
-          stepsUsed: 0,
-          qstashMessageId: null,
-          scheduledFor,
-          scheduledDelay: classResult.delay,
-        });
+        // Create goal_run for new tables
+        try {
+          await createGoalRun({
+            userId,
+            deviceId: persistentDeviceId,
+            goal: classResult.goal,
+            scheduledFor,
+          });
+        } catch (err) {
+          console.error(`[Pipeline] Failed to create goal_run for scheduled goal: ${err}`);
+        }
       }
 
       // Publish to QStash with delay
@@ -267,13 +269,7 @@ export async function runPipeline(
         delay: classResult.delay,
       });
 
-      // Store the QStash message ID for cancellation
-      if (persistentDeviceId && result.messageId) {
-        await db
-          .update(agentSession)
-          .set({ qstashMessageId: result.messageId })
-          .where(eq(agentSession.id, sessionId));
-      }
+      // Store the QStash message ID for cancellation (future: store on goal_run)
 
       // Notify dashboard (web)
       sessions.notifyDashboard(userId, {
@@ -383,6 +379,6 @@ export async function runPipeline(
 
   return {
     ...loopResult,
-    resolvedBy: "ui_agent" as const,
+    resolvedBy: "discovery" as const,
   };
 }

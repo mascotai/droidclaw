@@ -62,7 +62,131 @@ export async function ensureSchema() {
     await client`ALTER TABLE "cached_flow" ADD COLUMN IF NOT EXISTS "timeline" jsonb`;
     await client`ALTER TABLE "cached_flow" ADD COLUMN IF NOT EXISTS "active" boolean NOT NULL DEFAULT true`;
 
-    console.log("[db] Schema ensured (cached_flow, eval_run, agent_step.duration_ms)");
+    // ══════════════════════════════════════════════════════════════════
+    // ── Goals-First Redesign — New Tables
+    // ══════════════════════════════════════════════════════════════════
+
+    // ── goal (saved template) ──
+    await client`
+      CREATE TABLE IF NOT EXISTS "goal" (
+        "id" text PRIMARY KEY NOT NULL,
+        "user_id" text NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
+        "name" text NOT NULL,
+        "app" text,
+        "max_steps" integer DEFAULT 15,
+        "retries" integer DEFAULT 0,
+        "cache" boolean DEFAULT true,
+        "eval" jsonb,
+        "created_at" timestamp DEFAULT now() NOT NULL,
+        "updated_at" timestamp DEFAULT now() NOT NULL
+      )
+    `;
+
+    // ── workflow (saved template) ──
+    await client`
+      CREATE TABLE IF NOT EXISTS "workflow" (
+        "id" text PRIMARY KEY NOT NULL,
+        "user_id" text NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
+        "name" text NOT NULL,
+        "steps" jsonb NOT NULL,
+        "variables" jsonb,
+        "created_at" timestamp DEFAULT now() NOT NULL,
+        "updated_at" timestamp DEFAULT now() NOT NULL
+      )
+    `;
+
+    // ── recipe (compiled replay — replaces cached_flow) ──
+    await client`
+      CREATE TABLE IF NOT EXISTS "recipe" (
+        "id" text PRIMARY KEY NOT NULL,
+        "user_id" text NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
+        "device_id" text NOT NULL REFERENCES "device"("id") ON DELETE CASCADE,
+        "goal_key" text NOT NULL,
+        "app_package" text,
+        "steps" jsonb NOT NULL,
+        "timeline" jsonb,
+        "active" boolean NOT NULL DEFAULT true,
+        "success_count" integer DEFAULT 0,
+        "fail_count" integer DEFAULT 0,
+        "source_goal_run_id" text,
+        "created_at" timestamp DEFAULT now() NOT NULL,
+        "last_used_at" timestamp
+      )
+    `;
+
+    await client`
+      CREATE INDEX IF NOT EXISTS "recipe_lookup_idx"
+        ON "recipe" ("user_id", "device_id", "goal_key", "app_package")
+    `;
+
+    // ── goal_run (execution of a goal) ──
+    await client`
+      CREATE TABLE IF NOT EXISTS "goal_run" (
+        "id" text PRIMARY KEY NOT NULL,
+        "user_id" text NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
+        "device_id" text NOT NULL REFERENCES "device"("id") ON DELETE CASCADE,
+        "goal_id" text REFERENCES "goal"("id") ON DELETE SET NULL,
+        "workflow_run_id" text,
+        "step_index" integer,
+        "goal" text NOT NULL,
+        "app" text,
+        "max_steps" integer DEFAULT 15,
+        "status" text NOT NULL DEFAULT 'running',
+        "resolved_by" text,
+        "recipe_id" text REFERENCES "recipe"("id") ON DELETE SET NULL,
+        "steps_used" integer DEFAULT 0,
+        "duration_ms" integer,
+        "eval_definition" jsonb,
+        "eval_passed" boolean,
+        "eval_state_values" jsonb,
+        "eval_mismatches" jsonb,
+        "scheduled_for" timestamp,
+        "started_at" timestamp DEFAULT now() NOT NULL,
+        "completed_at" timestamp
+      )
+    `;
+
+    // ── step (single agent action within a goal run) ──
+    await client`
+      CREATE TABLE IF NOT EXISTS "step" (
+        "id" text PRIMARY KEY NOT NULL,
+        "goal_run_id" text NOT NULL REFERENCES "goal_run"("id") ON DELETE CASCADE,
+        "step_number" integer NOT NULL,
+        "screen_hash" text,
+        "action" jsonb,
+        "reasoning" text,
+        "result" text,
+        "package_name" text,
+        "activity_name" text,
+        "elements" jsonb,
+        "duration_ms" integer,
+        "timestamp" timestamp DEFAULT now() NOT NULL
+      )
+    `;
+
+    // ── eval_batch (batch eval run — replaces eval_run) ──
+    await client`
+      CREATE TABLE IF NOT EXISTS "eval_batch" (
+        "id" text PRIMARY KEY NOT NULL,
+        "user_id" text NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
+        "device_id" text NOT NULL REFERENCES "device"("id") ON DELETE CASCADE,
+        "name" text,
+        "status" text NOT NULL DEFAULT 'running',
+        "runs_per_workflow" integer NOT NULL,
+        "workflow_defs" jsonb NOT NULL,
+        "results" jsonb,
+        "started_at" timestamp DEFAULT now() NOT NULL,
+        "completed_at" timestamp
+      )
+    `;
+
+    // ── workflow_run new columns ──
+    await client`ALTER TABLE "workflow_run" ADD COLUMN IF NOT EXISTS "workflow_id" text`;
+    await client`ALTER TABLE "workflow_run" ADD COLUMN IF NOT EXISTS "variables" jsonb`;
+    await client`ALTER TABLE "workflow_run" ADD COLUMN IF NOT EXISTS "duration_ms" integer`;
+    await client`ALTER TABLE "workflow_run" ADD COLUMN IF NOT EXISTS "eval_batch_id" text`;
+
+    console.log("[db] Schema ensured (cached_flow, eval_run, agent_step.duration_ms, goals-first redesign tables)");
   } catch (err) {
     console.warn("[db] ensureSchema warning:", (err as Error).message);
   }

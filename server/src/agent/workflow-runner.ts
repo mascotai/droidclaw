@@ -1,13 +1,14 @@
 import { sessions } from "../ws/sessions.js";
 import { db } from "../db.js";
-import { workflowRun, cachedFlow, agentStep } from "../schema.js";
+import { workflowRun, recipe, step as stepTable } from "../schema.js";
 import { eq, and, asc, sql } from "drizzle-orm";
 import { runPipeline } from "./pipeline.js";
-import { executeFlowStepWs } from "./flow-runner.js";
-import { compileSessionToFlow, normalizeGoalKey, isCacheable, resolveFlowVariables } from "./session-to-flow.js";
-import type { FlowStep } from "./session-to-flow.js";
+import { executeRecipeStep } from "./recipe-runner.js";
+import { compileGoalRunToRecipe, normalizeGoalKey, isCacheable, resolveRecipeVariables } from "./recipe-compiler.js";
+import type { RecipeStep } from "./recipe-compiler.js";
 import { activeSessions } from "./active-sessions.js";
 import { evaluateStep, type EvalJudgment, type StateDefinition, type AgentStepRecord } from "./eval-judge.js";
+import { createGoalRun, completeGoalRun } from "./goal-run-manager.js";
 import type { LLMConfig } from "./llm.js";
 import type { ScreenObservation } from "./loop.js";
 
@@ -71,19 +72,19 @@ function buildGoal(step: WorkflowStep): string {
  * for the LLM to "think" between actions, giving the UI time to settle.
  *
  * @param deviceId - The device to execute on
- * @param flowSteps - Deterministic flow steps
+ * @param recipeSteps - Deterministic recipe steps
  * @param timeline - Delay in ms before each step (from original session timing)
  * @param appId - Optional app identifier
  * @returns `true` if all steps succeeded, `false` if any step failed.
  */
 async function replayCachedFlow(
   deviceId: string,
-  flowSteps: FlowStep[],
+  recipeSteps: RecipeStep[],
   timeline?: number[],
   appId?: string,
 ): Promise<boolean> {
-  for (let i = 0; i < flowSteps.length; i++) {
-    const step = flowSteps[i];
+  for (let i = 0; i < recipeSteps.length; i++) {
+    const step = recipeSteps[i];
     try {
       // Wait according to the recorded timeline before executing this step
       const delay = timeline?.[i] ?? (i === 0 ? 0 : 2000);
@@ -93,7 +94,7 @@ async function replayCachedFlow(
       }
 
       const stepLabel = typeof step === "string" ? step : JSON.stringify(step);
-      const result = await executeFlowStepWs(deviceId, step, appId);
+      const result = await executeRecipeStep(deviceId, step, appId);
       wfLog(`[Workflow] Cached flow step ${i}: ${stepLabel} → ${result.message}`);
       if (!result.success) {
         // For tap/longpress/find_and_tap that can't find the element, retry a few times
@@ -104,7 +105,7 @@ async function replayCachedFlow(
           for (let retry = 0; retry < 5; retry++) {
             wfLog(`[Workflow] Cached flow step ${i}: element not found, waiting 3s and retrying (${retry + 1}/5)`);
             await new Promise((r) => setTimeout(r, 3000));
-            retryResult = await executeFlowStepWs(deviceId, step, appId);
+            retryResult = await executeRecipeStep(deviceId, step, appId);
             wfLog(`[Workflow] Cached flow step ${i} retry ${retry + 1}: ${retryResult.message}`);
             if (retryResult.success) break;
           }
@@ -303,6 +304,29 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
           const skipReason = reason ?? "when condition not met";
           wfLog(`[Workflow ${runId}] Step ${i} skipped: ${skipReason}`);
 
+          // Create + complete a goal_run for the skipped step
+          if (persistentDeviceId) {
+            try {
+              const skipGoalRunId = await createGoalRun({
+                userId,
+                deviceId: persistentDeviceId,
+                goal: step.goal,
+                app: step.app,
+                workflowRunId: runId,
+                stepIndex: i,
+                maxSteps: step.maxSteps,
+                evalDefinition: (step.eval as unknown as Record<string, unknown> | undefined) ?? null,
+              });
+              await completeGoalRun(skipGoalRunId, {
+                status: "skipped",
+                resolvedBy: "discovery",
+                stepsUsed: 0,
+              });
+            } catch (err) {
+              wfLog(`[Workflow ${runId}] Step ${i}: failed to create/complete skipped goal_run: ${err}`);
+            }
+          }
+
           stepResults.push({
             goal: step.goal,
             success: true,
@@ -351,6 +375,8 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
 
       const maxRetries = step.retries ?? 0;
       let stepSuccess = false;
+      const stepCacheable = isCacheable(step);
+      let usedRecipeId: string | undefined;
 
       for (let attempt = 0; attempt <= maxRetries; attempt++) {
         signal = getCurrentSignal(trackingKey, options.signal);
@@ -399,8 +425,27 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
           }
         }
 
+        // ── Create goal_run row for this step ──
+        let currentGoalRunId: string | undefined;
+        if (persistentDeviceId) {
+          try {
+            currentGoalRunId = await createGoalRun({
+              userId,
+              deviceId: persistentDeviceId,
+              goal: step.goal,
+              app: step.app,
+              workflowRunId: runId,
+              stepIndex: i,
+              maxSteps: step.maxSteps,
+              evalDefinition: (step.eval as unknown as Record<string, unknown> | undefined) ?? null,
+            });
+          } catch (err) {
+            wfLog(`[Workflow ${runId}] Step ${i}: failed to create goal_run: ${err}`);
+          }
+        }
+
         // ── Cache lookup: try to replay a cached deterministic flow ──
-        const stepCacheable = isCacheable(step);
+        // Check both recipe table (new) and cachedFlow table (legacy) for cached replays
         const pdevId = persistentDeviceId ?? "UNDEFINED";
         wfLog(`[Workflow ${runId}] Step ${i}: cache lookup check: stepCacheable=${stepCacheable}, persistentDeviceId=${pdevId}, userId=${userId}`);
         if (stepCacheable && persistentDeviceId) {
@@ -408,49 +453,67 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
           const appPackage = step.app ?? null;
 
           try {
-            const cached = await db
+            // Look up recipe from recipe table
+            let cachedEntry: { id: string; steps: unknown; timeline: unknown; successCount: number | null; failCount: number | null } | null = null;
+
+            const recipes = await db
               .select()
-              .from(cachedFlow)
+              .from(recipe)
               .where(
                 and(
-                  eq(cachedFlow.userId, userId),
-                  eq(cachedFlow.deviceId, persistentDeviceId),
-                  eq(cachedFlow.goalKey, goalKey),
-                  appPackage ? eq(cachedFlow.appPackage, appPackage) : sql`${cachedFlow.appPackage} IS NULL`,
-                  eq(cachedFlow.active, true),
+                  eq(recipe.userId, userId),
+                  eq(recipe.deviceId, persistentDeviceId),
+                  eq(recipe.goalKey, goalKey),
+                  appPackage ? eq(recipe.appPackage, appPackage) : sql`${recipe.appPackage} IS NULL`,
+                  eq(recipe.active, true),
                 )
               )
               .limit(1);
 
-            if (cached.length > 0) {
-              const cachedEntry = cached[0];
-              const rawFlowSteps = cachedEntry.steps as FlowStep[];
+            if (recipes.length > 0) {
+              cachedEntry = recipes[0];
+            }
+
+            if (cachedEntry) {
+              const rawRecipeSteps = cachedEntry.steps as RecipeStep[];
               const cachedTimeline = cachedEntry.timeline as number[] | null;
-              const resolvedFlowSteps = resolveFlowVariables(rawFlowSteps, resolvedValues ?? {});
+              const resolvedRecipeSteps = resolveRecipeVariables(rawRecipeSteps, resolvedValues ?? {});
 
-              wfLog(`[Workflow ${runId}] Step ${i}: replaying cached flow (${resolvedFlowSteps.length} steps, timeline=${cachedTimeline ? "yes" : "no"}, success=${cachedEntry.successCount}, fail=${cachedEntry.failCount})`);
+              wfLog(`[Workflow ${runId}] Step ${i}: replaying recipe (${resolvedRecipeSteps.length} steps, timeline=${cachedTimeline ? "yes" : "no"}, success=${cachedEntry.successCount}, fail=${cachedEntry.failCount})`);
 
-              const replayOk = await replayCachedFlow(deviceId, resolvedFlowSteps, cachedTimeline ?? undefined, step.app);
+              const replayOk = await replayCachedFlow(deviceId, resolvedRecipeSteps, cachedTimeline ?? undefined, step.app);
               if (replayOk) {
                 // Cache hit success — update stats (reset failCount on success)
                 await db
-                  .update(cachedFlow)
+                  .update(recipe)
                   .set({
-                    successCount: sql`${cachedFlow.successCount} + 1`,
+                    successCount: sql`${recipe.successCount} + 1`,
                     failCount: 0,
                     lastUsedAt: new Date(),
-                  })
-                  .where(eq(cachedFlow.id, cachedEntry.id));
+                  } as any)
+                  .where(eq(recipe.id, cachedEntry.id));
 
+                usedRecipeId = cachedEntry.id;
                 stepResults.push({
                   goal: step.goal,
                   success: true,
-                  stepsUsed: resolvedFlowSteps.length,
-                  resolvedBy: "cached_flow",
+                  stepsUsed: resolvedRecipeSteps.length,
+                  resolvedBy: "recipe",
                   cachedFlowId: cachedEntry.id,
                 });
                 stepSuccess = true;
-                wfLog(`[Workflow ${runId}] Step ${i}: cached flow replay SUCCESS`);
+                wfLog(`[Workflow ${runId}] Step ${i}: recipe replay SUCCESS`);
+
+                // Complete goal_run for cache hit
+                if (currentGoalRunId) {
+                  completeGoalRun(currentGoalRunId, {
+                    status: "completed",
+                    resolvedBy: "recipe",
+                    stepsUsed: resolvedRecipeSteps.length,
+                    recipeId: usedRecipeId,
+                  }).catch(err => wfLog(`[Workflow ${runId}] Step ${i}: failed to complete goal_run: ${err}`));
+                }
+
                 break; // Success — move to next step
               } else {
                 // Cache replay failed — increment failCount, deactivate after 3 consecutive failures
@@ -458,17 +521,17 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
                 const MAX_CONSECUTIVE_FAILS = 3;
 
                 if (newFailCount >= MAX_CONSECUTIVE_FAILS) {
-                  wfLog(`[Workflow ${runId}] Step ${i}: cached flow replay FAILED (${newFailCount}/${MAX_CONSECUTIVE_FAILS} consecutive), deactivating stale cache`);
+                  wfLog(`[Workflow ${runId}] Step ${i}: recipe replay FAILED (${newFailCount}/${MAX_CONSECUTIVE_FAILS} consecutive), deactivating stale cache`);
                   await db
-                    .update(cachedFlow)
-                    .set({ failCount: newFailCount, active: false })
-                    .where(eq(cachedFlow.id, cachedEntry.id));
+                    .update(recipe)
+                    .set({ failCount: newFailCount, active: false } as any)
+                    .where(eq(recipe.id, cachedEntry.id));
                 } else {
-                  wfLog(`[Workflow ${runId}] Step ${i}: cached flow replay FAILED (${newFailCount}/${MAX_CONSECUTIVE_FAILS} consecutive), keeping cache, falling through to AI`);
+                  wfLog(`[Workflow ${runId}] Step ${i}: recipe replay FAILED (${newFailCount}/${MAX_CONSECUTIVE_FAILS} consecutive), keeping cache, falling through to AI`);
                   await db
-                    .update(cachedFlow)
-                    .set({ failCount: newFailCount })
-                    .where(eq(cachedFlow.id, cachedEntry.id));
+                    .update(recipe)
+                    .set({ failCount: newFailCount } as any)
+                    .where(eq(recipe.id, cachedEntry.id));
                 }
 
                 // Re-launch app since cached flow may have left UI in a bad state
@@ -511,14 +574,14 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
 
           if (step.eval && step.eval.states && Object.keys(step.eval.states).length > 0) {
             try {
-              // Fetch agent step records for this session's transcript
-              const agentSteps = await db
+              // Fetch step records from the new step table for this goal run's transcript
+              const goalRunSteps = currentGoalRunId ? await db
                 .select()
-                .from(agentStep)
-                .where(eq(agentStep.sessionId, result.sessionId))
-                .orderBy(asc(agentStep.stepNumber));
+                .from(stepTable)
+                .where(eq(stepTable.goalRunId, currentGoalRunId))
+                .orderBy(asc(stepTable.stepNumber)) : [];
 
-              const transcript: AgentStepRecord[] = agentSteps.map((s) => ({
+              const transcript: AgentStepRecord[] = goalRunSteps.map((s) => ({
                 stepNumber: s.stepNumber,
                 action: s.action as Record<string, unknown> | null,
                 reasoning: s.reasoning,
@@ -548,6 +611,19 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
             stepResults.push({ goal: step.goal, success: true, stepsUsed: result.stepsUsed, sessionId: result.sessionId, resolvedBy: result.resolvedBy, observations: result.observations, evalJudgment, stepId: step.id });
             stepSuccess = true;
 
+            // Complete goal_run for pipeline success
+            if (currentGoalRunId) {
+              completeGoalRun(currentGoalRunId, {
+                status: "completed",
+                resolvedBy: "discovery",
+                stepsUsed: result.stepsUsed,
+                recipeId: usedRecipeId,
+                evalPassed: evalJudgment?.success,
+                evalStateValues: evalJudgment?.stateValues,
+                evalMismatches: evalJudgment?.mismatches,
+              }).catch(err => wfLog(`[Workflow ${runId}] Step ${i}: failed to complete goal_run: ${err}`));
+            }
+
             // ── Populate evalStateMap for `when` condition resolution ──
             if (step.id && evalJudgment?.stateValues) {
               evalStateMap.set(step.id, evalJudgment.stateValues);
@@ -555,46 +631,51 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
 
             // ── Cache save: compile the successful AI session into a deterministic flow ──
             wfLog(`[Workflow ${runId}] Step ${i}: cache save check: stepCacheable=${stepCacheable}, persistentDeviceId=${persistentDeviceId ?? "UNDEFINED"}, sessionId=${result.sessionId ?? "UNDEFINED"}`);
-            if (stepCacheable && persistentDeviceId && result.sessionId) {
+            if (stepCacheable && persistentDeviceId && currentGoalRunId) {
               try {
                 const sessionSteps = await db
-                  .select({ action: agentStep.action, result: agentStep.result, timestamp: agentStep.timestamp })
-                  .from(agentStep)
-                  .where(eq(agentStep.sessionId, result.sessionId))
-                  .orderBy(agentStep.stepNumber);
+                  .select({ action: stepTable.action, result: stepTable.result, timestamp: stepTable.timestamp })
+                  .from(stepTable)
+                  .where(eq(stepTable.goalRunId, currentGoalRunId))
+                  .orderBy(stepTable.stepNumber);
 
-                const compiled = compileSessionToFlow(
+                const compiled = compileGoalRunToRecipe(
                   sessionSteps as Array<{ action: Record<string, unknown> | null; result: string | null; timestamp?: Date | null }>,
                   step.app,
                   resolvedValues,
                 );
 
-                wfLog(`[Workflow ${runId}] Step ${i}: compileSessionToFlow returned ${compiled ? compiled.steps.length + " steps" : "NULL"} (from ${sessionSteps.length} raw steps)`);
+                wfLog(`[Workflow ${runId}] Step ${i}: compileGoalRunToRecipe returned ${compiled ? compiled.steps.length + " steps" : "NULL"} (from ${sessionSteps.length} raw steps)`);
 
                 if (compiled) {
                   const goalKey = normalizeGoalKey(step._goalTemplate ?? step.goal);
-                  // Deactivate any existing cache entries for this goal (keep for history, mark inactive)
-                  await db.update(cachedFlow).set({ active: false }).where(
+                  // Deactivate any existing recipes for this goal (keep for history, mark inactive)
+                  await db.update(recipe).set({ active: false }).where(
                     and(
-                      eq(cachedFlow.userId, userId),
-                      eq(cachedFlow.deviceId, persistentDeviceId),
-                      eq(cachedFlow.goalKey, goalKey),
-                      step.app ? eq(cachedFlow.appPackage, step.app) : sql`${cachedFlow.appPackage} IS NULL`,
+                      eq(recipe.userId, userId),
+                      eq(recipe.deviceId, persistentDeviceId),
+                      eq(recipe.goalKey, goalKey),
+                      step.app ? eq(recipe.appPackage, step.app) : sql`${recipe.appPackage} IS NULL`,
                     )
                   );
-                  await db.insert(cachedFlow).values({
-                    id: crypto.randomUUID(),
+
+                  // Insert new recipe
+                  const newRecipeId = crypto.randomUUID();
+                  await db.insert(recipe).values({
+                    id: newRecipeId,
                     userId,
                     deviceId: persistentDeviceId,
                     goalKey,
                     appPackage: step.app ?? null,
                     steps: compiled.steps as any,
                     timeline: compiled.timeline as any,
-                    sourceSessionId: result.sessionId,
+                    sourceGoalRunId: currentGoalRunId ?? null,
                   });
-                  wfLog(`[Workflow ${runId}] Step ${i}: compiled and cached deterministic flow (${compiled.steps.length} steps, timeline: [${compiled.timeline.join(", ")}]ms)`);
+                  usedRecipeId = newRecipeId;
 
-                  // Notify dashboard that a new cached flow was compiled
+                  wfLog(`[Workflow ${runId}] Step ${i}: compiled and cached deterministic recipe (${compiled.steps.length} steps, timeline: [${compiled.timeline.join(", ")}]ms)`);
+
+                  // Notify dashboard that a new recipe was compiled
                   sessions.notifyDashboard(userId, {
                     type: "cached_flow_compiled",
                     runId,
@@ -627,6 +708,19 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
           } else {
             // All retries exhausted
             stepResults.push({ goal: step.goal, success: false, stepsUsed: result.stepsUsed, sessionId: result.sessionId, resolvedBy: result.resolvedBy, observations: result.observations, evalJudgment });
+
+            // Complete goal_run for pipeline failure
+            if (currentGoalRunId) {
+              completeGoalRun(currentGoalRunId, {
+                status: "failed",
+                resolvedBy: "discovery",
+                stepsUsed: result.stepsUsed,
+                recipeId: usedRecipeId,
+                evalPassed: evalJudgment?.success,
+                evalStateValues: evalJudgment?.stateValues,
+                evalMismatches: evalJudgment?.mismatches,
+              }).catch(err => wfLog(`[Workflow ${runId}] Step ${i}: failed to complete goal_run: ${err}`));
+            }
           }
         } catch (err) {
           wfLog(`[Workflow ${runId}] Step ${i} attempt ${attempt}: pipeline THREW: ${err}`);
@@ -641,6 +735,15 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
             } as any);
           } else {
             stepResults.push({ goal: step.goal, success: false, stepsUsed: 0, error: String(err) });
+
+            // Complete goal_run for pipeline error
+            if (currentGoalRunId) {
+              completeGoalRun(currentGoalRunId, {
+                status: "failed",
+                resolvedBy: "discovery",
+                stepsUsed: 0,
+              }).catch(err2 => wfLog(`[Workflow ${runId}] Step ${i}: failed to complete goal_run: ${err2}`));
+            }
           }
         }
       }

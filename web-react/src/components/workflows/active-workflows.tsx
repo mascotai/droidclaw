@@ -57,7 +57,7 @@ export function ActiveWorkflows({ flows, loading, runningFlowId = null, onRun, o
 				<CardHeader className="pb-2">
 					<div className="flex items-center gap-2">
 						<Zap className="h-4 w-4 text-cyan-500" />
-						<CardTitle className="text-sm font-medium text-stone-700">Active Workflows</CardTitle>
+						<CardTitle className="text-sm font-medium text-stone-700">Recipes</CardTitle>
 						{flows.length > 0 ? (
 							<Badge variant="outline" className="text-xs">{flows.length}</Badge>
 						) : null}
@@ -77,8 +77,8 @@ export function ActiveWorkflows({ flows, loading, runningFlowId = null, onRun, o
 						<div className="rounded-xl border border-dashed border-stone-300 bg-white px-6 py-8 text-center">
 							<Zap className="mx-auto mb-2 h-8 w-8 text-stone-300" />
 							<p className="text-xs text-stone-400">
-								Run workflows to discover new automations.<br />
-								Successful tasks get saved here for instant replay.
+								Run workflows to build new recipes.<br />
+								Successful goals get saved here for instant replay.
 							</p>
 						</div>
 					) : (
@@ -149,7 +149,7 @@ export function ActiveWorkflows({ flows, loading, runningFlowId = null, onRun, o
 													variant="ghost"
 													size="icon"
 													onClick={() => confirmDelete(flow.id)}
-													title="Delete cached flow"
+													title="Delete recipe"
 													className="h-7 w-7 text-stone-300 hover:text-red-500 sm:opacity-0 sm:group-hover:opacity-100"
 												>
 													<Trash2 className="h-3.5 w-3.5" />
@@ -167,8 +167,8 @@ export function ActiveWorkflows({ flows, loading, runningFlowId = null, onRun, o
 			<ConfirmDialog
 				open={deleteConfirmOpen}
 				onOpenChange={setDeleteConfirmOpen}
-				title="Delete cached flow?"
-				description="This will remove the cached flow. The next run of this goal will use AI discovery instead of instant replay."
+				title="Delete recipe?"
+				description="This will remove the recipe. The next run of this goal will use AI discovery instead of instant replay."
 				confirmLabel="Delete"
 				onConfirm={handleDeleteConfirm}
 				onCancel={() => setDeleteFlowId(null)}
