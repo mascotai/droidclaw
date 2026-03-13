@@ -3,7 +3,7 @@
  * All requests go through /api/* which the proxy forwards to the Hono backend.
  */
 
-import type { Goal, Workflow, GoalRun, RecipeEntry } from '../types/devices';
+import type { Goal, Workflow, WorkflowStepConfig, RecipeEntry } from '../types/devices';
 
 class ApiError extends Error {
 	status: number;
@@ -314,7 +314,7 @@ export const api = {
 
 	// ── Workflows CRUD ── (under /v2/workflows via proxy /api/workflows)
 	listWorkflowTemplates: () => request<Workflow[]>('/workflows'),
-	createWorkflowTemplate: (data: { name: string; steps: Record<string, unknown>[]; variables?: Record<string, string> }) =>
+	createWorkflowTemplate: (data: { name: string; steps: WorkflowStepConfig[]; variables?: Record<string, string> }) =>
 		request<Workflow>('/workflows', {
 			method: 'POST',
 			body: JSON.stringify(data),

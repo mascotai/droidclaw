@@ -63,7 +63,7 @@ function WorkflowsPage() {
 	});
 
 	const createWorkflow = useMutation({
-		mutationFn: (data: { name: string; steps: Record<string, unknown>[]; variables?: Record<string, string> }) =>
+		mutationFn: (data: { name: string; steps: WorkflowStepConfig[]; variables?: Record<string, string> }) =>
 			api.createWorkflowTemplate(data),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: ['workflowTemplates'] });
@@ -141,8 +141,8 @@ function WorkflowsPage() {
 		const validSteps = steps.filter((s) => s.goal.trim());
 		if (validSteps.length === 0) return;
 
-		const stepsPayload = validSteps.map((s) => {
-			const step: Record<string, unknown> = { goal: s.goal };
+		const stepsPayload: WorkflowStepConfig[] = validSteps.map((s) => {
+			const step: WorkflowStepConfig = { goal: s.goal };
 			if (s.app.trim()) step.app = s.app;
 			if (s.maxSteps !== 15) step.maxSteps = s.maxSteps;
 			if (s.retries > 0) step.retries = s.retries;
