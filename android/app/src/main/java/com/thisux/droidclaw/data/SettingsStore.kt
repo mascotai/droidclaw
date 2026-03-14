@@ -8,8 +8,10 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import org.json.JSONArray
+import java.util.UUID
 
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
@@ -18,9 +20,9 @@ object SettingsKeys {
     val SERVER_URL = stringPreferencesKey("server_url")
     val DEVICE_NAME = stringPreferencesKey("device_name")
     val AUTO_CONNECT = booleanPreferencesKey("auto_connect")
-    val HAS_ONBOARDED = booleanPreferencesKey("has_onboarded")
     val RECENT_GOALS = stringPreferencesKey("recent_goals")
-    val CONNECTION_MODE = stringPreferencesKey("connection_mode") // "cloud" or "selfhosted"
+    val DEVICE_FINGERPRINT = stringPreferencesKey("device_fingerprint")
+    val DEVICE_STATUS = stringPreferencesKey("device_status") // "pending" | "active" | "rejected"
 }
 
 class SettingsStore(private val context: Context) {
@@ -30,7 +32,7 @@ class SettingsStore(private val context: Context) {
     }
 
     val serverUrl: Flow<String> = context.dataStore.data.map { prefs ->
-        prefs[SettingsKeys.SERVER_URL] ?: "wss://tunnel.droidclaw.ai"
+        prefs[SettingsKeys.SERVER_URL] ?: ""
     }
 
     val deviceName: Flow<String> = context.dataStore.data.map { prefs ->
@@ -39,6 +41,14 @@ class SettingsStore(private val context: Context) {
 
     val autoConnect: Flow<Boolean> = context.dataStore.data.map { prefs ->
         prefs[SettingsKeys.AUTO_CONNECT] ?: false
+    }
+
+    val deviceFingerprint: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[SettingsKeys.DEVICE_FINGERPRINT] ?: ""
+    }
+
+    val deviceStatus: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[SettingsKeys.DEVICE_STATUS] ?: ""
     }
 
     suspend fun setApiKey(value: String) {
@@ -57,20 +67,23 @@ class SettingsStore(private val context: Context) {
         context.dataStore.edit { it[SettingsKeys.AUTO_CONNECT] = value }
     }
 
-    val connectionMode: Flow<String> = context.dataStore.data.map { prefs ->
-        prefs[SettingsKeys.CONNECTION_MODE] ?: "cloud"
+    suspend fun setDeviceStatus(value: String) {
+        context.dataStore.edit { it[SettingsKeys.DEVICE_STATUS] = value }
     }
 
-    suspend fun setConnectionMode(value: String) {
-        context.dataStore.edit { it[SettingsKeys.CONNECTION_MODE] = value }
+    /**
+     * Returns the device fingerprint, generating and storing a UUID on first access.
+     */
+    suspend fun getOrCreateFingerprint(): String {
+        val existing = deviceFingerprint.first()
+        if (existing.isNotBlank()) return existing
+        val newFingerprint = UUID.randomUUID().toString()
+        context.dataStore.edit { it[SettingsKeys.DEVICE_FINGERPRINT] = newFingerprint }
+        return newFingerprint
     }
 
-    val hasOnboarded: Flow<Boolean> = context.dataStore.data.map { prefs ->
-        prefs[SettingsKeys.HAS_ONBOARDED] ?: false
-    }
-
-    suspend fun setHasOnboarded(value: Boolean) {
-        context.dataStore.edit { it[SettingsKeys.HAS_ONBOARDED] = value }
+    suspend fun clearApiKey() {
+        context.dataStore.edit { it.remove(SettingsKeys.API_KEY) }
     }
 
     val recentGoals: Flow<List<String>> = context.dataStore.data.map { prefs ->

@@ -2,6 +2,7 @@ package com.thisux.droidclaw.model
 
 enum class ConnectionState {
     Disconnected,
+    PendingApproval,
     Connecting,
     Connected,
     Error

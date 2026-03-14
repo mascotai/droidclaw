@@ -11,7 +11,6 @@ import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,15 +28,16 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.HourglassTop
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -52,7 +52,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -77,12 +76,10 @@ fun SettingsScreen() {
     val connectionState by ConnectionService.connectionState.collectAsState()
     val errorMessage by ConnectionService.errorMessage.collectAsState()
 
+    val serverUrl by app.settingsStore.serverUrl.collectAsState(initial = "")
+    val deviceStatus by app.settingsStore.deviceStatus.collectAsState(initial = "")
     val apiKey by app.settingsStore.apiKey.collectAsState(initial = "")
-    val serverUrl by app.settingsStore.serverUrl.collectAsState(initial = "wss://tunnel.droidclaw.ai")
-    val connectionMode by app.settingsStore.connectionMode.collectAsState(initial = "cloud")
 
-    var editingApiKey by remember { mutableStateOf<String?>(null) }
-    val displayApiKey = editingApiKey ?: apiKey
     var editingServerUrl by remember { mutableStateOf<String?>(null) }
     val displayServerUrl = editingServerUrl ?: serverUrl
 
@@ -150,90 +147,48 @@ fun SettingsScreen() {
         // --- Server Section ---
         SectionHeader("Server")
 
-        Card(
+        OutlinedTextField(
+            value = displayServerUrl,
+            onValueChange = { editingServerUrl = it },
+            label = { Text("Server URL") },
+            placeholder = { Text("https://your-server.example.com") },
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-            )
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable {
-                            scope.launch { app.settingsStore.setConnectionMode("cloud") }
+            singleLine = true,
+            shape = RoundedCornerShape(12.dp)
+        )
+
+        if (editingServerUrl != null && editingServerUrl != serverUrl) {
+            OutlinedButton(
+                onClick = {
+                    scope.launch {
+                        app.settingsStore.setServerUrl(displayServerUrl)
+                        // Clear old token when server URL changes — will trigger re-registration
+                        app.settingsStore.clearApiKey()
+                        app.settingsStore.setDeviceStatus("")
+                        editingServerUrl = null
+                        // Auto-trigger registration
+                        val intent = Intent(context, ConnectionService::class.java).apply {
+                            action = ConnectionService.ACTION_DISCONNECT
                         }
-                ) {
-                    RadioButton(
-                        selected = connectionMode == "cloud",
-                        onClick = { scope.launch { app.settingsStore.setConnectionMode("cloud") } }
-                    )
-                    Text("DroidClaw Cloud", style = MaterialTheme.typography.bodyMedium)
-                }
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable {
-                            scope.launch { app.settingsStore.setConnectionMode("selfhosted") }
+                        context.startForegroundService(intent)
+                        val connectIntent = Intent(context, ConnectionService::class.java).apply {
+                            action = ConnectionService.ACTION_CONNECT
                         }
-                ) {
-                    RadioButton(
-                        selected = connectionMode == "selfhosted",
-                        onClick = { scope.launch { app.settingsStore.setConnectionMode("selfhosted") } }
-                    )
-                    Text("Self-hosted", style = MaterialTheme.typography.bodyMedium)
-                }
+                        context.startForegroundService(connectIntent)
+                    }
+                },
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text("Save & Register")
             }
         }
 
-        if (connectionMode == "selfhosted") {
-            OutlinedTextField(
-                value = displayServerUrl,
-                onValueChange = { editingServerUrl = it },
-                label = { Text("WebSocket URL") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                shape = RoundedCornerShape(12.dp)
+        // Registration status indicator
+        if (serverUrl.isNotBlank()) {
+            RegistrationStatusCard(
+                deviceStatus = deviceStatus,
+                connectionState = connectionState
             )
-            if (editingServerUrl != null && editingServerUrl != serverUrl) {
-                OutlinedButton(
-                    onClick = {
-                        scope.launch {
-                            app.settingsStore.setServerUrl(displayServerUrl)
-                            editingServerUrl = null
-                        }
-                    },
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text("Save URL")
-                }
-            }
-
-            OutlinedTextField(
-                value = displayApiKey,
-                onValueChange = { editingApiKey = it },
-                label = { Text("API Key") },
-                modifier = Modifier.fillMaxWidth(),
-                visualTransformation = PasswordVisualTransformation(),
-                singleLine = true,
-                shape = RoundedCornerShape(12.dp)
-            )
-            if (editingApiKey != null && editingApiKey != apiKey) {
-                OutlinedButton(
-                    onClick = {
-                        scope.launch {
-                            app.settingsStore.setApiKey(displayApiKey)
-                            editingApiKey = null
-                        }
-                    },
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text("Save API Key")
-                }
-            }
         }
 
         // --- Connection Section ---
@@ -261,6 +216,7 @@ fun SettingsScreen() {
                             .background(
                                 when (connectionState) {
                                     ConnectionState.Connected -> StatusGreen
+                                    ConnectionState.PendingApproval -> StatusAmber
                                     ConnectionState.Connecting -> StatusAmber
                                     ConnectionState.Error -> StatusRed
                                     ConnectionState.Disconnected -> Color.Gray
@@ -270,6 +226,7 @@ fun SettingsScreen() {
                     Text(
                         text = when (connectionState) {
                             ConnectionState.Connected -> "Connected to server"
+                            ConnectionState.PendingApproval -> "Waiting for dashboard approval..."
                             ConnectionState.Connecting -> "Connecting..."
                             ConnectionState.Error -> errorMessage ?: "Connection error"
                             ConnectionState.Disconnected -> "Disconnected"
@@ -277,6 +234,23 @@ fun SettingsScreen() {
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.padding(start = 8.dp)
                     )
+                }
+
+                if (connectionState == ConnectionState.PendingApproval) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp
+                        )
+                        Text(
+                            text = "Polling for approval every 30s...",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
 
                 Button(
@@ -292,8 +266,11 @@ fun SettingsScreen() {
                     },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(8.dp),
+                    enabled = serverUrl.isNotBlank(),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = if (connectionState == ConnectionState.Connected || connectionState == ConnectionState.Connecting) {
+                        containerColor = if (connectionState == ConnectionState.Connected ||
+                            connectionState == ConnectionState.Connecting ||
+                            connectionState == ConnectionState.PendingApproval) {
                             MaterialTheme.colorScheme.error
                         } else {
                             MaterialTheme.colorScheme.primary
@@ -312,13 +289,6 @@ fun SettingsScreen() {
 
         // --- Permissions Section ---
         SectionHeader("Permissions")
-
-        ChecklistItem(
-            label = "API key configured",
-            isOk = apiKey.isNotBlank(),
-            actionLabel = null,
-            onAction = {}
-        )
 
         ChecklistItem(
             label = "Accessibility service",
@@ -370,6 +340,75 @@ fun SettingsScreen() {
         )
 
         Spacer(modifier = Modifier.height(16.dp))
+    }
+}
+
+@Composable
+private fun RegistrationStatusCard(
+    deviceStatus: String,
+    connectionState: ConnectionState
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = when (deviceStatus) {
+                "active" -> MaterialTheme.colorScheme.secondaryContainer
+                "rejected" -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
+                "pending" -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+            }
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            when (deviceStatus) {
+                "active" -> {
+                    Icon(
+                        imageVector = Icons.Filled.CheckCircle,
+                        contentDescription = "Active",
+                        tint = StatusGreen
+                    )
+                    Text("Device approved", style = MaterialTheme.typography.bodyMedium)
+                }
+                "rejected" -> {
+                    Icon(
+                        imageVector = Icons.Filled.Error,
+                        contentDescription = "Rejected",
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                    Text("Device rejected", style = MaterialTheme.typography.bodyMedium)
+                }
+                "pending" -> {
+                    Icon(
+                        imageVector = Icons.Filled.HourglassTop,
+                        contentDescription = "Pending",
+                        tint = StatusAmber
+                    )
+                    Column {
+                        Text("Pending approval", style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            "Approve this device from the dashboard",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                else -> {
+                    Icon(
+                        imageVector = Icons.Filled.Error,
+                        contentDescription = "Not registered",
+                        tint = Color.Gray
+                    )
+                    Text("Not registered", style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+        }
     }
 }
 

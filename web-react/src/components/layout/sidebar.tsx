@@ -2,7 +2,6 @@ import { Link, useLocation } from '@tanstack/react-router';
 import {
 	LayoutDashboard,
 	Smartphone,
-	Key,
 	Settings,
 	X,
 	Cog,
@@ -21,7 +20,6 @@ const navItems = [
 	{ label: 'Devices', to: '/dashboard/devices', icon: Smartphone },
 	{ label: 'Goals', to: '/dashboard/goals', icon: Target },
 	{ label: 'Workflows', to: '/dashboard/workflows', icon: Workflow },
-	{ label: 'API Keys', to: '/dashboard/api-keys', icon: Key },
 	{ label: 'Settings', to: '/dashboard/settings', icon: Settings },
 ] as const;
 

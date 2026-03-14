@@ -126,13 +126,14 @@ export interface LlmConfig {
 	model: string | null;
 }
 
-export interface ApiKeyInfo {
+export interface PendingDevice {
 	id: string;
-	name: string | null;
-	start: string | null;
-	enabled: boolean | null;
+	name: string;
+	model?: string;
+	androidVersion?: string;
+	status: string;
+	deviceInfo?: Record<string, unknown>;
 	createdAt: string;
-	type: string | null;
 }
 
 // ── API functions ──
@@ -251,23 +252,19 @@ export const api = {
 	investigateSession: (sessionId: string) =>
 		request(`/investigate/${sessionId}`, { method: 'POST' }),
 
-	// Pairing — under /pairing (not /v2)
-	createPairingCode: () =>
-		request<{ code: string; expiresAt: string }>('/pairing/create', { method: 'POST' }),
-	getPairingStatus: () =>
-		request<{ paired: boolean; expired?: boolean }>('/pairing/status'),
+	// Device registration — pending / approve / reject / revoke
+	listPendingDevices: () => request<PendingDevice[]>('/devices/pending'),
+	approveDevice: (deviceId: string) =>
+		request<{ deviceId: string; status: string }>(`/devices/${deviceId}/approve`, { method: 'POST' }),
+	rejectDevice: (deviceId: string) =>
+		request<{ deviceId: string; status: string }>(`/devices/${deviceId}/reject`, { method: 'POST' }),
+	revokeDevice: (deviceId: string) =>
+		request<{ deviceId: string; status: string }>(`/devices/${deviceId}`, { method: 'DELETE' }),
 
 	// Settings — v2 doesn't have settings routes, stub for now
 	getConfig: (): Promise<LlmConfig | null> => Promise.resolve(null),
 	updateConfig: (_data: { provider: string; apiKey: string; model?: string }): Promise<{ saved: boolean }> =>
 		Promise.resolve({ saved: false }),
-
-	// API Keys — v2 doesn't have api-keys routes, stub for now
-	listApiKeys: (): Promise<ApiKeyInfo[]> => Promise.resolve([]),
-	createApiKey: (_name: string, _type = 'user'): Promise<{ key: string }> =>
-		Promise.reject(new Error('API keys not available in v2')),
-	deleteApiKey: (_keyId: string): Promise<{ deleted: boolean }> =>
-		Promise.reject(new Error('API keys not available in v2')),
 
 	// License — under /license (not /v2)
 	activateLicense: (key: string) =>

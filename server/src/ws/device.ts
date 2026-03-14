@@ -94,8 +94,66 @@ export async function handleDeviceMessage(
 
   if (msg.type === "auth") {
     try {
-      // Hash the incoming key and look it up directly in the DB
+      // Hash the incoming key
       const hashedKey = await hashApiKey(msg.apiKey);
+
+      // ── NEW: Try device.token lookup first (device-initiated registration flow) ──
+      const deviceRows = await db
+        .select()
+        .from(device)
+        .where(and(eq(device.token, hashedKey), eq(device.status, "active")))
+        .limit(1);
+
+      if (deviceRows.length > 0) {
+        const d = deviceRows[0];
+        const userId = d.userId!;
+        const persistentDeviceId = d.id;
+
+        // Update device status
+        const name = msg.deviceInfo
+          ? `${msg.deviceInfo.model} (Android ${msg.deviceInfo.androidVersion})`
+          : d.name;
+
+        await db.update(device).set({
+          status: "online",
+          lastSeen: new Date(),
+          name,
+          deviceInfo: msg.deviceInfo as unknown as Record<string, unknown> ?? d.deviceInfo,
+          updatedAt: new Date(),
+        }).where(eq(device.id, persistentDeviceId));
+
+        const ephemeralDeviceId = crypto.randomUUID();
+
+        // Mark connection as authenticated
+        ws.data.authenticated = true;
+        ws.data.userId = userId;
+        ws.data.deviceId = ephemeralDeviceId;
+        ws.data.persistentDeviceId = persistentDeviceId;
+
+        // Register device in session manager
+        sessions.addDevice({
+          deviceId: ephemeralDeviceId,
+          persistentDeviceId,
+          userId,
+          ws,
+          deviceInfo: msg.deviceInfo,
+          connectedAt: new Date(),
+          lastPong: Date.now(),
+        });
+
+        ws.send(JSON.stringify({ type: "auth_ok", deviceId: ephemeralDeviceId }));
+
+        sessions.notifyDashboard(userId, {
+          type: "device_online",
+          deviceId: persistentDeviceId,
+          name,
+        });
+
+        console.log(`Device authenticated (device token): ${ephemeralDeviceId} (db: ${persistentDeviceId}) for user ${userId} — app v${msg.deviceInfo?.appVersionName ?? '?'} (code ${msg.deviceInfo?.appVersionCode ?? '?'})`);
+        return;
+      }
+
+      // ── LEGACY: Fall back to apikey table lookup ──
       const rows = await db
         .select({ id: apikey.id, userId: apikey.userId, enabled: apikey.enabled, expiresAt: apikey.expiresAt, type: apikey.type })
         .from(apikey)

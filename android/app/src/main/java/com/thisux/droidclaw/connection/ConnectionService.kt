@@ -67,6 +67,7 @@ class ConnectionService : LifecycleService() {
     private var captureManager: ScreenCaptureManager? = null
     private var wakeLock: PowerManager.WakeLock? = null
     internal var overlay: AgentOverlay? = null
+    private var registrationPollingJob: kotlinx.coroutines.Job? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -123,13 +124,100 @@ class ConnectionService : LifecycleService() {
             val apiKey = app.settingsStore.apiKey.first()
             val serverUrl = app.settingsStore.serverUrl.first()
 
-            if (apiKey.isBlank() || serverUrl.isBlank()) {
+            if (serverUrl.isBlank()) {
                 connectionState.value = ConnectionState.Error
-                errorMessage.value = "API key or server URL not configured"
+                errorMessage.value = "Server URL not configured"
                 stopSelf()
                 return@launch
             }
 
+            if (apiKey.isBlank()) {
+                // No token — need to register and poll for approval
+                startRegistrationFlow(serverUrl)
+                return@launch
+            }
+
+            // Have a token — connect WebSocket directly
+            connectWebSocket(serverUrl, apiKey)
+        }
+    }
+
+    /**
+     * Register with the server and poll for dashboard approval.
+     * When approved, stores the token and connects the WebSocket.
+     */
+    private fun startRegistrationFlow(serverUrl: String) {
+        registrationPollingJob?.cancel()
+        registrationPollingJob = lifecycleScope.launch {
+            val app = application as DroidClawApp
+            val fingerprint = app.settingsStore.getOrCreateFingerprint()
+            val deviceName = app.settingsStore.deviceName.first()
+            val model = android.os.Build.MODEL
+            val androidVersion = android.os.Build.VERSION.RELEASE
+
+            // Step 1: Register with the server
+            Log.i(TAG, "Registering device with server: $serverUrl")
+            val registerResult = DeviceRegistrationApi.register(
+                serverUrl, fingerprint, deviceName, model, androidVersion
+            )
+
+            registerResult.onFailure { e ->
+                Log.e(TAG, "Registration failed: ${e.message}")
+                connectionState.value = ConnectionState.Error
+                errorMessage.value = "Registration failed: ${e.message}"
+                return@launch
+            }
+
+            registerResult.onSuccess { response ->
+                Log.i(TAG, "Registered, deviceId=${response.deviceId}, status=${response.status}")
+                app.settingsStore.setDeviceStatus(response.status)
+            }
+
+            // Step 2: Poll for approval
+            connectionState.value = ConnectionState.PendingApproval
+            errorMessage.value = null
+            updateNotification("Waiting for approval...")
+
+            while (true) {
+                delay(30_000L)
+
+                val statusResult = DeviceRegistrationApi.pollStatus(serverUrl, fingerprint)
+                statusResult.onSuccess { status ->
+                    Log.i(TAG, "Poll status: ${status.status}")
+                    app.settingsStore.setDeviceStatus(status.status)
+
+                    when (status.status) {
+                        "active" -> {
+                            val token = status.token
+                            if (token != null) {
+                                Log.i(TAG, "Device approved! Storing token and connecting.")
+                                app.settingsStore.setApiKey(token)
+                                connectWebSocket(serverUrl, token)
+                                return@launch
+                            }
+                        }
+                        "rejected" -> {
+                            connectionState.value = ConnectionState.Error
+                            errorMessage.value = "Device registration was rejected"
+                            return@launch
+                        }
+                        // "pending" — keep polling
+                    }
+                }
+                statusResult.onFailure { e ->
+                    Log.w(TAG, "Status poll failed: ${e.message}")
+                    // Keep polling despite transient failures
+                }
+            }
+        }
+    }
+
+    /**
+     * Connect WebSocket with an authenticated token.
+     * If auth fails, clears the token and falls back to registration.
+     */
+    private fun connectWebSocket(serverUrl: String, apiKey: String) {
+        lifecycleScope.launch {
             ScreenCaptureManager.restoreConsent(this@ConnectionService)
             captureManager = ScreenCaptureManager(this@ConnectionService).also { mgr ->
                 if (ScreenCaptureManager.hasConsent()) {
@@ -166,6 +254,7 @@ class ConnectionService : LifecycleService() {
                     updateNotification(
                         when (state) {
                             ConnectionState.Connected -> "Connected to server"
+                            ConnectionState.PendingApproval -> "Waiting for approval..."
                             ConnectionState.Connecting -> "Connecting..."
                             ConnectionState.Error -> "Connection error"
                             ConnectionState.Disconnected -> "Disconnected"
@@ -173,12 +262,32 @@ class ConnectionService : LifecycleService() {
                     )
                     // Send installed apps list once connected
                     if (state == ConnectionState.Connected) {
+                        val app = application as DroidClawApp
+                        app.settingsStore.setDeviceStatus("active")
+
                         if (Settings.canDrawOverlays(this@ConnectionService)) {
                             overlay?.show()
                         }
                         val apps = getInstalledApps()
                         webSocket?.sendTyped(AppsMessage(apps = apps))
                         Log.i(TAG, "Sent ${apps.size} installed apps to server")
+                    }
+                    // If auth failed, clear token and restart with registration
+                    if (state == ConnectionState.Error) {
+                        val errMsg = ws.errorMessage.value ?: ""
+                        if (errMsg.contains("auth", ignoreCase = true) ||
+                            errMsg.contains("unauthorized", ignoreCase = true) ||
+                            errMsg.contains("invalid", ignoreCase = true)) {
+                            Log.w(TAG, "Auth failed, clearing token and re-registering")
+                            val app = application as DroidClawApp
+                            app.settingsStore.clearApiKey()
+                            app.settingsStore.setDeviceStatus("")
+                            ws.disconnect()
+                            webSocket = null
+                            commandRouter?.reset()
+                            commandRouter = null
+                            startRegistrationFlow(serverUrl)
+                        }
                     }
                 }
             }
@@ -244,6 +353,8 @@ class ConnectionService : LifecycleService() {
     }
 
     private fun disconnect() {
+        registrationPollingJob?.cancel()
+        registrationPollingJob = null
         overlay?.hideVignette()
         overlay?.hide()
         webSocket?.disconnect()

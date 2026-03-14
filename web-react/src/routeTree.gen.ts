@@ -13,7 +13,6 @@ import { Route as AuthRouteImport } from './routes/_auth'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthDashboardIndexRouteImport } from './routes/_auth/dashboard/index'
 import { Route as AuthDashboardSettingsRouteImport } from './routes/_auth/dashboard/settings'
-import { Route as AuthDashboardApiKeysRouteImport } from './routes/_auth/dashboard/api-keys'
 import { Route as AuthDashboardActivateRouteImport } from './routes/_auth/dashboard/activate'
 import { Route as AuthDashboardDevicesIndexRouteImport } from './routes/_auth/dashboard/devices/index'
 import { Route as AuthDashboardDevicesDeviceIdIndexRouteImport } from './routes/_auth/dashboard/devices/$deviceId/index'
@@ -37,11 +36,6 @@ const AuthDashboardIndexRoute = AuthDashboardIndexRouteImport.update({
 const AuthDashboardSettingsRoute = AuthDashboardSettingsRouteImport.update({
   id: '/dashboard/settings',
   path: '/dashboard/settings',
-  getParentRoute: () => AuthRoute,
-} as any)
-const AuthDashboardApiKeysRoute = AuthDashboardApiKeysRouteImport.update({
-  id: '/dashboard/api-keys',
-  path: '/dashboard/api-keys',
   getParentRoute: () => AuthRoute,
 } as any)
 const AuthDashboardActivateRoute = AuthDashboardActivateRouteImport.update({
@@ -77,7 +71,6 @@ const AuthDashboardWorkflowsIndexRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/dashboard/activate': typeof AuthDashboardActivateRoute
-  '/dashboard/api-keys': typeof AuthDashboardApiKeysRoute
   '/dashboard/settings': typeof AuthDashboardSettingsRoute
   '/dashboard/': typeof AuthDashboardIndexRoute
   '/dashboard/devices/': typeof AuthDashboardDevicesIndexRoute
@@ -88,7 +81,6 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/dashboard/activate': typeof AuthDashboardActivateRoute
-  '/dashboard/api-keys': typeof AuthDashboardApiKeysRoute
   '/dashboard/settings': typeof AuthDashboardSettingsRoute
   '/dashboard': typeof AuthDashboardIndexRoute
   '/dashboard/devices': typeof AuthDashboardDevicesIndexRoute
@@ -101,7 +93,6 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_auth': typeof AuthRouteWithChildren
   '/_auth/dashboard/activate': typeof AuthDashboardActivateRoute
-  '/_auth/dashboard/api-keys': typeof AuthDashboardApiKeysRoute
   '/_auth/dashboard/settings': typeof AuthDashboardSettingsRoute
   '/_auth/dashboard/': typeof AuthDashboardIndexRoute
   '/_auth/dashboard/devices/': typeof AuthDashboardDevicesIndexRoute
@@ -114,7 +105,6 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/dashboard/activate'
-    | '/dashboard/api-keys'
     | '/dashboard/settings'
     | '/dashboard/'
     | '/dashboard/devices/'
@@ -125,7 +115,6 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/dashboard/activate'
-    | '/dashboard/api-keys'
     | '/dashboard/settings'
     | '/dashboard'
     | '/dashboard/devices'
@@ -137,7 +126,6 @@ export interface FileRouteTypes {
     | '/'
     | '/_auth'
     | '/_auth/dashboard/activate'
-    | '/_auth/dashboard/api-keys'
     | '/_auth/dashboard/settings'
     | '/_auth/dashboard/'
     | '/_auth/dashboard/devices/'
@@ -181,13 +169,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthDashboardSettingsRouteImport
       parentRoute: typeof AuthRoute
     }
-    '/_auth/dashboard/api-keys': {
-      id: '/_auth/dashboard/api-keys'
-      path: '/dashboard/api-keys'
-      fullPath: '/dashboard/api-keys'
-      preLoaderRoute: typeof AuthDashboardApiKeysRouteImport
-      parentRoute: typeof AuthRoute
-    }
     '/_auth/dashboard/activate': {
       id: '/_auth/dashboard/activate'
       path: '/dashboard/activate'
@@ -228,7 +209,6 @@ declare module '@tanstack/react-router' {
 
 interface AuthRouteChildren {
   AuthDashboardActivateRoute: typeof AuthDashboardActivateRoute
-  AuthDashboardApiKeysRoute: typeof AuthDashboardApiKeysRoute
   AuthDashboardSettingsRoute: typeof AuthDashboardSettingsRoute
   AuthDashboardIndexRoute: typeof AuthDashboardIndexRoute
   AuthDashboardDevicesIndexRoute: typeof AuthDashboardDevicesIndexRoute
@@ -239,7 +219,6 @@ interface AuthRouteChildren {
 
 const AuthRouteChildren: AuthRouteChildren = {
   AuthDashboardActivateRoute: AuthDashboardActivateRoute,
-  AuthDashboardApiKeysRoute: AuthDashboardApiKeysRoute,
   AuthDashboardSettingsRoute: AuthDashboardSettingsRoute,
   AuthDashboardIndexRoute: AuthDashboardIndexRoute,
   AuthDashboardDevicesIndexRoute: AuthDashboardDevicesIndexRoute,

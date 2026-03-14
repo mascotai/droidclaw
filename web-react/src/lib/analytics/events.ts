@@ -28,11 +28,6 @@ export const DEVICE_CACHED_FLOW_RUN = 'device-cached-flow-run';
 export const DEVICE_CACHED_FLOW_DELETE = 'device-cached-flow-delete';
 export const DEVICE_CACHED_FLOW_COMPILED = 'device-cached-flow-compiled';
 
-// API Keys
-export const APIKEY_CREATE = 'apikey-create';
-export const APIKEY_COPY = 'apikey-copy';
-export const APIKEY_DELETE = 'apikey-delete';
-
 // Settings
 export const SETTINGS_SAVE = 'settings-save';
 

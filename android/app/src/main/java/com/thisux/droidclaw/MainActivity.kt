@@ -29,6 +29,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -43,7 +44,6 @@ import com.thisux.droidclaw.ui.components.PermissionStatusBar
 import com.thisux.droidclaw.model.ConnectionState
 import com.thisux.droidclaw.ui.screens.HomeScreen
 import com.thisux.droidclaw.ui.screens.LogsScreen
-import com.thisux.droidclaw.ui.screens.OnboardingScreen
 import com.thisux.droidclaw.ui.screens.SettingsScreen
 import com.thisux.droidclaw.ui.theme.DroidClawTheme
 import com.thisux.droidclaw.ui.theme.InstrumentSerif
@@ -61,7 +61,6 @@ sealed class Screen(val route: String, val label: String) {
     data object Home : Screen("home", "Home")
     data object Settings : Screen("settings", "Settings")
     data object Logs : Screen("logs", "Logs")
-    data object Onboarding : Screen("onboarding", "Onboarding")
 }
 
 class MainActivity : ComponentActivity() {
@@ -104,8 +103,8 @@ class MainActivity : ComponentActivity() {
         if (ConnectionService.connectionState.value != com.thisux.droidclaw.model.ConnectionState.Disconnected) return
         val app = application as DroidClawApp
         lifecycleScope.launch {
-            val apiKey = app.settingsStore.apiKey.first()
-            if (apiKey.isNotBlank()) {
+            val serverUrl = app.settingsStore.serverUrl.first()
+            if (serverUrl.isNotBlank()) {
                 val intent = Intent(this@MainActivity, ConnectionService::class.java).apply {
                     action = ConnectionService.ACTION_CONNECT
                 }
@@ -120,102 +119,107 @@ class MainActivity : ComponentActivity() {
 fun MainNavigation() {
     val context = LocalContext.current
     val app = context.applicationContext as DroidClawApp
-    val hasOnboarded by app.settingsStore.hasOnboarded.collectAsState(initial = true)
+
+    val serverUrl by app.settingsStore.serverUrl.collectAsState(initial = "")
 
     val navController = rememberNavController()
     val bottomNavScreens = listOf(Screen.Home, Screen.Settings)
     val navBackStackEntry by navController.currentBackStackEntryAsState()
-    val currentRoute = navBackStackEntry?.destination?.route
 
-    val showChrome = currentRoute != Screen.Onboarding.route
+    // Auto-navigate to Settings tab if no server URL configured
+    LaunchedEffect(serverUrl) {
+        if (serverUrl.isBlank()) {
+            navController.navigate(Screen.Settings.route) {
+                popUpTo(navController.graph.findStartDestination().id) {
+                    saveState = true
+                }
+                launchSingleTop = true
+                restoreState = true
+            }
+        }
+    }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         topBar = {
-            if (showChrome) {
-                CenterAlignedTopAppBar(
-                    title = {
-                        Text(
-                            text = "DroidClaw",
-                            style = MaterialTheme.typography.titleLarge.copy(
-                                fontFamily = InstrumentSerif
-                            )
+            CenterAlignedTopAppBar(
+                title = {
+                    Text(
+                        text = "DroidClaw",
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontFamily = InstrumentSerif
                         )
-                    },
-                    actions = {
-                        PermissionStatusBar(
-                            onNavigateToSettings = {
-                                navController.navigate(Screen.Settings.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) {
-                                        saveState = true
-                                    }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            }
-                        )
-                        IconButton(onClick = {
-                            navController.navigate(Screen.Logs.route) {
+                    )
+                },
+                actions = {
+                    PermissionStatusBar(
+                        onNavigateToSettings = {
+                            navController.navigate(Screen.Settings.route) {
                                 popUpTo(navController.graph.findStartDestination().id) {
                                     saveState = true
                                 }
                                 launchSingleTop = true
+                                restoreState = true
                             }
-                        }) {
-                            Icon(
-                                Icons.Filled.History,
-                                contentDescription = "Logs"
-                            )
                         }
-                    },
-                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface,
-                        titleContentColor = MaterialTheme.colorScheme.onSurface
                     )
-                )
-            }
-        },
-        bottomBar = {
-            if (showChrome) {
-                NavigationBar {
-                    val currentDestination = navBackStackEntry?.destination
-
-                    bottomNavScreens.forEach { screen ->
-                        NavigationBarItem(
-                            icon = {
-                                Icon(
-                                    when (screen) {
-                                        is Screen.Home -> Icons.Filled.Home
-                                        is Screen.Settings -> Icons.Filled.Settings
-                                        else -> Icons.Filled.Home
-                                    },
-                                    contentDescription = screen.label
-                                )
-                            },
-                            label = { Text(screen.label) },
-                            selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true,
-                            onClick = {
-                                navController.navigate(screen.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) {
-                                        saveState = true
-                                    }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
+                    IconButton(onClick = {
+                        navController.navigate(Screen.Logs.route) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
                             }
+                            launchSingleTop = true
+                        }
+                    }) {
+                        Icon(
+                            Icons.Filled.History,
+                            contentDescription = "Logs"
                         )
                     }
+                },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface
+                )
+            )
+        },
+        bottomBar = {
+            NavigationBar {
+                val currentDestination = navBackStackEntry?.destination
+
+                bottomNavScreens.forEach { screen ->
+                    NavigationBarItem(
+                        icon = {
+                            Icon(
+                                when (screen) {
+                                    is Screen.Home -> Icons.Filled.Home
+                                    is Screen.Settings -> Icons.Filled.Settings
+                                    else -> Icons.Filled.Home
+                                },
+                                contentDescription = screen.label
+                            )
+                        },
+                        label = { Text(screen.label) },
+                        selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true,
+                        onClick = {
+                            navController.navigate(screen.route) {
+                                popUpTo(navController.graph.findStartDestination().id) {
+                                    saveState = true
+                                }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        }
+                    )
                 }
             }
         }
     ) { innerPadding ->
-        val startDestination = if (hasOnboarded) Screen.Home.route else Screen.Onboarding.route
-
         val connectionState by ConnectionService.connectionState.collectAsState()
         val errorMessage by ConnectionService.errorMessage.collectAsState()
 
         Column(modifier = Modifier.padding(innerPadding)) {
-            if (showChrome && connectionState == ConnectionState.Error) {
+            if (connectionState == ConnectionState.Error) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -234,22 +238,13 @@ fun MainNavigation() {
 
             NavHost(
                 navController = navController,
-                startDestination = startDestination,
+                startDestination = Screen.Home.route,
                 modifier = Modifier.weight(1f)
             ) {
-            composable(Screen.Onboarding.route) {
-                OnboardingScreen(
-                    onComplete = {
-                        navController.navigate(Screen.Home.route) {
-                            popUpTo(Screen.Onboarding.route) { inclusive = true }
-                        }
-                    }
-                )
+                composable(Screen.Home.route) { HomeScreen() }
+                composable(Screen.Settings.route) { SettingsScreen() }
+                composable(Screen.Logs.route) { LogsScreen() }
             }
-            composable(Screen.Home.route) { HomeScreen() }
-            composable(Screen.Settings.route) { SettingsScreen() }
-            composable(Screen.Logs.route) { LogsScreen() }
-        }
         }
     }
 }

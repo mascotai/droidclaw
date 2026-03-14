@@ -8,5 +8,5 @@ export type {
 	CachedFlow,
 	PaginatedResponse,
 	LlmConfig,
-	ApiKeyInfo,
+	PendingDevice,
 } from '@/lib/api';

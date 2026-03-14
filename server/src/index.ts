@@ -14,6 +14,7 @@ import { pairing } from "./routes/pairing.js";
 import { v2 } from "./routes/v2.js";
 import { goalCrud } from "./routes/goal-crud.js";
 import { workflowCrud } from "./routes/workflow-crud.js";
+import { deviceRegistration, deviceManagement } from "./routes/device-registration.js";
 
 import { db, ensureSchema } from "./db.js";
 import { workflowRun, evalBatch } from "./schema.js";
@@ -41,9 +42,11 @@ app.on(["POST", "GET"], "/api/auth/*", (c) => {
 app.route("/health", health);
 app.route("/license", license);
 app.route("/pairing", pairing);
+app.route("/devices", deviceRegistration);   // Public: /devices/register, /devices/register/status
 app.route("/v2", v2);
 app.route("/v2/goals", goalCrud);
 app.route("/v2/workflows", workflowCrud);
+app.route("/v2/devices", deviceManagement);  // Authed: /v2/devices/pending, /:id/approve, /:id/reject
 
 // Start server with WebSocket support
 const server = Bun.serve<WebSocketData>({

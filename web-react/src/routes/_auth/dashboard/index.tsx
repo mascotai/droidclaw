@@ -3,13 +3,13 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import {
 	Smartphone,
-	Key,
 	Settings,
 	Wifi,
 	WifiOff,
 	CheckCircle2,
 	ArrowRight,
 	Zap,
+	ShieldAlert,
 } from 'lucide-react';
 import { track } from '@/lib/analytics/track';
 import { DASHBOARD_CARD_CLICK } from '@/lib/analytics/events';
@@ -29,15 +29,15 @@ function DashboardPage() {
 		queryFn: () => api.getConfig(),
 	});
 
-	const { data: apiKeys } = useQuery({
-		queryKey: ['apiKeys'],
-		queryFn: () => api.listApiKeys(),
+	const { data: pendingDevices } = useQuery({
+		queryKey: ['devices', 'pending'],
+		queryFn: () => api.listPendingDevices(),
 	});
 
 	const onlineDevices = devices?.filter((d) => d.status === 'online') ?? [];
 	const hasDevices = (devices?.length ?? 0) > 0;
 	const hasConfig = !!config;
-	const hasApiKeys = (apiKeys?.length ?? 0) > 0;
+	const hasPending = (pendingDevices?.length ?? 0) > 0;
 
 	return (
 		<div className="mx-auto max-w-5xl space-y-8">
@@ -50,7 +50,7 @@ function DashboardPage() {
 			</div>
 
 			{/* Setup checklist */}
-			{(!hasDevices || !hasConfig || !hasApiKeys) && (
+			{(!hasDevices || !hasConfig) && (
 				<div className="rounded-xl border border-amber-200 bg-amber-50 p-6">
 					<h2 className="flex items-center gap-2 text-sm font-semibold text-amber-900">
 						<Zap className="h-4 w-4" />
@@ -63,13 +63,8 @@ function DashboardPage() {
 							to="/dashboard/settings"
 						/>
 						<ChecklistItem
-							done={hasApiKeys}
-							label="Create an API key"
-							to="/dashboard/api-keys"
-						/>
-						<ChecklistItem
 							done={hasDevices}
-							label="Pair a device"
+							label="Connect a device"
 							to="/dashboard/devices"
 						/>
 					</div>
@@ -89,9 +84,9 @@ function DashboardPage() {
 					icon={<Wifi className="h-5 w-5 text-emerald-500" />}
 				/>
 				<StatCard
-					label="API keys"
-					value={String(apiKeys?.length ?? 0)}
-					icon={<Key className="h-5 w-5 text-stone-400" />}
+					label="Pending approval"
+					value={String(pendingDevices?.length ?? 0)}
+					icon={<ShieldAlert className="h-5 w-5 text-amber-500" />}
 				/>
 			</div>
 
@@ -102,12 +97,6 @@ function DashboardPage() {
 					title="Devices"
 					description="View and manage your connected Android devices"
 					icon={<Smartphone className="h-6 w-6 text-violet-600" />}
-				/>
-				<NavCard
-					to="/dashboard/api-keys"
-					title="API Keys"
-					description="Create and manage authentication keys"
-					icon={<Key className="h-6 w-6 text-violet-600" />}
 				/>
 				<NavCard
 					to="/dashboard/settings"

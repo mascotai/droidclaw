@@ -117,14 +117,19 @@ export const pairingCode = pgTable("pairing_code", {
 
 export const device = pgTable("device", {
   id: text("id").primaryKey(),
+  deviceFingerprint: text("device_fingerprint").unique(), // Android-generated, stable per install
   userId: text("user_id")
-    .notNull()
-    .references(() => user.id, { onDelete: "cascade" }),
+    .references(() => user.id, { onDelete: "cascade" }), // nullable — pending devices have no user
   name: text("name").notNull(),
+  model: text("model"),
+  androidVersion: text("android_version"),
+  status: text("status").notNull().default("pending"), // "pending" | "active" | "rejected"
+  token: text("token"), // SHA-256 hashed device token (set on approve)
+  rawToken: text("raw_token"), // Temp: raw token returned once to device on first poll after approval
   lastSeen: timestamp("last_seen"),
-  status: text("status").notNull().default("offline"),
   deviceInfo: jsonb("device_info"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
 /** @deprecated Use `goalRun` table instead. Kept for backward compatibility with existing DB queries. */

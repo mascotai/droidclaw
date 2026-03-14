@@ -186,7 +186,30 @@ export async function ensureSchema() {
     await client`ALTER TABLE "workflow_run" ADD COLUMN IF NOT EXISTS "duration_ms" integer`;
     await client`ALTER TABLE "workflow_run" ADD COLUMN IF NOT EXISTS "eval_batch_id" text`;
 
-    console.log("[db] Schema ensured (cached_flow, eval_run, agent_step.duration_ms, goals-first redesign tables)");
+    // ══════════════════════════════════════════════════════════════════
+    // ── Device Auth Redesign — Alter device table
+    // ══════════════════════════════════════════════════════════════════
+    await client`ALTER TABLE "device" ADD COLUMN IF NOT EXISTS "device_fingerprint" text`;
+    await client`ALTER TABLE "device" ADD COLUMN IF NOT EXISTS "model" text`;
+    await client`ALTER TABLE "device" ADD COLUMN IF NOT EXISTS "android_version" text`;
+    await client`ALTER TABLE "device" ADD COLUMN IF NOT EXISTS "token" text`;
+    await client`ALTER TABLE "device" ADD COLUMN IF NOT EXISTS "raw_token" text`;
+    await client`ALTER TABLE "device" ADD COLUMN IF NOT EXISTS "updated_at" timestamp DEFAULT now() NOT NULL`;
+    // Make userId nullable (pending devices have no user yet)
+    await client`ALTER TABLE "device" ALTER COLUMN "user_id" DROP NOT NULL`;
+    // Change default status from "offline" to "pending"
+    await client`ALTER TABLE "device" ALTER COLUMN "status" SET DEFAULT 'pending'`;
+    // Unique constraint on device_fingerprint (ignore if already exists)
+    await client`
+      DO $$ BEGIN
+        ALTER TABLE "device" ADD CONSTRAINT "device_device_fingerprint_unique" UNIQUE ("device_fingerprint");
+      EXCEPTION
+        WHEN duplicate_table THEN NULL;
+        WHEN duplicate_object THEN NULL;
+      END $$
+    `;
+
+    console.log("[db] Schema ensured (cached_flow, eval_run, agent_step.duration_ms, goals-first redesign tables, device auth redesign)");
   } catch (err) {
     console.warn("[db] ensureSchema warning:", (err as Error).message);
   }
