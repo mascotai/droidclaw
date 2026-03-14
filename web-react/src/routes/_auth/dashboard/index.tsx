@@ -37,8 +37,6 @@ function DashboardPage() {
 	const onlineDevices = devices?.filter((d) => d.status === 'online') ?? [];
 	const hasDevices = (devices?.length ?? 0) > 0;
 	const hasConfig = !!config;
-	const hasPending = (pendingDevices?.length ?? 0) > 0;
-
 	return (
 		<div className="mx-auto max-w-5xl space-y-8">
 			{/* Page header */}
