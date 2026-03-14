@@ -73,6 +73,27 @@ export async function sessionMiddleware(c: Context, next: Next) {
   const authHeader = c.req.header("Authorization");
   if (authHeader?.startsWith("Bearer ")) {
     const token = authHeader.slice(7);
+
+    // Check if this is an INTERNAL_SECRET Bearer token (server-to-server via Authorization header)
+    if (env.INTERNAL_SECRET && token === env.INTERNAL_SECRET) {
+      const headerUserId = c.req.header("x-user-id") || c.req.header("x-internal-user-id");
+      if (!headerUserId) {
+        return c.json({ error: "X-User-Id header required with INTERNAL_SECRET Bearer auth" }, 400);
+      }
+      const users = await db
+        .select({ id: userTable.id, name: userTable.name, email: userTable.email })
+        .from(userTable)
+        .where(eq(userTable.id, headerUserId))
+        .limit(1);
+      if (users.length === 0) {
+        return c.json({ error: "unauthorized" }, 401);
+      }
+      c.set("user", users[0]);
+      c.set("session", { id: "internal-bearer", userId: headerUserId });
+      await next();
+      return;
+    }
+
     const hashedKey = await hashApiKey(token);
 
     const rows = await db
