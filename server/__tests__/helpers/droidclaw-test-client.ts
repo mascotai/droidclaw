@@ -36,9 +36,17 @@ export interface GoalResult {
 	error?: string;
 }
 
+export interface GoalStepAction {
+	action: string;
+	target?: string;
+	coordinates?: [number, number];
+	text?: string;
+	[key: string]: unknown;
+}
+
 export interface GoalStepResult {
 	step: number;
-	action: string;
+	action: GoalStepAction;
 	reasoning: string;
 	result: string;
 	package: string;

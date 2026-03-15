@@ -463,6 +463,55 @@ describe("Ensure Account", () => {
 			const ensureGoal = result.goals.find((g) => g.goalId === "ensure_account");
 			expect(ensureGoal).toBeTruthy();
 			expect(ensureGoal!.evalPassed).toBe(true);
+
+			// ── Eval state verification ──
+			expect(ensureGoal!.evalStateValues).toBeDefined();
+			expect(ensureGoal!.evalStateValues!.correct_account_active).toBe(true);
+			expect(ensureGoal!.evalStateValues!.on_home_feed).toBe(true);
+			expect(ensureGoal!.evalMismatches).toEqual([]);
+
+			// ── Step inspection ──
+			const { steps, totalSteps } = await client.getGoalSteps(runId, "ensure_account");
+
+			// Steps array is non-empty
+			expect(steps.length).toBeGreaterThan(0);
+
+			// Step count within maxSteps (12)
+			expect(totalSteps).toBeLessThanOrEqual(12);
+
+			// Last step action is "done" — agent marked goal complete, didn't exhaust steps
+			const lastStep = steps[steps.length - 1];
+			const lastAction = typeof lastStep.action === "string"
+				? lastStep.action
+				: (lastStep.action as Record<string, unknown>).action;
+			expect(lastAction).toBe("done");
+
+			// All steps with a package stayed in Instagram
+			const stepsWithPackage = steps.filter((s) => s.package);
+			for (const s of stepsWithPackage) {
+				expect(s.package).toBe("com.instagram.android");
+			}
+
+			// At least one step's reasoning mentions the username
+			const mentionsUsername = steps.some(
+				(s) => s.reasoning?.toLowerCase().includes(TEST_IG_USERNAME!.toLowerCase()),
+			);
+			expect(mentionsUsername).toBe(true);
+
+			// ── Eval endpoint verification ──
+			const evalResult = await client.getGoalEval(runId, "ensure_account");
+			expect(evalResult.judgment).toBeTruthy();
+			expect(evalResult.judgment!.success).toBe(true);
+			expect(evalResult.judgment!.stateValues.correct_account_active).toBe(true);
+
+			// ── Console logging — print each step for test output visibility ──
+			console.log(`\n📋 Ensure Account — ${totalSteps} steps (discovery):`);
+			for (const s of steps) {
+				const actionStr = typeof s.action === "string"
+					? s.action
+					: JSON.stringify(s.action);
+				console.log(`  Step ${s.step}: [${actionStr}] ${s.reasoning?.slice(0, 120) ?? ""}`);
+			}
 		},
 		5 * 60_000,
 	);
@@ -478,6 +527,21 @@ describe("Ensure Account", () => {
 			const ensureGoal = result.goals.find((g) => g.goalId === "ensure_account");
 			expect(ensureGoal).toBeTruthy();
 			expect(ensureGoal!.resolvedBy).toBe("recipe");
+
+			// ── Eval state verification ──
+			expect(ensureGoal!.evalPassed).toBe(true);
+			expect(ensureGoal!.evalStateValues).toBeDefined();
+			expect(ensureGoal!.evalStateValues!.correct_account_active).toBe(true);
+			expect(ensureGoal!.evalStateValues!.on_home_feed).toBe(true);
+			expect(ensureGoal!.evalMismatches).toEqual([]);
+
+			// ── Eval endpoint verification ──
+			const evalResult = await client.getGoalEval(runId, "ensure_account");
+			expect(evalResult.judgment).toBeTruthy();
+			expect(evalResult.judgment!.success).toBe(true);
+			expect(evalResult.judgment!.stateValues.correct_account_active).toBe(true);
+
+			console.log(`\n📋 Ensure Account — recipe replay, eval passed ✓`);
 		},
 		5 * 60_000,
 	);
