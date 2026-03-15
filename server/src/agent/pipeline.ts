@@ -34,6 +34,8 @@ export interface PipelineOptions {
   signal?: AbortSignal;
   onStep?: AgentLoopOptions["onStep"];
   onComplete?: AgentLoopOptions["onComplete"];
+  /** If provided, reuse this goal_run instead of creating a new one. */
+  goalRunId?: string;
 }
 
 export interface PipelineResultFinal {
@@ -158,6 +160,7 @@ export async function runPipeline(
     signal,
     onStep,
     onComplete,
+    goalRunId,
   } = options;
 
   // ── Load device capabilities ─────────────────────────────
@@ -236,6 +239,7 @@ export async function runPipeline(
         pipelineMode: true,
         onStep,
         onComplete,
+        goalRunId,
       });
       return { ...loopResult, resolvedBy: "discovery" as const };
     } else {
@@ -375,6 +379,7 @@ export async function runPipeline(
     pipelineMode: true,
     onStep,
     onComplete,
+    goalRunId,
   });
 
   return {

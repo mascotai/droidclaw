@@ -68,6 +68,8 @@ export interface AgentLoopOptions {
   signal?: AbortSignal;
   onStep?: (step: AgentStep) => void;
   onComplete?: (result: AgentResult) => void;
+  /** If provided, reuse this goal_run instead of creating a new one. */
+  goalRunId?: string;
 }
 
 export interface AgentStep {
@@ -328,9 +330,9 @@ export async function runAgentLoop(
     }
   }
 
-  // Persist goal_run to DB
-  let goalRunId: string | undefined;
-  if (persistentDeviceId) {
+  // Persist goal_run to DB (reuse provided goalRunId or create a new one)
+  let goalRunId: string | undefined = options.goalRunId;
+  if (persistentDeviceId && !goalRunId) {
     try {
       goalRunId = await createGoalRun({
         userId,

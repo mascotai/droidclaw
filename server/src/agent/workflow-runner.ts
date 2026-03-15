@@ -578,6 +578,7 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
             llmConfig,
             maxSteps: step.maxSteps,
             signal,
+            goalRunId: currentGoalRunId,
           });
 
           wfLog(`[Workflow ${runId}] Step ${i} attempt ${attempt}: pipeline returned success=${result.success}, stepsUsed=${result.stepsUsed}, resolvedBy=${result.resolvedBy}`);
