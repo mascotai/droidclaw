@@ -159,7 +159,18 @@ export class DroidClawTestClient {
 		const deadline = Date.now() + timeoutMs;
 
 		while (Date.now() < deadline) {
-			const result = await this.getRunStatus(runId);
+			let result: WorkflowRunResult | null = null;
+			try {
+				result = await this.getRunStatus(runId);
+			} catch (err) {
+				// Run may not exist in DB yet (queued in Temporal, not started)
+				const elapsed = Math.round((Date.now() - (deadline - timeoutMs)) / 1000);
+				console.log(
+					`[${elapsed}s] Run ${runId.slice(0, 8)}... waiting for run to start (${(err as Error).message})`,
+				);
+				await new Promise((r) => setTimeout(r, pollIntervalMs));
+				continue;
+			}
 
 			if (result.status === "completed" || result.status === "failed" || result.status === "stopped") {
 				return result;

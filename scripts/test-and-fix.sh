@@ -16,15 +16,16 @@ set -euo pipefail
 
 # ── Load secrets from Infisical ──────────────────────────────────────
 # Uses infisical CLI with universal auth to fetch prod secrets.
-# Falls back to .env if infisical is not available.
+# Requires INFISICAL_CLIENT_ID and INFISICAL_CLIENT_SECRET env vars.
+# Falls back to .env if infisical is not available or not configured.
 INFISICAL_DOMAIN="https://secrets.stack.mascott.ai/api"
 INFISICAL_PROJECT_ID="f6753b26-c4ae-476c-a388-1a3cf56a7c0b"
 
-if command -v infisical &>/dev/null; then
+if command -v infisical &>/dev/null && [ -n "${INFISICAL_CLIENT_ID:-}" ] && [ -n "${INFISICAL_CLIENT_SECRET:-}" ]; then
   echo "🔐 Loading secrets from Infisical..."
   INFISICAL_TOKEN=$(infisical login --method=universal-auth \
-    --client-id="${INFISICAL_CLIENT_ID:-9d81f31c-04e8-44fb-970f-4c635bfdc0ce}" \
-    --client-secret="${INFISICAL_CLIENT_SECRET:-462850bd7dceb4d8c38e914975a4c6c89ca1c13606fb0c8db3ccc2d8c27a8924}" \
+    --client-id="$INFISICAL_CLIENT_ID" \
+    --client-secret="$INFISICAL_CLIENT_SECRET" \
     --domain="$INFISICAL_DOMAIN" --silent --plain 2>/dev/null) || true
 
   if [ -n "$INFISICAL_TOKEN" ]; then
