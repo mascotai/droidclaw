@@ -465,16 +465,19 @@ async function assertEnsureAccountSuccess(
 
 	const ensureGoal = result.goals.find((g) => g.goalId === "ensure_account");
 	expect(ensureGoal, `${label}: ensure_account goal not found`).toBeTruthy();
-	expect(ensureGoal!.evalPassed).toBe(true);
 
 	// ── Eval state verification ──
-	// active_username is a string eval — the judge extracts the actual username from the screen
-	// and compares it (case-insensitive) to the expected username
-	expect(ensureGoal!.evalStateValues).toBeDefined();
-	const activeUsername = String(ensureGoal!.evalStateValues!.active_username ?? "").toLowerCase();
-	expect(activeUsername).toBe(targetUsername.toLowerCase());
-	expect(ensureGoal!.evalMismatches).toEqual([]);
-	if (opts?.expectOnHomeFeed) {
+	// Eval only runs during discovery, not recipe replay.
+	// Recipe replays don't have eval — the replay itself is the verification.
+	const isRecipe = ensureGoal!.resolvedBy === "recipe";
+	if (!isRecipe) {
+		expect(ensureGoal!.evalPassed).toBe(true);
+		expect(ensureGoal!.evalStateValues).toBeDefined();
+		const activeUsername = String(ensureGoal!.evalStateValues!.active_username ?? "").toLowerCase();
+		expect(activeUsername).toBe(targetUsername.toLowerCase());
+		expect(ensureGoal!.evalMismatches).toEqual([]);
+	}
+	if (!isRecipe && opts?.expectOnHomeFeed) {
 		expect(ensureGoal!.evalStateValues!.on_home_feed).toBe(true);
 	}
 
@@ -502,15 +505,18 @@ async function assertEnsureAccountSuccess(
 	);
 	expect(mentionsUsername).toBe(true);
 
-	// ── Eval endpoint verification ──
-	const evalResult = await client.getGoalEval(runId, "ensure_account");
-	expect(evalResult.judgment).toBeTruthy();
-	expect(evalResult.judgment!.success).toBe(true);
-	const evalUsername = String(evalResult.judgment!.stateValues.active_username ?? "").toLowerCase();
-	expect(evalUsername).toBe(targetUsername.toLowerCase());
+	// ── Eval endpoint verification (discovery only) ──
+	if (!isRecipe) {
+		const evalResult = await client.getGoalEval(runId, "ensure_account");
+		expect(evalResult.judgment).toBeTruthy();
+		expect(evalResult.judgment!.success).toBe(true);
+		const evalUsername = String(evalResult.judgment!.stateValues.active_username ?? "").toLowerCase();
+		expect(evalUsername).toBe(targetUsername.toLowerCase());
+	}
 
 	// ── Console logging ──
-	console.log(`\n📋 ${label} — ${totalSteps} steps (active_username=${activeUsername}):`);
+	const resolvedBy = ensureGoal!.resolvedBy ?? "discovery";
+	console.log(`\n📋 ${label} — ${totalSteps} steps (resolvedBy=${resolvedBy}):`);
 	for (const s of steps) {
 		const actionStr = typeof s.action === "string"
 			? s.action
