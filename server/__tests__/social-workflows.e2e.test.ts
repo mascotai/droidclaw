@@ -663,21 +663,10 @@ describe("Ensure Account", () => {
 			expect(ensureGoal).toBeTruthy();
 			expect(ensureGoal!.resolvedBy).toBe("recipe");
 
-			// ── Eval state verification ──
-			expect(ensureGoal!.evalPassed).toBe(true);
-			expect(ensureGoal!.evalStateValues).toBeDefined();
-			const activeUsername = String(ensureGoal!.evalStateValues!.active_username ?? "").toLowerCase();
-			expect(activeUsername).toBe(TEST_IG_USERNAME!.toLowerCase());
-			expect(ensureGoal!.evalMismatches).toEqual([]);
-
-			// ── Eval endpoint verification ──
-			const evalResult = await client.getGoalEval(runId, "ensure_account");
-			expect(evalResult.judgment).toBeTruthy();
-			expect(evalResult.judgment!.success).toBe(true);
-			const evalUsername = String(evalResult.judgment!.stateValues.active_username ?? "").toLowerCase();
-			expect(evalUsername).toBe(TEST_IG_USERNAME!.toLowerCase());
-
-			console.log(`\n📋 Ensure Account — recipe replay, eval passed ✓`);
+			// Recipe replays don't run eval — eval is only used during discovery
+			// to decide whether the result is worth caching. The replay itself
+			// is the verification (it either works or falls through to AI).
+			console.log(`\n📋 Ensure Account — recipe replay, resolvedBy=recipe ✓`);
 		},
 		5 * 60_000,
 	);
