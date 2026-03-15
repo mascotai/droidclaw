@@ -15,6 +15,7 @@ import { v2 } from "./routes/v2.js";
 import { goalCrud } from "./routes/goal-crud.js";
 import { workflowCrud } from "./routes/workflow-crud.js";
 import { deviceRegistration, deviceManagement } from "./routes/device-registration.js";
+import { internal } from "./routes/internal.js";
 
 import { db, ensureSchema } from "./db.js";
 import { workflowRun, evalBatch } from "./schema.js";
@@ -47,6 +48,7 @@ app.route("/v2", v2);
 app.route("/v2/goals", goalCrud);
 app.route("/v2/workflows", workflowCrud);
 app.route("/v2/devices", deviceManagement);  // Authed: /v2/devices/pending, /:id/approve, /:id/reject
+app.route("/internal", internal);            // Worker-only: /internal/execute-run (INTERNAL_SECRET auth)
 
 // Start server with WebSocket support
 const server = Bun.serve<WebSocketData>({

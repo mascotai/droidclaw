@@ -90,22 +90,21 @@ export class DroidClawTestClient {
 			body.variables = { ...(workflow.variables ?? {}), ...(variables ?? {}) };
 		}
 
-		const res = await fetch(
-			`${this.baseUrl}/v2/devices/${this.deviceId}/workflows/run`,
-			{
-				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-					...this.authHeaders(),
-				},
-				body: JSON.stringify(body),
+		const url = `${this.baseUrl}/v2/devices/${this.deviceId}/workflows/run`;
+		const res = await fetch(url, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				...this.authHeaders(),
 			},
-		);
+			body: JSON.stringify(body),
+		});
 
 		if (!res.ok) {
-			const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+			const text = await res.text().catch(() => "");
+			const errObj = (() => { try { return JSON.parse(text); } catch { return null; } })();
 			throw new Error(
-				`Failed to queue workflow: ${(err as Record<string, string>).error ?? res.status}`,
+				`Failed to queue workflow: ${errObj?.error ?? `HTTP ${res.status}`} (url: ${url}, response: ${text.slice(0, 300)})`,
 			);
 		}
 
