@@ -1,17 +1,16 @@
 {
   "name": "Instagram Ensure Account",
-  "description": "Checks if the correct Instagram account is active. If not, performs a full login with TOTP 2FA. Use this as a prerequisite step before other Instagram workflows to ensure the right account is active.",
+  "description": "Checks if the correct Instagram account is active. Tries to switch if not. Fails if the account can't be activated — the caller should handle login separately.",
   "params": {
-    "username": "The Instagram username that should be active",
-    "password": "Account password (only used if login is needed)",
-    "totpSecret": "TOTP secret for 2FA (only used if login is needed)"
+    "username": "The Instagram username that should be active"
   },
   "steps": [
     {
-      "id": "check_login",
+      "id": "ensure_account",
       "app": "com.instagram.android",
-      "goal": "Open Instagram. Dismiss any popups or dialogs. Check if the account '{{username}}' is currently logged in and active. Look at the profile tab or the username at the top of the screen. If '{{username}}' is the active account and you can see the home feed or profile, you are done.",
-      "maxSteps": 8,
+      "goal": "Open Instagram. Dismiss any popups or dialogs. Check if the account '{{username}}' is currently logged in and active. Look at the profile tab or the username at the top of the screen. If '{{username}}' is the active account, you are done. If a different account is active, long-press the profile picture icon in the bottom-right corner to open the account switcher. If '{{username}}' appears in the list, tap it to switch. If '{{username}}' is not in the list, mark as failed.",
+      "maxSteps": 12,
+      "retries": 1,
       "eval": {
         "states": {
           "correct_account_active": {
@@ -22,54 +21,6 @@
           "on_home_feed": {
             "type": "boolean",
             "description": "The Instagram home feed is visible with posts/stories and bottom navigation bar"
-          }
-        }
-      }
-    },
-    {
-      "id": "full_login",
-      "app": "com.instagram.android",
-      "goal": "The correct account is not active. From the home feed, long-press the profile picture icon in the bottom-right corner to open the account switcher. If '{{username}}' appears in the list, tap it to switch. If not, tap 'Add Instagram account', then 'Log into existing account'. Enter username '{{username}}' and password '{{password}}', then tap 'Log in'.",
-      "when": { "check_login.correct_account_active": false },
-      "maxSteps": 20,
-      "retries": 1,
-      "eval": {
-        "states": {
-          "on_2fa_or_feed": {
-            "type": "boolean",
-            "description": "Either a 2FA code screen appeared, or the home feed is visible (if account was already saved)",
-            "expected": true
-          }
-        }
-      }
-    },
-    {
-      "id": "totp",
-      "goal": "Use get_totp action with text='{{totpSecret}}' to generate a code. Tap the security code input, paste the code, then tap Continue/Confirm.",
-      "when": { "full_login.on_2fa_or_feed": true },
-      "maxSteps": 15,
-      "retries": 4,
-      "eval": {
-        "states": {
-          "past_2fa": {
-            "type": "boolean",
-            "description": "The 2FA screen is gone — moved to onboarding or home feed",
-            "expected": true
-          }
-        }
-      }
-    },
-    {
-      "id": "dismiss_onboarding",
-      "goal": "Dismiss any onboarding screens (Save Login Info, Notifications, etc.) by tapping 'Not Now' or 'Skip'. Keep dismissing until you reach the home feed.",
-      "when": { "full_login.on_2fa_or_feed": true },
-      "maxSteps": 20,
-      "eval": {
-        "states": {
-          "on_home_feed": {
-            "type": "boolean",
-            "description": "The Instagram home feed is visible",
-            "expected": true
           }
         }
       }

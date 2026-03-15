@@ -1,11 +1,28 @@
 {
   "name": "Instagram Profile Picture",
-  "description": "Downloads an image from a URL, then sets it as the Instagram profile picture via Edit Profile > Edit picture or avatar > Choose from library.",
+  "description": "Ensures the correct account is active, downloads an image from a URL, then sets it as the Instagram profile picture.",
   "params": {
+    "username": "The Instagram username that should be active",
     "imageUrl": "Direct URL to the image file to use as profile picture",
     "albumName": "Short unique album name (e.g. 'pfp1a2b3' — 6-8 chars)"
   },
   "steps": [
+    {
+      "id": "ensure_account",
+      "app": "com.instagram.android",
+      "goal": "Open Instagram. Dismiss any popups or dialogs. Check if the account '{{username}}' is currently logged in and active. Look at the profile tab or the username at the top of the screen. If '{{username}}' is the active account, you are done. If a different account is active, long-press the profile picture icon in the bottom-right corner to open the account switcher. If '{{username}}' appears in the list, tap it to switch. If '{{username}}' is not in the list, mark as failed.",
+      "maxSteps": 12,
+      "retries": 1,
+      "eval": {
+        "states": {
+          "correct_account_active": {
+            "type": "boolean",
+            "description": "The Instagram account '{{username}}' is currently logged in and active (visible as the current user)",
+            "expected": true
+          }
+        }
+      }
+    },
     {
       "goal": "Download this image and save it to the device gallery in an album called {{albumName}}: {{imageUrl}}",
       "maxSteps": 10,

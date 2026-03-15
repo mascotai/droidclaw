@@ -1,6 +1,6 @@
 {
   "name": "Instagram Post Reel from URL (v2 — optimized)",
-  "description": "Optimized version that uses fewer agent steps. Verifies the correct Instagram account is active, downloads a video from a URL into a unique album, then uploads it as a Reel with a caption.",
+  "description": "Ensures the correct account is active, downloads a video from a URL into a unique album, then uploads it as a Reel with a caption.",
   "params": {
     "username": "The Instagram username that should be active",
     "videoUrl": "Direct URL to the video file to download",
@@ -9,10 +9,20 @@
   },
   "steps": [
     {
+      "id": "ensure_account",
       "app": "com.instagram.android",
-      "goal": "Open Instagram. If you see any popup or dialog (like 'Not now', 'Skip', or a Google sign-in prompt), dismiss it. Check which Instagram account is currently logged in by looking at the profile tab or the username displayed at the top. If the active account is '{{username}}', proceed (mark done). If a different account is active, tap the username at the top to open the account switcher, then select '{{username}}'. If '{{username}}' is not listed, mark as failed.",
-      "maxSteps": 10,
-      "retries": 1
+      "goal": "Open Instagram. Dismiss any popups or dialogs. Check if the account '{{username}}' is currently logged in and active. Look at the profile tab or the username at the top of the screen. If '{{username}}' is the active account, you are done. If a different account is active, long-press the profile picture icon in the bottom-right corner to open the account switcher. If '{{username}}' appears in the list, tap it to switch. If '{{username}}' is not in the list, mark as failed.",
+      "maxSteps": 12,
+      "retries": 1,
+      "eval": {
+        "states": {
+          "correct_account_active": {
+            "type": "boolean",
+            "description": "The Instagram account '{{username}}' is currently logged in and active (visible as the current user)",
+            "expected": true
+          }
+        }
+      }
     },
     {
       "goal": "Download a video file to the device into a specific album. Use the download action with url {{videoUrl}} and save it as {{albumName}}/reel_video.mp4. The album format (AlbumName/filename) will create a gallery album named '{{albumName}}' under Pictures. After the download completes, mark done.",

@@ -246,6 +246,22 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
 
   wfLog(`[Workflow ${runId}] Starting: persistentDeviceId=${persistentDeviceId ?? "UNDEFINED"}, deviceId=${deviceId}, trackingKey=${trackingKey}`);
 
+  // ── Build set of eval state keys that have downstream `when` handlers ──
+  // When a step's eval fails but ALL mismatched states are referenced by a
+  // downstream `when` condition, the workflow continues instead of failing.
+  // The `when` system handles the branching/recovery.
+  const handledStateKeys = new Set<string>();
+  for (const s of steps) {
+    if (s.when) {
+      for (const key of Object.keys(s.when)) {
+        handledStateKeys.add(key);
+      }
+    }
+  }
+  if (handledStateKeys.size > 0) {
+    wfLog(`[Workflow ${runId}] Handled eval state keys (via when): ${[...handledStateKeys].join(", ")}`);
+  }
+
   /** Send a JSON message to the device WebSocket (if still connected) */
   const sendToDevice = (msg: Record<string, unknown>) => {
     const d = sessions.getDevice(deviceId) ?? sessions.getDeviceByPersistentId(persistentDeviceId ?? "");
@@ -607,6 +623,11 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
             }
           }
 
+          // ── Always populate evalStateMap so `when` conditions work regardless of eval pass/fail ──
+          if (step.id && evalJudgment?.stateValues) {
+            evalStateMap.set(step.id, evalJudgment.stateValues);
+          }
+
           if (evalSuccess) {
             stepResults.push({ goal: step.goal, success: true, stepsUsed: result.stepsUsed, sessionId: result.sessionId, resolvedBy: result.resolvedBy, observations: result.observations, evalJudgment, stepId: step.id });
             stepSuccess = true;
@@ -622,11 +643,6 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
                 evalStateValues: evalJudgment?.stateValues,
                 evalMismatches: evalJudgment?.mismatches,
               }).catch(err => wfLog(`[Workflow ${runId}] Step ${i}: failed to complete goal_run: ${err}`));
-            }
-
-            // ── Populate evalStateMap for `when` condition resolution ──
-            if (step.id && evalJudgment?.stateValues) {
-              evalStateMap.set(step.id, evalJudgment.stateValues);
             }
 
             // ── Cache save: compile the successful AI session into a deterministic flow ──
@@ -693,6 +709,41 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
             }
 
             break; // Success — move to next step
+          }
+
+          // ── Soft failure: eval mismatched but all mismatches have downstream `when` handlers ──
+          if (evalJudgment && step.id && evalJudgment.mismatches.length > 0) {
+            const unhandledMismatches = evalJudgment.mismatches.filter((m) => {
+              const stateKey = `${step.id}.${m.key}`;
+              return !handledStateKeys.has(stateKey);
+            });
+
+            if (unhandledMismatches.length === 0) {
+              // ALL mismatches are handled by downstream `when` conditions → continue workflow
+              wfLog(`[Workflow ${runId}] Step ${i} eval: SOFT FAIL — all ${evalJudgment.mismatches.length} mismatch(es) handled by downstream when conditions`);
+
+              stepResults.push({
+                goal: step.goal, success: true, stepsUsed: result.stepsUsed,
+                sessionId: result.sessionId, resolvedBy: result.resolvedBy,
+                observations: result.observations, evalJudgment, stepId: step.id,
+              });
+              stepSuccess = true;
+
+              // Complete goal_run — eval recorded but didn't block
+              if (currentGoalRunId) {
+                completeGoalRun(currentGoalRunId, {
+                  status: "completed",
+                  resolvedBy: "discovery",
+                  stepsUsed: result.stepsUsed,
+                  evalPassed: false,
+                  evalStateValues: evalJudgment.stateValues,
+                  evalMismatches: evalJudgment.mismatches,
+                }).catch(err => wfLog(`[Workflow ${runId}] Step ${i}: failed to complete goal_run: ${err}`));
+              }
+
+              // Don't compile recipe — eval mismatch means this path is conditional, not worth caching
+              break;
+            }
           }
 
           // Failed — log attempt and retry if attempts remain

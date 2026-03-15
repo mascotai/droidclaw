@@ -1,10 +1,11 @@
 {
   "name": "Instagram Warm-up",
-  "description": "Simulates natural Instagram browsing with randomized engagement targets per run. Comment steps navigate the search results grid so each comment lands on a different user's reel.",
+  "description": "Ensures the correct account is active, then simulates natural Instagram browsing with randomized engagement targets.",
   "params": {
+    "username": "The Instagram username that should be active",
     "nicheKeywords": "Search terms for the Explore tab (e.g. 'fitness motivation')",
     "commentPrompt": "Persona/style instruction for comments (e.g. 'You are a fitness enthusiast. Write a 5-6 word funny supportive reply')",
-    "commentCount": "Number of unique reels to comment on — duplicate the comment step that many times"
+    "commentCount": "Number of unique reels to comment on"
   },
   "variables": {
     "watchReels": { "min": 8, "max": 15 },
@@ -15,10 +16,20 @@
   },
   "steps": [
     {
+      "id": "ensure_account",
       "app": "com.instagram.android",
-      "goal": "Open Instagram. Dismiss popups. Once on Home feed, you are done.",
-      "maxSteps": 8,
-      "retries": 2
+      "goal": "Open Instagram. Dismiss any popups or dialogs. Check if the account '{{username}}' is currently logged in and active. Look at the profile tab or the username at the top of the screen. If '{{username}}' is the active account, you are done. If a different account is active, long-press the profile picture icon in the bottom-right corner to open the account switcher. If '{{username}}' appears in the list, tap it to switch. If '{{username}}' is not in the list, mark as failed.",
+      "maxSteps": 12,
+      "retries": 1,
+      "eval": {
+        "states": {
+          "correct_account_active": {
+            "type": "boolean",
+            "description": "The Instagram account '{{username}}' is currently logged in and active (visible as the current user)",
+            "expected": true
+          }
+        }
+      }
     },
     {
       "app": "com.instagram.android",

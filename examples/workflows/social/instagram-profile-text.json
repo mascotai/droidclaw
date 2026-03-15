@@ -1,12 +1,28 @@
 {
   "name": "Instagram Profile Text",
-  "description": "Opens Instagram, navigates to Edit Profile, and updates the display name, username, and bio in a single session.",
+  "description": "Ensures the correct account is active, then navigates to Edit Profile and updates the display name, username, and bio.",
   "params": {
+    "username": "The Instagram username that should be active",
     "name": "The new display name to set",
-    "username": "The new username to set (without @)",
     "bio": "The bio text to set on the profile (max 150 characters)"
   },
   "steps": [
+    {
+      "id": "ensure_account",
+      "app": "com.instagram.android",
+      "goal": "Open Instagram. Dismiss any popups or dialogs. Check if the account '{{username}}' is currently logged in and active. Look at the profile tab or the username at the top of the screen. If '{{username}}' is the active account, you are done. If a different account is active, long-press the profile picture icon in the bottom-right corner to open the account switcher. If '{{username}}' appears in the list, tap it to switch. If '{{username}}' is not in the list, mark as failed.",
+      "maxSteps": 12,
+      "retries": 1,
+      "eval": {
+        "states": {
+          "correct_account_active": {
+            "type": "boolean",
+            "description": "The Instagram account '{{username}}' is currently logged in and active (visible as the current user)",
+            "expected": true
+          }
+        }
+      }
+    },
     {
       "app": "com.instagram.android",
       "goal": "Open Instagram. If you see any popup or dialog (like 'Not now', 'Skip', account suggestions, or a Google sign-in prompt), dismiss it by tapping 'Not now', 'Skip', 'X', or pressing Back. If you see someone else's profile or a post, press Back until you see the home feed. To navigate to your own profile, look for a small profile picture or avatar icon in the bottom-right corner of the screen and tap it. If you can't find the profile icon in the element list, tap at the bottom-right area of the screen (coordinates approximately [990, 2170] on a 1080-wide screen). Once on your profile page (you should see 'Edit profile' button, your posts count, followers count), tap 'Edit profile'. Wait for the Edit Profile screen to load — you should see fields like Name, Username, Bio.",
