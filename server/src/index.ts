@@ -15,11 +15,19 @@ import { v2 } from "./routes/v2.js";
 import { goalCrud } from "./routes/goal-crud.js";
 import { workflowCrud } from "./routes/workflow-crud.js";
 import { deviceRegistration, deviceManagement } from "./routes/device-registration.js";
-import { internal } from "./routes/internal.js";
 
 import { db, ensureSchema } from "./db.js";
-import { workflowRun, evalBatch } from "./schema.js";
+import { workflowRun, evalBatch, llmConfig as llmConfigTable } from "./schema.js";
 import { eq } from "drizzle-orm";
+import { sessions } from "./ws/sessions.js";
+import { activeSessions } from "./agent/active-sessions.js";
+import {
+  runWorkflowServer,
+  type WorkflowStep,
+} from "./agent/workflow-runner.js";
+import { registerExecuteRunHandler } from "./temporal/activities.js";
+import { startTemporalWorker } from "./temporal/worker.js";
+import type { ExecuteRunInput } from "./temporal/types.js";
 
 const app = new Hono();
 
@@ -48,7 +56,6 @@ app.route("/v2", v2);
 app.route("/v2/goals", goalCrud);
 app.route("/v2/workflows", workflowCrud);
 app.route("/v2/devices", deviceManagement);  // Authed: /v2/devices/pending, /:id/approve, /:id/reject
-app.route("/internal", internal);            // Worker-only: /internal/execute-run (INTERNAL_SECRET auth)
 
 // Start server with WebSocket support
 const server = Bun.serve<WebSocketData>({
@@ -137,4 +144,111 @@ db.update(evalBatch)
   .catch((err) => {
     console.error("[Startup] Failed to clean stale evals:", err);
   });
+
+// ── Embedded Temporal Worker ──
+// Register the execute handler (same logic as old /internal/execute-run)
+// then start the worker in-process — no HTTP roundtrip, no separate container.
+
+registerExecuteRunHandler(async (input: ExecuteRunInput) => {
+  const {
+    runId,
+    deviceId,
+    userId,
+    name,
+    type: wfType,
+    steps,
+    totalSteps,
+    llmModel,
+    resolvedValues,
+  } = input;
+
+  // Check device is online (direct access — no HTTP needed)
+  const device =
+    sessions.getDeviceByPersistentId(deviceId) ??
+    sessions.getDevice(deviceId);
+  if (!device) {
+    throw new Error(`Device ${deviceId} not connected`);
+  }
+
+  const trackingKey = device.persistentDeviceId ?? device.deviceId;
+
+  // Create DB row (idempotent for retries)
+  await db
+    .insert(workflowRun)
+    .values({
+      id: runId,
+      userId,
+      deviceId,
+      name,
+      type: wfType,
+      steps: steps as any,
+      status: "running",
+      totalSteps,
+      startedAt: new Date(),
+    })
+    .onConflictDoNothing();
+
+  // Resolve LLM config (workflow type needs it)
+  let llmCfg = null;
+  if (wfType === "workflow") {
+    const configs = await db
+      .select()
+      .from(llmConfigTable)
+      .where(eq(llmConfigTable.userId, userId))
+      .limit(1);
+
+    if (configs.length === 0) {
+      await db
+        .update(workflowRun)
+        .set({ status: "failed", completedAt: new Date() })
+        .where(eq(workflowRun.id, runId));
+      throw new Error("No LLM config found for user");
+    }
+
+    llmCfg = {
+      provider: configs[0].provider,
+      apiKey: configs[0].apiKey,
+      model: llmModel ?? configs[0].model ?? undefined,
+    };
+  }
+
+  // Register in activeSessions
+  const abort = new AbortController();
+  activeSessions.set(trackingKey, {
+    sessionId: runId,
+    goal: `${wfType}: ${name}`,
+    abort,
+  });
+
+  try {
+    if (wfType === "workflow") {
+      await runWorkflowServer({
+        runId,
+        deviceId: device.deviceId,
+        persistentDeviceId: device.persistentDeviceId,
+        userId,
+        name,
+        steps: steps as WorkflowStep[],
+        llmConfig: llmCfg!,
+        signal: abort.signal,
+        resolvedValues,
+      });
+    } else {
+      throw new Error(`Unsupported workflow type: ${wfType}`);
+    }
+  } catch (err) {
+    // Mark the run as failed
+    await db
+      .update(workflowRun)
+      .set({ status: "failed", completedAt: new Date() })
+      .where(eq(workflowRun.id, runId));
+    throw err; // Re-throw so Temporal sees the failure
+  } finally {
+    activeSessions.delete(trackingKey);
+  }
+});
+
+startTemporalWorker().catch((err) => {
+  console.error("[Temporal] Failed to start embedded worker:", err);
+});
 

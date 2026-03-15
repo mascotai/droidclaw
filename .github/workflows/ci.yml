@@ -3,8 +3,6 @@ name: Build & Push DroidClaw Images
 on:
   push:
     branches: [main, dev]
-    paths-ignore:
-      - 'temporal/**'
   workflow_dispatch:
 
 permissions:
@@ -66,7 +64,7 @@ jobs:
           event-type: deploy-service
           client-payload: |
             {
-              "services": "droidclaw-server,droidclaw-web,droidclaw-worker",
+              "services": "droidclaw-server,droidclaw-web",
               "compose_file": "apps/droidclaw.yml",
               "project": "${{ github.ref == 'refs/heads/main' && 'mascotai-prod' || 'mascotai-dev' }}",
               "infisical_env": "${{ github.ref == 'refs/heads/main' && 'prod' || 'dev' }}",
