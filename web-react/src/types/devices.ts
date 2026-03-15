@@ -26,7 +26,9 @@ export interface WorkflowStepConfig {
 	retries?: number;
 	cache?: boolean;
 	forceStop?: boolean;
-	eval?: Record<string, unknown>;
+	eval?: { states: Record<string, { type: string; description: string; expected?: unknown }> };
+	id?: string;
+	when?: Record<string, boolean | string | number>;
 }
 
 export interface AgentStepDetail {
