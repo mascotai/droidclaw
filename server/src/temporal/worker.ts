@@ -21,7 +21,7 @@ export async function startTemporalWorker(): Promise<void> {
     connection,
     namespace: env.TEMPORAL_NAMESPACE,
     taskQueue: env.TEMPORAL_TASK_QUEUE,
-    workflowsPath: new URL("./workflows/device-queue.js", import.meta.url)
+    workflowsPath: new URL("./workflows/device-queue.ts", import.meta.url)
       .pathname,
     activities,
     maxConcurrentActivityTaskExecutions: 5,
