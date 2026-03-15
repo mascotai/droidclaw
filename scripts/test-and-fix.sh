@@ -15,10 +15,16 @@
 set -euo pipefail
 set -a && source .env && set +a
 
+# Map .env names to what the tests expect
+export DROIDCLAW_URL="${DROIDCLAW_URL:-$DROIDCLAW_API_URL}"
+export DROIDCLAW_AUTH_TOKEN="${DROIDCLAW_AUTH_TOKEN:-$DROIDCLAW_API_KEY}"
+export INSTAREG_API_URL="${INSTAREG_API_URL:-https://instareg.stack.mascott.ai}"
+export INSTAREG_API_KEY="${INSTAREG_API_KEY:-$INSTAREG_API_SECRET_KEY}"
+
 MAX_FIX=3
 RESULTS="./test-results/social-e2e.json"
 BASE="${DROIDCLAW_URL}/v2/devices/${DROIDCLAW_DEVICE_ID}"
-HDR="Authorization: Bearer ${DROIDCLAW_API_KEY}"
+HDR="Authorization: Bearer ${DROIDCLAW_AUTH_TOKEN}"
 mkdir -p ./test-results
 
 # ── Phase 1: Discovery (auto-fix loop) ──────────────────────────────

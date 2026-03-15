@@ -13,10 +13,14 @@
  *   npx vitest run --config vitest.config.e2e-social.ts -t "Ensure"      # all phases for one workflow
  *   npm run test:social                                                   # everything
  *
- * Requires env vars:
+ * Env vars (required):
  *   DROIDCLAW_URL          — server URL (e.g., https://droidclaw.stack.mascott.ai)
  *   DROIDCLAW_AUTH_TOKEN   — Bearer token (API key or INTERNAL_SECRET)
  *   DROIDCLAW_DEVICE_ID    — device to run tests on
+ *   INSTAREG_API_URL       — InstaReg API URL (to fetch test account credentials)
+ *   INSTAREG_API_KEY       — InstaReg API key
+ *
+ * Env vars (optional — override auto-fetched credentials):
  *   TEST_IG_USERNAME        — Instagram test account username
  *   TEST_IG_PASSWORD        — Instagram test account password
  *   TEST_IG_TOTP_SECRET     — TOTP secret for 2FA
@@ -28,9 +32,11 @@ import { DroidClawTestClient } from "./helpers/droidclaw-test-client";
 const DROIDCLAW_URL = process.env.DROIDCLAW_URL;
 const DROIDCLAW_AUTH_TOKEN = process.env.DROIDCLAW_AUTH_TOKEN;
 const DROIDCLAW_DEVICE_ID = process.env.DROIDCLAW_DEVICE_ID;
-const TEST_IG_USERNAME = process.env.TEST_IG_USERNAME;
-const TEST_IG_PASSWORD = process.env.TEST_IG_PASSWORD;
-const TEST_IG_TOTP_SECRET = process.env.TEST_IG_TOTP_SECRET;
+
+// IG credentials — set via env or auto-fetched from InstaReg
+let TEST_IG_USERNAME = process.env.TEST_IG_USERNAME;
+let TEST_IG_PASSWORD = process.env.TEST_IG_PASSWORD;
+let TEST_IG_TOTP_SECRET = process.env.TEST_IG_TOTP_SECRET;
 
 // Optional env vars for specific tests
 const TEST_IG_NAME = process.env.TEST_IG_NAME ?? "Test User";
@@ -43,13 +49,80 @@ const TEST_IG_COMMENT_PROMPT =
 
 let client: DroidClawTestClient;
 
-beforeAll(() => {
+/**
+ * Fetch an Instagram account from the InstaReg orders API.
+ * Picks the most recent order's first account.
+ */
+async function fetchAccountFromInstaReg(): Promise<{
+	username: string;
+	password: string;
+	totpSecret: string;
+}> {
+	const apiUrl = process.env.INSTAREG_API_URL;
+	const apiKey = process.env.INSTAREG_API_KEY;
+
+	if (!apiUrl || !apiKey) {
+		throw new Error(
+			"No TEST_IG_USERNAME set and INSTAREG_API_URL/INSTAREG_API_KEY not available to auto-fetch. " +
+			"Set either TEST_IG_USERNAME+TEST_IG_PASSWORD+TEST_IG_TOTP_SECRET or INSTAREG_API_URL+INSTAREG_API_KEY.",
+		);
+	}
+
+	// List recent orders
+	const ordersRes = await fetch(`${apiUrl}/api/orders?limit=5`, {
+		headers: { Authorization: `Bearer ${apiKey}` },
+	});
+	if (!ordersRes.ok) throw new Error(`InstaReg orders list failed: HTTP ${ordersRes.status}`);
+	const ordersData = (await ordersRes.json()) as {
+		orders: Array<{ orderId: string; accountCount: number }>;
+	};
+
+	// Find an order with accounts
+	for (const order of ordersData.orders) {
+		const detailRes = await fetch(`${apiUrl}/api/orders/${order.orderId}`, {
+			headers: { Authorization: `Bearer ${apiKey}` },
+		});
+		if (!detailRes.ok) continue;
+		const detail = (await detailRes.json()) as {
+			accounts: Array<{
+				username: string;
+				password: string;
+				seed: string;
+				twoFAVerified: boolean;
+			}>;
+		};
+
+		const account = detail.accounts.find((a) => a.twoFAVerified);
+		if (account) {
+			// seed may have spaces (base32 formatting), strip them
+			const totpSecret = account.seed.replace(/\s+/g, "");
+			console.log(`📱 Using InstaReg account: ${account.username} (order ${order.orderId.slice(0, 8)}...)`);
+			return {
+				username: account.username,
+				password: account.password,
+				totpSecret,
+			};
+		}
+	}
+
+	throw new Error("No verified InstaReg account found in recent orders");
+}
+
+beforeAll(async () => {
 	if (!DROIDCLAW_URL || !DROIDCLAW_AUTH_TOKEN || !DROIDCLAW_DEVICE_ID) {
 		throw new Error(
 			"Missing required env vars: DROIDCLAW_URL, DROIDCLAW_AUTH_TOKEN, DROIDCLAW_DEVICE_ID",
 		);
 	}
 	client = new DroidClawTestClient(DROIDCLAW_URL, DROIDCLAW_AUTH_TOKEN, DROIDCLAW_DEVICE_ID);
+
+	// Auto-fetch IG credentials from InstaReg if not provided
+	if (!TEST_IG_USERNAME) {
+		const account = await fetchAccountFromInstaReg();
+		TEST_IG_USERNAME = account.username;
+		TEST_IG_PASSWORD = account.password;
+		TEST_IG_TOTP_SECRET = account.totpSecret;
+	}
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
