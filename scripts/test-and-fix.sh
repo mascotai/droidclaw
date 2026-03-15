@@ -13,13 +13,42 @@
 #   bash scripts/test-and-fix.sh
 
 set -euo pipefail
-set -a && source .env && set +a
 
-# Map .env names to what the tests expect
-export DROIDCLAW_URL="${DROIDCLAW_URL:-$DROIDCLAW_API_URL}"
-export DROIDCLAW_AUTH_TOKEN="${DROIDCLAW_AUTH_TOKEN:-$DROIDCLAW_API_KEY}"
-export INSTAREG_API_URL="${INSTAREG_API_URL:-https://instareg.stack.mascott.ai}"
-export INSTAREG_API_KEY="${INSTAREG_API_KEY:-$INSTAREG_API_SECRET_KEY}"
+# ── Load secrets from Infisical ──────────────────────────────────────
+# Uses infisical CLI with universal auth to fetch prod secrets.
+# Falls back to .env if infisical is not available.
+INFISICAL_DOMAIN="https://secrets.stack.mascott.ai/api"
+INFISICAL_PROJECT_ID="f6753b26-c4ae-476c-a388-1a3cf56a7c0b"
+
+if command -v infisical &>/dev/null; then
+  echo "🔐 Loading secrets from Infisical..."
+  INFISICAL_TOKEN=$(infisical login --method=universal-auth \
+    --client-id="${INFISICAL_CLIENT_ID:-9d81f31c-04e8-44fb-970f-4c635bfdc0ce}" \
+    --client-secret="${INFISICAL_CLIENT_SECRET:-462850bd7dceb4d8c38e914975a4c6c89ca1c13606fb0c8db3ccc2d8c27a8924}" \
+    --domain="$INFISICAL_DOMAIN" --silent --plain 2>/dev/null) || true
+
+  if [ -n "$INFISICAL_TOKEN" ]; then
+    eval "$(infisical export \
+      --token="$INFISICAL_TOKEN" \
+      --projectId="$INFISICAL_PROJECT_ID" \
+      --env=prod \
+      --domain="$INFISICAL_DOMAIN" \
+      --format=dotenv 2>/dev/null | grep -E '^(DROIDCLAW_|INSTAREG_)' | sed 's/^/export /')"
+    echo "   ✅ Loaded secrets from Infisical"
+  else
+    echo "   ⚠️  Infisical auth failed, falling back to .env"
+    set -a && source .env && set +a
+  fi
+else
+  echo "📄 Loading secrets from .env (infisical CLI not found)"
+  set -a && source .env && set +a
+fi
+
+# Map secret names to what the tests expect
+export DROIDCLAW_URL="${DROIDCLAW_URL:-${DROIDCLAW_API_URL:-}}"
+export DROIDCLAW_AUTH_TOKEN="${DROIDCLAW_AUTH_TOKEN:-${DROIDCLAW_API_KEY:-${DROIDCLAW_INTERNAL_SECRET:-}}}"
+export INSTAREG_API_URL="https://instareg.stack.mascott.ai"  # always use external URL
+export INSTAREG_API_KEY="${INSTAREG_API_KEY:-${INSTAREG_API_SECRET_KEY:-}}"
 
 MAX_FIX=3
 RESULTS="./test-results/social-e2e.json"
