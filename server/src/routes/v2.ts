@@ -29,6 +29,8 @@ import {
   agentStep,
   cachedFlow,
   recipe,
+  goalRun,
+  step as stepTable,
 } from "../schema.js";
 import { activeSessions } from "../agent/active-sessions.js";
 import { getWorkflowDebugLog } from "../agent/workflow-runner.js";
@@ -398,14 +400,38 @@ v2.get("/devices/:deviceId/workflows/runs/:runId", async (c) => {
     const goalDef = stepDefs[goalIdx];
 
     if (active?.sessionId) {
-      // Get the latest step from DB
-      const latestSteps = await db
+      // Get the latest step from DB — try legacy agentStep first, then new step table
+      let latest: { stepNumber: number; action: any; reasoning: string | null; result: string | null; packageName: string | null; durationMs: number | null } | null = null;
+
+      const legacySteps = await db
         .select()
         .from(agentStep)
         .where(eq(agentStep.sessionId, active.sessionId))
         .orderBy(desc(agentStep.stepNumber))
         .limit(1);
-      const latest = latestSteps[0] ?? null;
+
+      if (legacySteps.length > 0) {
+        latest = legacySteps[0];
+      } else {
+        // Try new step table via goal_run for this running workflow
+        const goalRunRows = await db
+          .select({ id: goalRun.id })
+          .from(goalRun)
+          .where(and(eq(goalRun.workflowRunId, run.id), eq(goalRun.stepIndex, goalIdx)))
+          .limit(1);
+
+        if (goalRunRows.length > 0) {
+          const newSteps = await db
+            .select()
+            .from(stepTable)
+            .where(eq(stepTable.goalRunId, goalRunRows[0].id))
+            .orderBy(desc(stepTable.stepNumber))
+            .limit(1);
+          if (newSteps.length > 0) {
+            latest = newSteps[0];
+          }
+        }
+      }
 
       goals.push({
         goal: goalIdx,
@@ -618,22 +644,77 @@ v2.get("/devices/:deviceId/workflows/runs/:runId/goals/:goalId/steps", async (c)
   const fromStep = parseInt(c.req.query("from") ?? "0", 10);
   const toStep = parseInt(c.req.query("to") ?? "0", 10);
 
-  const conditions = [eq(agentStep.sessionId, sessionId)];
-  if (fromStep > 0) conditions.push(sql`${agentStep.stepNumber} >= ${fromStep}`);
-  if (toStep > 0) conditions.push(sql`${agentStep.stepNumber} <= ${toStep}`);
+  // Try legacy agentStep table first, then fall back to new step table (via goal_run)
+  const legacyConditions = [eq(agentStep.sessionId, sessionId)];
+  if (fromStep > 0) legacyConditions.push(sql`${agentStep.stepNumber} >= ${fromStep}`);
+  if (toStep > 0) legacyConditions.push(sql`${agentStep.stepNumber} <= ${toStep}`);
 
-  // Get total count (before pagination) for context
-  const totalResult = await db
+  const legacyTotal = await db
     .select({ count: sql<number>`count(*)` })
     .from(agentStep)
     .where(eq(agentStep.sessionId, sessionId));
-  const totalSteps = Number(totalResult[0]?.count ?? 0);
+  let totalSteps = Number(legacyTotal[0]?.count ?? 0);
 
-  const agentSteps = await db
-    .select()
-    .from(agentStep)
-    .where(and(...conditions))
-    .orderBy(asc(agentStep.stepNumber));
+  let formattedSteps: Array<{
+    step: number; action: any; reasoning: string | null;
+    result: string | null; package: string | null; durationMs: number | null;
+  }>;
+
+  if (totalSteps > 0) {
+    // Legacy path — steps in agent_step table
+    const agentSteps = await db
+      .select()
+      .from(agentStep)
+      .where(and(...legacyConditions))
+      .orderBy(asc(agentStep.stepNumber));
+
+    formattedSteps = agentSteps.map((s) => ({
+      step: s.stepNumber,
+      action: s.action,
+      reasoning: s.reasoning,
+      result: s.result,
+      package: s.packageName,
+      durationMs: s.durationMs,
+    }));
+  } else {
+    // New path — look up goal_run by workflowRunId + stepIndex, then query step table
+    const goalRunRows = await db
+      .select({ id: goalRun.id })
+      .from(goalRun)
+      .where(and(eq(goalRun.workflowRunId, run.id), eq(goalRun.stepIndex, idx)))
+      .limit(1);
+
+    if (goalRunRows.length > 0) {
+      const grId = goalRunRows[0].id;
+
+      const newTotal = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(stepTable)
+        .where(eq(stepTable.goalRunId, grId));
+      totalSteps = Number(newTotal[0]?.count ?? 0);
+
+      const newConditions = [eq(stepTable.goalRunId, grId)];
+      if (fromStep > 0) newConditions.push(sql`${stepTable.stepNumber} >= ${fromStep}`);
+      if (toStep > 0) newConditions.push(sql`${stepTable.stepNumber} <= ${toStep}`);
+
+      const newSteps = await db
+        .select()
+        .from(stepTable)
+        .where(and(...newConditions))
+        .orderBy(asc(stepTable.stepNumber));
+
+      formattedSteps = newSteps.map((s) => ({
+        step: s.stepNumber,
+        action: s.action,
+        reasoning: s.reasoning,
+        result: s.result,
+        package: s.packageName,
+        durationMs: s.durationMs,
+      }));
+    } else {
+      formattedSteps = [];
+    }
+  }
 
   return c.json({
     goal: idx,
@@ -643,14 +724,7 @@ v2.get("/devices/:deviceId/workflows/runs/:runId/goals/:goalId/steps", async (c)
     totalSteps,
     maxSteps: def?.maxSteps ?? null,
     ...(fromStep > 0 || toStep > 0 ? { from: fromStep || 1, to: toStep || totalSteps } : {}),
-    steps: agentSteps.map((s) => ({
-      step: s.stepNumber,
-      action: s.action,
-      reasoning: s.reasoning,
-      result: s.result,
-      package: s.packageName,
-      durationMs: s.durationMs,
-    })),
+    steps: formattedSteps,
   });
 });
 
@@ -671,7 +745,7 @@ v2.get("/devices/:deviceId/workflows/runs/:runId/goals/:goalId/steps/:step", asy
 
   const sr = stepResults[idx];
 
-  // Get the agent step from DB
+  // Get the agent step from DB — try legacy agentStep table, then new step table
   let agentStepData: {
     action: any; reasoning: string | null; result: string | null;
     packageName: string | null; durationMs: number | null;
@@ -691,6 +765,32 @@ v2.get("/devices/:deviceId/workflows/runs/:runId/goals/:goalId/steps/:step", asy
         packageName: rows[0].packageName,
         durationMs: rows[0].durationMs,
       };
+    }
+  }
+
+  // Fallback: try new step table via goal_run
+  if (!agentStepData) {
+    const goalRunRows = await db
+      .select({ id: goalRun.id })
+      .from(goalRun)
+      .where(and(eq(goalRun.workflowRunId, run.id), eq(goalRun.stepIndex, idx)))
+      .limit(1);
+
+    if (goalRunRows.length > 0) {
+      const rows = await db
+        .select()
+        .from(stepTable)
+        .where(and(eq(stepTable.goalRunId, goalRunRows[0].id), eq(stepTable.stepNumber, stepNum)))
+        .limit(1);
+      if (rows.length > 0) {
+        agentStepData = {
+          action: rows[0].action,
+          reasoning: rows[0].reasoning,
+          result: rows[0].result,
+          packageName: rows[0].packageName,
+          durationMs: rows[0].durationMs,
+        };
+      }
     }
   }
 
