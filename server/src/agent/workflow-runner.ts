@@ -11,7 +11,6 @@ import { evaluateStep, type EvalJudgment, type StateDefinition, type AgentStepRe
 import { createGoalRun, completeGoalRun } from "./goal-run-manager.js";
 import type { LLMConfig } from "./llm.js";
 import type { ScreenObservation } from "./loop.js";
-import { getScreenWithRetry } from "./screen-utils.js";
 
 /** In-memory ring buffer for workflow debug logs (last 200 entries). */
 const _debugLog: string[] = [];
@@ -511,65 +510,12 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
                   .where(eq(recipe.id, cachedEntry.id));
 
                 usedRecipeId = cachedEntry.id;
-
-                // ── Eval judge after recipe replay ──
-                let recipeEvalJudgment: EvalJudgment | undefined;
-                if (step.eval && step.eval.states && Object.keys(step.eval.states).length > 0) {
-                  try {
-                    // Capture current screen as observation for the eval judge
-                    const screenRes = await getScreenWithRetry(deviceId);
-                    const recipeObservations: ScreenObservation[] = screenRes ? [{
-                      stepNumber: resolvedRecipeSteps.length,
-                      elements: screenRes.elements as any[],
-                      packageName: screenRes.packageName,
-                      activityName: screenRes.activityName,
-                    }] : [];
-
-                    recipeEvalJudgment = await evaluateStep(
-                      step.goal,
-                      recipeObservations,
-                      [], // no agent transcript for recipe replay
-                      step.eval.states,
-                      llmConfig,
-                    );
-
-                    wfLog(`[Workflow ${runId}] Step ${i} recipe eval: ${recipeEvalJudgment.success ? "PASS" : "FAIL"} (mismatches: ${recipeEvalJudgment.mismatches.length})`);
-
-                    if (!recipeEvalJudgment.success) {
-                      // Recipe replayed fine but eval failed — treat as recipe failure
-                      wfLog(`[Workflow ${runId}] Step ${i}: recipe eval FAILED, falling through to AI`);
-                      const newFailCount = (cachedEntry.failCount ?? 0) + 1;
-                      await db
-                        .update(recipe)
-                        .set({ failCount: newFailCount } as any)
-                        .where(eq(recipe.id, cachedEntry.id));
-
-                      if (step.app) {
-                        try {
-                          await sessions.sendCommand(deviceId, { type: "launch", packageName: step.app });
-                          await new Promise((r) => setTimeout(r, 1500));
-                        } catch {}
-                      }
-                      continue; // fall through to AI
-                    }
-                  } catch (err) {
-                    wfLog(`[Workflow ${runId}] Step ${i}: recipe eval error: ${err}, treating as success`);
-                  }
-                }
-
-                // Populate evalStateMap for `when` conditions
-                if (step.id && recipeEvalJudgment?.stateValues) {
-                  evalStateMap.set(step.id, recipeEvalJudgment.stateValues);
-                }
-
                 stepResults.push({
                   goal: step.goal,
                   success: true,
                   stepsUsed: resolvedRecipeSteps.length,
                   resolvedBy: "recipe",
                   cachedFlowId: cachedEntry.id,
-                  evalJudgment: recipeEvalJudgment,
-                  stepId: step.id,
                 });
                 stepSuccess = true;
                 wfLog(`[Workflow ${runId}] Step ${i}: recipe replay SUCCESS`);
@@ -581,9 +527,6 @@ export async function runWorkflowServer(options: RunWorkflowOptions): Promise<vo
                     resolvedBy: "recipe",
                     stepsUsed: resolvedRecipeSteps.length,
                     recipeId: usedRecipeId,
-                    evalPassed: recipeEvalJudgment?.success,
-                    evalStateValues: recipeEvalJudgment?.stateValues,
-                    evalMismatches: recipeEvalJudgment?.mismatches,
                   }).catch(err => wfLog(`[Workflow ${runId}] Step ${i}: failed to complete goal_run: ${err}`));
                 }
 
