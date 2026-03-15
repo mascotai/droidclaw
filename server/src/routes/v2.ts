@@ -383,6 +383,8 @@ v2.get("/devices/:deviceId/workflows/runs/:runId", async (c) => {
     stepsUsed: sr.stepsUsed,
     resolvedBy: sr.resolvedBy ?? null,
     evalPassed: sr.evalJudgment ? sr.evalJudgment.success : null,
+    evalStateValues: sr.evalJudgment?.stateValues ?? null,
+    evalMismatches: sr.evalJudgment?.mismatches ?? null,
     skipped: sr.skipped ?? false,
     error: sr.error ?? null,
     sessionId: sr.sessionId ?? null,

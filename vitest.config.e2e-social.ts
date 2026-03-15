@@ -8,5 +8,7 @@ export default defineConfig({
 		pool: "forks", // Isolated processes
 		maxConcurrency: 1, // Sequential — one device at a time
 		retry: 0, // Don't retry device tests
+		reporters: ["default", "json"],
+		outputFile: { json: "./test-results/social-e2e.json" },
 	},
 });

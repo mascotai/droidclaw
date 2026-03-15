@@ -18,7 +18,8 @@
     "db:push": "bun run --cwd web db:push",
     "typecheck": "tsc --noEmit",
     "test:social": "npx vitest run --config vitest.config.e2e-social.ts",
-    "test:social:ui": "npx vitest --config vitest.config.e2e-social.ts --ui"
+    "test:social:ui": "npx vitest --config vitest.config.e2e-social.ts --ui",
+    "test:social:fix": "bash scripts/test-and-fix.sh"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.700.0",
@@ -33,6 +34,7 @@
   "devDependencies": {
     "@types/bun": "^1.1.0",
     "@types/js-yaml": "^4.0.9",
+    "@vitest/ui": "^4.1.0",
     "typescript": "^5.6.0",
     "vitest": "^3.1.0"
   }

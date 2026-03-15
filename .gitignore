@@ -19,3 +19,4 @@ CLAUDE.md
 .playwright-mcp/
 shadcn-cli-v4-transcript.md
 transcription.txt
+test-results/

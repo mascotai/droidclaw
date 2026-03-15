@@ -36,6 +36,29 @@ export interface GoalResult {
 	error?: string;
 }
 
+export interface GoalStepResult {
+	step: number;
+	action: string;
+	reasoning: string;
+	result: string;
+	package: string;
+	durationMs: number;
+}
+
+export interface GoalStepsResult {
+	steps: GoalStepResult[];
+	totalSteps: number;
+}
+
+export interface GoalEvalResult {
+	definition: Record<string, unknown> | null;
+	judgment: {
+		success: boolean;
+		stateValues: Record<string, unknown>;
+		mismatches: Array<{ key: string; expected: unknown; actual: unknown }>;
+	} | null;
+}
+
 export class DroidClawTestClient {
 	private baseUrl: string;
 	private authToken: string;
@@ -222,6 +245,47 @@ export class DroidClawTestClient {
 		});
 		if (!res.ok) throw new Error(`Failed to list devices: HTTP ${res.status}`);
 		return (await res.json()) as Array<{ deviceId: string; name: string; online: boolean }>;
+	}
+
+	/**
+	 * Get agent steps for a specific goal in a run.
+	 */
+	async getGoalSteps(
+		runId: string,
+		goalId: string,
+		options?: { from?: number; to?: number },
+	): Promise<GoalStepsResult> {
+		const params = new URLSearchParams();
+		if (options?.from) params.set("from", String(options.from));
+		if (options?.to) params.set("to", String(options.to));
+		const qs = params.toString() ? `?${params.toString()}` : "";
+
+		const res = await fetch(
+			`${this.baseUrl}/v2/devices/${this.deviceId}/workflows/runs/${runId}/goals/${goalId}/steps${qs}`,
+			{ headers: this.authHeaders() },
+		);
+
+		if (!res.ok) {
+			throw new Error(`Failed to get goal steps: HTTP ${res.status}`);
+		}
+
+		return (await res.json()) as GoalStepsResult;
+	}
+
+	/**
+	 * Get eval definition and judgment for a specific goal in a run.
+	 */
+	async getGoalEval(runId: string, goalId: string): Promise<GoalEvalResult> {
+		const res = await fetch(
+			`${this.baseUrl}/v2/devices/${this.deviceId}/workflows/runs/${runId}/goals/${goalId}/eval`,
+			{ headers: this.authHeaders() },
+		);
+
+		if (!res.ok) {
+			throw new Error(`Failed to get goal eval: HTTP ${res.status}`);
+		}
+
+		return (await res.json()) as GoalEvalResult;
 	}
 
 	private authHeaders(): Record<string, string> {
