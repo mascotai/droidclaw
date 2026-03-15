@@ -13,10 +13,10 @@
       "retries": 1,
       "eval": {
         "states": {
-          "correct_account_active": {
-            "type": "boolean",
-            "description": "The Instagram account '{{username}}' is currently logged in and active (visible as the current user)",
-            "expected": true
+          "active_username": {
+            "type": "string",
+            "description": "The Instagram username currently visible at the top of the screen or in the profile tab (the active/logged-in account username)",
+            "expected": "{{username}}"
           },
           "on_home_feed": {
             "type": "boolean",

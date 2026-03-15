@@ -445,73 +445,206 @@ describe("Instagram Post Reel", () => {
 //  6. Ensure Account
 // ═══════════════════════════════════════════════════════════════════════════
 
+/**
+ * Helper: shared assertions for a successful ensure_account goal.
+ * Validates eval states, step structure, and eval endpoint.
+ *
+ * @param expectOnHomeFeed - If true, assert on_home_feed === true. Default: false.
+ *   The workflow's eval only requires active_username; on_home_feed has no
+ *   expected value (informational only). After switching accounts, Instagram often
+ *   lands on the profile page, not the home feed.
+ */
+async function assertEnsureAccountSuccess(
+	runId: string,
+	targetUsername: string,
+	label: string,
+	opts?: { expectOnHomeFeed?: boolean },
+) {
+	const result = await client.waitForCompletion(runId, 5 * 60_000);
+	expect(result.status).toBe("completed");
+
+	const ensureGoal = result.goals.find((g) => g.goalId === "ensure_account");
+	expect(ensureGoal, `${label}: ensure_account goal not found`).toBeTruthy();
+	expect(ensureGoal!.evalPassed).toBe(true);
+
+	// ── Eval state verification ──
+	// active_username is a string eval — the judge extracts the actual username from the screen
+	// and compares it (case-insensitive) to the expected username
+	expect(ensureGoal!.evalStateValues).toBeDefined();
+	const activeUsername = String(ensureGoal!.evalStateValues!.active_username ?? "").toLowerCase();
+	expect(activeUsername).toBe(targetUsername.toLowerCase());
+	expect(ensureGoal!.evalMismatches).toEqual([]);
+	if (opts?.expectOnHomeFeed) {
+		expect(ensureGoal!.evalStateValues!.on_home_feed).toBe(true);
+	}
+
+	// ── Step inspection ──
+	const { steps, totalSteps } = await client.getGoalSteps(runId, "ensure_account");
+	expect(steps.length).toBeGreaterThan(0);
+	expect(totalSteps).toBeLessThanOrEqual(12);
+
+	// Last step action is "done" — agent completed, didn't exhaust steps
+	const lastStep = steps[steps.length - 1];
+	const lastAction = typeof lastStep.action === "string"
+		? lastStep.action
+		: (lastStep.action as Record<string, unknown>).action;
+	expect(lastAction).toBe("done");
+
+	// All steps with a package stayed in Instagram
+	const stepsWithPackage = steps.filter((s) => s.package);
+	for (const s of stepsWithPackage) {
+		expect(s.package).toBe("com.instagram.android");
+	}
+
+	// At least one step's reasoning mentions the username
+	const mentionsUsername = steps.some(
+		(s) => s.reasoning?.toLowerCase().includes(targetUsername.toLowerCase()),
+	);
+	expect(mentionsUsername).toBe(true);
+
+	// ── Eval endpoint verification ──
+	const evalResult = await client.getGoalEval(runId, "ensure_account");
+	expect(evalResult.judgment).toBeTruthy();
+	expect(evalResult.judgment!.success).toBe(true);
+	const evalUsername = String(evalResult.judgment!.stateValues.active_username ?? "").toLowerCase();
+	expect(evalUsername).toBe(targetUsername.toLowerCase());
+
+	// ── Console logging ──
+	console.log(`\n📋 ${label} — ${totalSteps} steps (active_username=${activeUsername}):`);
+	for (const s of steps) {
+		const actionStr = typeof s.action === "string"
+			? s.action
+			: JSON.stringify(s.action);
+		console.log(`  Step ${s.step}: [${actionStr}] ${s.reasoning?.slice(0, 120) ?? ""}`);
+	}
+
+	return { result, ensureGoal: ensureGoal!, steps, totalSteps };
+}
+
 describe("Ensure Account", () => {
-	const getVars = () => {
-		expect(TEST_IG_USERNAME, "TEST_IG_USERNAME required").toBeTruthy();
-		return { username: TEST_IG_USERNAME! };
-	};
 	const workflow = "examples/workflows/social/instagram-ensure-account.json";
 
+	// ── Scenario 1: Target already active ──
+	// The primary test account is already the active account on the device.
+	// Agent should recognize it and mark done quickly.
 	test(
-		"Phase 1: discovery",
+		"Scenario 1: target already active — should succeed immediately",
 		async () => {
-			const { runId } = await client.runWorkflow(workflow, getVars());
+			expect(TEST_IG_USERNAME, "TEST_IG_USERNAME required").toBeTruthy();
+
+			const { runId } = await client.runWorkflow(workflow, { username: TEST_IG_USERNAME! });
+			const { totalSteps } = await assertEnsureAccountSuccess(
+				runId,
+				TEST_IG_USERNAME!,
+				"Scenario 1 (already active)",
+			);
+
+			// Should complete quickly — just check profile and done
+			expect(totalSteps).toBeLessThanOrEqual(5);
+			console.log(`✅ Scenario 1 passed: account already active, ${totalSteps} steps`);
+		},
+		5 * 60_000,
+	);
+
+	// ── Scenario 2: Target exists in account switcher — should switch ──
+	// Pre-condition: multiple accounts are already logged in on the device.
+	// First, ensure_account switches to a different account, then switches back to primary.
+	// ensure_account itself does NOT log in — it only checks/switches existing accounts.
+	test(
+		"Scenario 2: different account active, target in switcher — should switch",
+		async () => {
+			expect(TEST_IG_USERNAME, "TEST_IG_USERNAME required").toBeTruthy();
+
+			// Step 1: Switch to a different account so primary is NOT active
+			// Use one of the existing accounts already on the device
+			const OTHER_USERNAME = "dragon.2408522";
+			console.log(`\n🔧 Test setup: switching to ${OTHER_USERNAME} so primary is no longer active...`);
+			const setupResult = await client.runWorkflow(workflow, { username: OTHER_USERNAME });
+			const setupCompletion = await client.waitForCompletion(setupResult.runId, 5 * 60_000);
+			expect(setupCompletion.status).toBe("completed");
+			console.log(`✅ Setup: ${OTHER_USERNAME} is now active, ${TEST_IG_USERNAME} should be in the switcher`);
+
+			// Step 2: Now ensure_account for the PRIMARY account — should switch via account switcher
+			console.log(`\n🔄 Running ensure_account to switch from ${OTHER_USERNAME} → ${TEST_IG_USERNAME}...`);
+			const { runId } = await client.runWorkflow(workflow, { username: TEST_IG_USERNAME! });
+			const { totalSteps, steps } = await assertEnsureAccountSuccess(
+				runId,
+				TEST_IG_USERNAME!,
+				"Scenario 2 (switch account)",
+			);
+
+			// Verify the agent actually switched — should have used account switcher
+			// Look for steps that involve long-press on profile or tapping the account
+			const switchingSteps = steps.filter(
+				(s) => {
+					const reasoning = s.reasoning?.toLowerCase() ?? "";
+					const actionStr = typeof s.action === "string" ? s.action : JSON.stringify(s.action);
+					return reasoning.includes("switch") ||
+						reasoning.includes("account") ||
+						reasoning.includes("long") ||
+						actionStr.includes("longpress");
+				},
+			);
+			expect(switchingSteps.length).toBeGreaterThan(0);
+			console.log(`✅ Scenario 2 passed: switched account in ${totalSteps} steps, ${switchingSteps.length} switch-related steps`);
+		},
+		10 * 60_000,
+	);
+
+	// ── Scenario 3: Target not in account switcher — should fail ──
+	// Use a username that doesn't exist on the device.
+	// The agent should check the account switcher and fail gracefully.
+	test(
+		"Scenario 3: target not in switcher — should fail",
+		async () => {
+			const FAKE_USERNAME = "nonexistent_user_xyz_99999";
+
+			console.log(`\n❌ Running ensure_account for nonexistent account ${FAKE_USERNAME}...`);
+			const { runId } = await client.runWorkflow(workflow, { username: FAKE_USERNAME });
 			const result = await client.waitForCompletion(runId, 5 * 60_000);
 
-			expect(result.status).toBe("completed");
+			// Workflow should fail — account doesn't exist on the device
+			expect(result.status).toBe("failed");
 
 			const ensureGoal = result.goals.find((g) => g.goalId === "ensure_account");
-			expect(ensureGoal).toBeTruthy();
-			expect(ensureGoal!.evalPassed).toBe(true);
+			expect(ensureGoal, "ensure_account goal not found").toBeTruthy();
 
-			// ── Eval state verification ──
-			expect(ensureGoal!.evalStateValues).toBeDefined();
-			expect(ensureGoal!.evalStateValues!.correct_account_active).toBe(true);
-			expect(ensureGoal!.evalStateValues!.on_home_feed).toBe(true);
-			expect(ensureGoal!.evalMismatches).toEqual([]);
+			// Goal should NOT have passed
+			expect(ensureGoal!.success).toBe(false);
 
-			// ── Step inspection ──
-			const { steps, totalSteps } = await client.getGoalSteps(runId, "ensure_account");
-
-			// Steps array is non-empty
-			expect(steps.length).toBeGreaterThan(0);
-
-			// Step count within maxSteps (12)
-			expect(totalSteps).toBeLessThanOrEqual(12);
-
-			// Last step action is "done" — agent marked goal complete, didn't exhaust steps
-			const lastStep = steps[steps.length - 1];
-			const lastAction = typeof lastStep.action === "string"
-				? lastStep.action
-				: (lastStep.action as Record<string, unknown>).action;
-			expect(lastAction).toBe("done");
-
-			// All steps with a package stayed in Instagram
-			const stepsWithPackage = steps.filter((s) => s.package);
-			for (const s of stepsWithPackage) {
-				expect(s.package).toBe("com.instagram.android");
+			// Eval should show active_username is NOT the fake username
+			if (ensureGoal!.evalStateValues) {
+				const activeUsername = String(ensureGoal!.evalStateValues.active_username ?? "").toLowerCase();
+				expect(activeUsername).not.toBe(FAKE_USERNAME.toLowerCase());
 			}
 
-			// At least one step's reasoning mentions the username
-			const mentionsUsername = steps.some(
-				(s) => s.reasoning?.toLowerCase().includes(TEST_IG_USERNAME!.toLowerCase()),
-			);
-			expect(mentionsUsername).toBe(true);
+			// ── Step inspection — agent should have attempted but failed ──
+			const { steps, totalSteps } = await client.getGoalSteps(runId, "ensure_account");
+			expect(steps.length).toBeGreaterThan(0);
 
-			// ── Eval endpoint verification ──
-			const evalResult = await client.getGoalEval(runId, "ensure_account");
-			expect(evalResult.judgment).toBeTruthy();
-			expect(evalResult.judgment!.success).toBe(true);
-			expect(evalResult.judgment!.stateValues.correct_account_active).toBe(true);
-
-			// ── Console logging — print each step for test output visibility ──
-			console.log(`\n📋 Ensure Account — ${totalSteps} steps (discovery):`);
+			// Agent should have tried to find the account and concluded it's not there
+			console.log(`\n📋 Scenario 3 — ${totalSteps} steps (expected failure):`);
 			for (const s of steps) {
 				const actionStr = typeof s.action === "string"
 					? s.action
 					: JSON.stringify(s.action);
 				console.log(`  Step ${s.step}: [${actionStr}] ${s.reasoning?.slice(0, 120) ?? ""}`);
 			}
+
+			console.log(`✅ Scenario 3 passed: correctly failed for nonexistent account`);
+		},
+		5 * 60_000,
+	);
+
+	// ── Original phased tests (kept for recipe/stress testing) ──
+
+	test(
+		"Phase 1: discovery",
+		async () => {
+			expect(TEST_IG_USERNAME, "TEST_IG_USERNAME required").toBeTruthy();
+
+			const { runId } = await client.runWorkflow(workflow, { username: TEST_IG_USERNAME! });
+			await assertEnsureAccountSuccess(runId, TEST_IG_USERNAME!, "Phase 1 (discovery)");
 		},
 		5 * 60_000,
 	);
@@ -519,7 +652,9 @@ describe("Ensure Account", () => {
 	test(
 		"Phase 2: recipe",
 		async () => {
-			const { runId } = await client.runWorkflow(workflow, getVars());
+			expect(TEST_IG_USERNAME, "TEST_IG_USERNAME required").toBeTruthy();
+
+			const { runId } = await client.runWorkflow(workflow, { username: TEST_IG_USERNAME! });
 			const result = await client.waitForCompletion(runId, 5 * 60_000);
 
 			expect(result.status).toBe("completed");
@@ -531,15 +666,16 @@ describe("Ensure Account", () => {
 			// ── Eval state verification ──
 			expect(ensureGoal!.evalPassed).toBe(true);
 			expect(ensureGoal!.evalStateValues).toBeDefined();
-			expect(ensureGoal!.evalStateValues!.correct_account_active).toBe(true);
-			expect(ensureGoal!.evalStateValues!.on_home_feed).toBe(true);
+			const activeUsername = String(ensureGoal!.evalStateValues!.active_username ?? "").toLowerCase();
+			expect(activeUsername).toBe(TEST_IG_USERNAME!.toLowerCase());
 			expect(ensureGoal!.evalMismatches).toEqual([]);
 
 			// ── Eval endpoint verification ──
 			const evalResult = await client.getGoalEval(runId, "ensure_account");
 			expect(evalResult.judgment).toBeTruthy();
 			expect(evalResult.judgment!.success).toBe(true);
-			expect(evalResult.judgment!.stateValues.correct_account_active).toBe(true);
+			const evalUsername = String(evalResult.judgment!.stateValues.active_username ?? "").toLowerCase();
+			expect(evalUsername).toBe(TEST_IG_USERNAME!.toLowerCase());
 
 			console.log(`\n📋 Ensure Account — recipe replay, eval passed ✓`);
 		},
@@ -549,7 +685,8 @@ describe("Ensure Account", () => {
 	test(
 		"Phase 3: stress test (5 runs)",
 		async () => {
-			await runStressTest(workflow, getVars(), 5, 5 * 60_000);
+			expect(TEST_IG_USERNAME, "TEST_IG_USERNAME required").toBeTruthy();
+			await runStressTest(workflow, { username: TEST_IG_USERNAME! }, 5, 5 * 60_000);
 		},
 		30 * 60_000,
 	);
