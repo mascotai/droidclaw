@@ -11,6 +11,10 @@ import {
 	GripVertical,
 	X,
 	Variable,
+	Package,
+	Zap,
+	RotateCcw,
+	OctagonX,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
@@ -22,6 +26,11 @@ import {
 	DialogDescription,
 	DialogFooter,
 } from '@/components/ui/dialog';
+import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
+import { Textarea } from '@/components/ui/textarea';
+import { AppCombobox } from '@/components/shared/app-combobox';
+import { WorkflowGraph } from '@/components/workflows/workflow-graph';
 
 export const Route = createFileRoute('/_auth/dashboard/workflows/')({
 	component: WorkflowsPage,
@@ -35,6 +44,7 @@ interface StepDraft {
 	maxSteps: number;
 	retries: number;
 	cache: boolean;
+	forceStop: boolean;
 }
 
 interface VariableDraft {
@@ -42,7 +52,7 @@ interface VariableDraft {
 	value: string;
 }
 
-const emptyStep: StepDraft = { goal: '', app: '', maxSteps: 15, retries: 0, cache: false };
+const emptyStep: StepDraft = { goal: '', app: '', maxSteps: 15, retries: 0, cache: false, forceStop: false };
 
 // ── Page ──
 
@@ -126,6 +136,7 @@ function WorkflowsPage() {
 				maxSteps: s.maxSteps ?? 15,
 				retries: s.retries ?? 0,
 				cache: s.cache ?? false,
+				forceStop: s.forceStop ?? false,
 			})),
 		);
 		setVariables(
@@ -147,6 +158,7 @@ function WorkflowsPage() {
 			if (s.maxSteps !== 15) step.maxSteps = s.maxSteps;
 			if (s.retries > 0) step.retries = s.retries;
 			if (s.cache) step.cache = true;
+			if (s.forceStop) step.forceStop = true;
 			return step;
 		});
 
@@ -198,7 +210,7 @@ function WorkflowsPage() {
 	const isSaving = createWorkflow.isPending || updateWorkflow.isPending;
 
 	return (
-		<div className="mx-auto max-w-3xl space-y-6">
+		<div className="mx-auto max-w-4xl space-y-6">
 			{/* Header */}
 			<div className="flex items-center justify-between">
 				<div>
@@ -216,107 +228,186 @@ function WorkflowsPage() {
 				</button>
 			</div>
 
-			{/* Workflows list */}
-			<div className="rounded-xl border border-stone-200 bg-white p-6">
+			{/* Workflows list — expanded cards */}
+			<div className="space-y-4">
 				<h3 className="text-sm font-semibold text-stone-900">Saved workflows</h3>
 				{isLoading ? (
-					<div className="mt-4 space-y-3">
+					<div className="space-y-3">
 						{[1, 2, 3].map((i) => (
 							<div
 								key={i}
-								className="h-16 animate-pulse rounded-lg bg-stone-100"
+								className="h-32 animate-pulse rounded-xl bg-stone-100"
 							/>
 						))}
 					</div>
 				) : workflows && workflows.length > 0 ? (
-					<div className="mt-4 space-y-2">
+					<div className="space-y-4">
 						{workflows.map((wf: Workflow) => (
 							<div
 								key={wf.id}
-								className="flex items-center justify-between rounded-lg border border-stone-100 px-4 py-3"
+								className="rounded-xl border border-stone-200 bg-white overflow-hidden"
 							>
-								<div className="flex items-center gap-3 min-w-0">
-									<WorkflowIcon className="h-4 w-4 shrink-0 text-stone-400" />
-									<div className="min-w-0">
-										<p className="text-sm font-medium text-stone-700 truncate">
-											{wf.name}
-										</p>
-										<div className="flex items-center gap-2 text-xs text-stone-400">
-											<span>
-												{wf.steps.length} {wf.steps.length === 1 ? 'step' : 'steps'}
-											</span>
-											{wf.variables && Object.keys(wf.variables).length > 0 && (
-												<span className="flex items-center gap-0.5">
-													<Variable className="h-3 w-3" />
-													{Object.keys(wf.variables).length}
+								{/* Card header */}
+								<div className="flex items-center justify-between px-5 py-3.5 border-b border-stone-100">
+									<div className="flex items-center gap-3 min-w-0">
+										<WorkflowIcon className="h-4 w-4 shrink-0 text-stone-400" />
+										<div className="min-w-0">
+											<p className="text-sm font-semibold text-stone-900">
+												{wf.name}
+											</p>
+											<div className="flex items-center gap-2 text-xs text-stone-400 mt-0.5">
+												<span>
+													{wf.steps.length} {wf.steps.length === 1 ? 'step' : 'steps'}
 												</span>
-											)}
-											<span>
-												Updated{' '}
-												{formatDistanceToNow(new Date(wf.updatedAt), {
-													addSuffix: true,
-												})}
-											</span>
+												{wf.variables && Object.keys(wf.variables).length > 0 && (
+													<span className="flex items-center gap-0.5">
+														<Variable className="h-3 w-3" />
+														{Object.keys(wf.variables).length} var{Object.keys(wf.variables).length !== 1 ? 's' : ''}
+													</span>
+												)}
+												<span>
+													Updated{' '}
+													{formatDistanceToNow(new Date(wf.updatedAt), {
+														addSuffix: true,
+													})}
+												</span>
+											</div>
 										</div>
+									</div>
+
+									<div className="flex items-center gap-1 shrink-0">
+										<button
+											onClick={() => openEdit(wf)}
+											className="rounded p-1.5 text-stone-400 hover:text-stone-600 hover:bg-stone-50"
+											title="Edit workflow"
+										>
+											<Pencil className="h-4 w-4" />
+										</button>
+
+										{deleteConfirm === wf.id ? (
+											<div className="flex items-center gap-2">
+												<button
+													onClick={() => deleteWorkflow.mutate(wf.id)}
+													className="rounded px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
+												>
+													Confirm
+												</button>
+												<button
+													onClick={() => setDeleteConfirm(null)}
+													className="rounded px-2 py-1 text-xs text-stone-500 hover:bg-stone-50"
+												>
+													Cancel
+												</button>
+											</div>
+										) : (
+											<button
+												onClick={() => setDeleteConfirm(wf.id)}
+												className="rounded p-1.5 text-stone-400 hover:text-red-500 hover:bg-red-50"
+												title="Delete workflow"
+											>
+												<Trash2 className="h-4 w-4" />
+											</button>
+										)}
 									</div>
 								</div>
 
-								<div className="flex items-center gap-1 shrink-0">
-									<button
-										onClick={() => openEdit(wf)}
-										className="rounded p-1.5 text-stone-400 hover:text-stone-600"
-										title="Edit workflow"
-									>
-										<Pencil className="h-4 w-4" />
-									</button>
-
-									{deleteConfirm === wf.id ? (
-										<div className="flex items-center gap-2">
-											<button
-												onClick={() => deleteWorkflow.mutate(wf.id)}
-												className="rounded px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
-											>
-												Confirm
-											</button>
-											<button
-												onClick={() => setDeleteConfirm(null)}
-												className="rounded px-2 py-1 text-xs text-stone-500 hover:bg-stone-50"
-											>
-												Cancel
-											</button>
-										</div>
-									) : (
-										<button
-											onClick={() => setDeleteConfirm(wf.id)}
-											className="rounded p-1.5 text-stone-400 hover:text-red-500"
-											title="Delete workflow"
+								{/* Steps detail */}
+								<div className="px-5 py-3 space-y-2">
+									{wf.steps.map((step: WorkflowStepConfig, idx: number) => (
+										<div
+											key={idx}
+											className="flex items-start gap-3 rounded-lg bg-stone-50 px-3 py-2.5"
 										>
-											<Trash2 className="h-4 w-4" />
-										</button>
-									)}
+											<span className="mt-0.5 shrink-0 flex items-center justify-center h-5 w-5 rounded-full bg-stone-200 text-[10px] font-bold text-stone-600">
+												{idx + 1}
+											</span>
+											<div className="min-w-0 flex-1">
+												<p className="text-sm text-stone-700 whitespace-pre-wrap">
+													{step.goal}
+												</p>
+												<div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+													{step.app && (
+														<Badge variant="outline" className="gap-1">
+															<Package className="h-3 w-3" />
+															{step.app}
+														</Badge>
+													)}
+													<Badge variant="secondary" className="gap-1">
+														<Zap className="h-3 w-3" />
+														{step.maxSteps ?? 15} steps
+													</Badge>
+													{(step.retries ?? 0) > 0 && (
+														<Badge variant="secondary" className="gap-1">
+															<RotateCcw className="h-3 w-3" />
+															{step.retries} {step.retries === 1 ? 'retry' : 'retries'}
+														</Badge>
+													)}
+													{step.forceStop && (
+														<Badge variant="destructive" className="gap-1">
+															<OctagonX className="h-3 w-3" />
+															Force stop
+														</Badge>
+													)}
+													{step.cache && (
+														<Badge variant="secondary">Cached</Badge>
+													)}
+												</div>
+											</div>
+										</div>
+									))}
+								</div>
+
+								{/* Variables section */}
+								{wf.variables && Object.keys(wf.variables).length > 0 && (
+									<div className="px-5 pb-3">
+										<div className="rounded-lg bg-violet-50 border border-violet-100 px-3 py-2">
+											<p className="text-[10px] font-semibold uppercase tracking-wider text-violet-500 mb-1">
+												Variables
+											</p>
+											<div className="flex flex-wrap gap-1.5">
+												{Object.entries(wf.variables).map(([key, val]) => (
+													<span
+														key={key}
+														className="inline-flex items-center gap-1 rounded bg-white border border-violet-200 px-2 py-0.5 text-xs font-mono"
+													>
+														<span className="text-violet-600">{key}</span>
+														<span className="text-stone-300">=</span>
+														<span className="text-stone-500">{val}</span>
+													</span>
+												))}
+											</div>
+										</div>
+									</div>
+								)}
+
+								{/* Workflow graph */}
+								<div className="px-5 pb-4">
+									<WorkflowGraph steps={wf.steps} />
 								</div>
 							</div>
 						))}
 					</div>
 				) : (
-					<div className="mt-4 flex flex-col items-center py-8">
-						<WorkflowIcon className="h-8 w-8 text-stone-300" />
-						<p className="mt-2 text-sm text-stone-500">
-							No saved workflows yet
-						</p>
-						<button
-							onClick={openCreate}
-							className="mt-3 text-sm font-medium text-violet-600 hover:text-violet-700"
-						>
-							Create your first workflow
-						</button>
+					<div className="rounded-xl border border-stone-200 bg-white p-6">
+						<div className="flex flex-col items-center py-8">
+							<WorkflowIcon className="h-8 w-8 text-stone-300" />
+							<p className="mt-2 text-sm text-stone-500">
+								No saved workflows yet
+							</p>
+							<button
+								onClick={openCreate}
+								className="mt-3 text-sm font-medium text-violet-600 hover:text-violet-700"
+							>
+								Create your first workflow
+							</button>
+						</div>
 					</div>
 				)}
 			</div>
 
 			{/* Create / Edit Dialog */}
 			<Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) closeDialog(); }}>
-				<DialogContent className="sm:max-w-xl max-h-[85vh] overflow-y-auto">
+				<DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
 					<DialogHeader>
 						<DialogTitle>
 							{editingId ? 'Edit workflow' : 'New workflow'}
@@ -366,29 +457,28 @@ function WorkflowsPage() {
 										<div className="flex items-start gap-2">
 											<GripVertical className="mt-2 h-4 w-4 shrink-0 text-stone-300" />
 											<div className="flex-1 space-y-2">
-												<div className="flex items-center gap-2">
-													<span className="shrink-0 rounded bg-stone-200 px-1.5 py-0.5 text-[10px] font-medium text-stone-600">
+												{/* Step number + goal textarea */}
+												<div className="flex items-start gap-2">
+													<span className="mt-2 shrink-0 rounded bg-stone-200 px-1.5 py-0.5 text-[10px] font-medium text-stone-600">
 														{idx + 1}
 													</span>
-													<input
-														type="text"
+													<Textarea
 														value={step.goal}
 														onChange={(e) =>
 															updateStep(idx, { goal: e.target.value })
 														}
-														placeholder="Goal — e.g., Open the Settings app"
-														className="flex-1 rounded border border-stone-300 bg-white px-2.5 py-1.5 text-sm focus:border-violet-500 focus:ring-violet-500"
+														placeholder="Goal — e.g., Open the Settings app and navigate to Wi-Fi"
+														rows={2}
+														className="flex-1 resize-y text-sm bg-white"
 													/>
 												</div>
+
+												{/* App combobox + settings row */}
 												<div className="flex flex-wrap gap-2">
-													<input
-														type="text"
+													<AppCombobox
 														value={step.app}
-														onChange={(e) =>
-															updateStep(idx, { app: e.target.value })
-														}
-														placeholder="App package (optional)"
-														className="min-w-[140px] flex-1 rounded border border-stone-300 bg-white px-2.5 py-1.5 text-xs focus:border-violet-500 focus:ring-violet-500"
+														onChange={(val) => updateStep(idx, { app: val })}
+														className="min-w-[200px] flex-1"
 													/>
 													<div className="flex items-center gap-1">
 														<label className="text-[10px] text-stone-500">
@@ -423,6 +513,22 @@ function WorkflowsPage() {
 															max={10}
 															className="w-14 rounded border border-stone-300 bg-white px-2 py-1.5 text-center text-xs focus:border-violet-500 focus:ring-violet-500"
 														/>
+													</div>
+												</div>
+
+												{/* Force stop toggle — visible */}
+												<div className="flex items-center gap-3">
+													<div className="flex items-center gap-1.5">
+														<Switch
+															checked={step.forceStop}
+															onCheckedChange={(checked: boolean) =>
+																updateStep(idx, { forceStop: checked })
+															}
+															size="sm"
+														/>
+														<label className="text-xs text-stone-500">
+															Force stop app before step
+														</label>
 													</div>
 												</div>
 											</div>
@@ -495,6 +601,26 @@ function WorkflowsPage() {
 								</p>
 							)}
 						</div>
+
+						{/* Preview graph in dialog */}
+						{steps.some((s) => s.goal.trim()) && (
+							<div>
+								<label className="block text-xs font-medium text-stone-600 mb-2">
+									Preview
+								</label>
+								<WorkflowGraph
+									steps={steps
+										.filter((s) => s.goal.trim())
+										.map((s) => ({
+											goal: s.goal,
+											app: s.app || undefined,
+											maxSteps: s.maxSteps !== 15 ? s.maxSteps : undefined,
+											retries: s.retries > 0 ? s.retries : undefined,
+											forceStop: s.forceStop || undefined,
+										}))}
+								/>
+							</div>
+						)}
 					</div>
 
 					<DialogFooter>

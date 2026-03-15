@@ -14,10 +14,10 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthDashboardIndexRouteImport } from './routes/_auth/dashboard/index'
 import { Route as AuthDashboardSettingsRouteImport } from './routes/_auth/dashboard/settings'
 import { Route as AuthDashboardActivateRouteImport } from './routes/_auth/dashboard/activate'
+import { Route as AuthDashboardWorkflowsIndexRouteImport } from './routes/_auth/dashboard/workflows/index'
+import { Route as AuthDashboardGoalsIndexRouteImport } from './routes/_auth/dashboard/goals/index'
 import { Route as AuthDashboardDevicesIndexRouteImport } from './routes/_auth/dashboard/devices/index'
 import { Route as AuthDashboardDevicesDeviceIdIndexRouteImport } from './routes/_auth/dashboard/devices/$deviceId/index'
-import { Route as AuthDashboardGoalsIndexRouteImport } from './routes/_auth/dashboard/goals/index'
-import { Route as AuthDashboardWorkflowsIndexRouteImport } from './routes/_auth/dashboard/workflows/index'
 
 const AuthRoute = AuthRouteImport.update({
   id: '/_auth',
@@ -43,6 +43,17 @@ const AuthDashboardActivateRoute = AuthDashboardActivateRouteImport.update({
   path: '/dashboard/activate',
   getParentRoute: () => AuthRoute,
 } as any)
+const AuthDashboardWorkflowsIndexRoute =
+  AuthDashboardWorkflowsIndexRouteImport.update({
+    id: '/dashboard/workflows/',
+    path: '/dashboard/workflows/',
+    getParentRoute: () => AuthRoute,
+  } as any)
+const AuthDashboardGoalsIndexRoute = AuthDashboardGoalsIndexRouteImport.update({
+  id: '/dashboard/goals/',
+  path: '/dashboard/goals/',
+  getParentRoute: () => AuthRoute,
+} as any)
 const AuthDashboardDevicesIndexRoute =
   AuthDashboardDevicesIndexRouteImport.update({
     id: '/dashboard/devices/',
@@ -55,18 +66,6 @@ const AuthDashboardDevicesDeviceIdIndexRoute =
     path: '/dashboard/devices/$deviceId/',
     getParentRoute: () => AuthRoute,
   } as any)
-const AuthDashboardGoalsIndexRoute =
-  AuthDashboardGoalsIndexRouteImport.update({
-    id: '/dashboard/goals/',
-    path: '/dashboard/goals/',
-    getParentRoute: () => AuthRoute,
-  } as any)
-const AuthDashboardWorkflowsIndexRoute =
-  AuthDashboardWorkflowsIndexRouteImport.update({
-    id: '/dashboard/workflows/',
-    path: '/dashboard/workflows/',
-    getParentRoute: () => AuthRoute,
-  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -74,9 +73,9 @@ export interface FileRoutesByFullPath {
   '/dashboard/settings': typeof AuthDashboardSettingsRoute
   '/dashboard/': typeof AuthDashboardIndexRoute
   '/dashboard/devices/': typeof AuthDashboardDevicesIndexRoute
-  '/dashboard/devices/$deviceId/': typeof AuthDashboardDevicesDeviceIdIndexRoute
   '/dashboard/goals/': typeof AuthDashboardGoalsIndexRoute
   '/dashboard/workflows/': typeof AuthDashboardWorkflowsIndexRoute
+  '/dashboard/devices/$deviceId/': typeof AuthDashboardDevicesDeviceIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -84,9 +83,9 @@ export interface FileRoutesByTo {
   '/dashboard/settings': typeof AuthDashboardSettingsRoute
   '/dashboard': typeof AuthDashboardIndexRoute
   '/dashboard/devices': typeof AuthDashboardDevicesIndexRoute
-  '/dashboard/devices/$deviceId': typeof AuthDashboardDevicesDeviceIdIndexRoute
   '/dashboard/goals': typeof AuthDashboardGoalsIndexRoute
   '/dashboard/workflows': typeof AuthDashboardWorkflowsIndexRoute
+  '/dashboard/devices/$deviceId': typeof AuthDashboardDevicesDeviceIdIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -96,9 +95,9 @@ export interface FileRoutesById {
   '/_auth/dashboard/settings': typeof AuthDashboardSettingsRoute
   '/_auth/dashboard/': typeof AuthDashboardIndexRoute
   '/_auth/dashboard/devices/': typeof AuthDashboardDevicesIndexRoute
-  '/_auth/dashboard/devices/$deviceId/': typeof AuthDashboardDevicesDeviceIdIndexRoute
   '/_auth/dashboard/goals/': typeof AuthDashboardGoalsIndexRoute
   '/_auth/dashboard/workflows/': typeof AuthDashboardWorkflowsIndexRoute
+  '/_auth/dashboard/devices/$deviceId/': typeof AuthDashboardDevicesDeviceIdIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -108,9 +107,9 @@ export interface FileRouteTypes {
     | '/dashboard/settings'
     | '/dashboard/'
     | '/dashboard/devices/'
-    | '/dashboard/devices/$deviceId/'
     | '/dashboard/goals/'
     | '/dashboard/workflows/'
+    | '/dashboard/devices/$deviceId/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -118,9 +117,9 @@ export interface FileRouteTypes {
     | '/dashboard/settings'
     | '/dashboard'
     | '/dashboard/devices'
-    | '/dashboard/devices/$deviceId'
     | '/dashboard/goals'
     | '/dashboard/workflows'
+    | '/dashboard/devices/$deviceId'
   id:
     | '__root__'
     | '/'
@@ -129,9 +128,9 @@ export interface FileRouteTypes {
     | '/_auth/dashboard/settings'
     | '/_auth/dashboard/'
     | '/_auth/dashboard/devices/'
-    | '/_auth/dashboard/devices/$deviceId/'
     | '/_auth/dashboard/goals/'
     | '/_auth/dashboard/workflows/'
+    | '/_auth/dashboard/devices/$deviceId/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -176,6 +175,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthDashboardActivateRouteImport
       parentRoute: typeof AuthRoute
     }
+    '/_auth/dashboard/workflows/': {
+      id: '/_auth/dashboard/workflows/'
+      path: '/dashboard/workflows'
+      fullPath: '/dashboard/workflows/'
+      preLoaderRoute: typeof AuthDashboardWorkflowsIndexRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/dashboard/goals/': {
+      id: '/_auth/dashboard/goals/'
+      path: '/dashboard/goals'
+      fullPath: '/dashboard/goals/'
+      preLoaderRoute: typeof AuthDashboardGoalsIndexRouteImport
+      parentRoute: typeof AuthRoute
+    }
     '/_auth/dashboard/devices/': {
       id: '/_auth/dashboard/devices/'
       path: '/dashboard/devices'
@@ -190,20 +203,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthDashboardDevicesDeviceIdIndexRouteImport
       parentRoute: typeof AuthRoute
     }
-    '/_auth/dashboard/goals/': {
-      id: '/_auth/dashboard/goals/'
-      path: '/dashboard/goals'
-      fullPath: '/dashboard/goals/'
-      preLoaderRoute: typeof AuthDashboardGoalsIndexRouteImport
-      parentRoute: typeof AuthRoute
-    }
-    '/_auth/dashboard/workflows/': {
-      id: '/_auth/dashboard/workflows/'
-      path: '/dashboard/workflows'
-      fullPath: '/dashboard/workflows/'
-      preLoaderRoute: typeof AuthDashboardWorkflowsIndexRouteImport
-      parentRoute: typeof AuthRoute
-    }
   }
 }
 
@@ -212,9 +211,9 @@ interface AuthRouteChildren {
   AuthDashboardSettingsRoute: typeof AuthDashboardSettingsRoute
   AuthDashboardIndexRoute: typeof AuthDashboardIndexRoute
   AuthDashboardDevicesIndexRoute: typeof AuthDashboardDevicesIndexRoute
-  AuthDashboardDevicesDeviceIdIndexRoute: typeof AuthDashboardDevicesDeviceIdIndexRoute
   AuthDashboardGoalsIndexRoute: typeof AuthDashboardGoalsIndexRoute
   AuthDashboardWorkflowsIndexRoute: typeof AuthDashboardWorkflowsIndexRoute
+  AuthDashboardDevicesDeviceIdIndexRoute: typeof AuthDashboardDevicesDeviceIdIndexRoute
 }
 
 const AuthRouteChildren: AuthRouteChildren = {
@@ -222,10 +221,10 @@ const AuthRouteChildren: AuthRouteChildren = {
   AuthDashboardSettingsRoute: AuthDashboardSettingsRoute,
   AuthDashboardIndexRoute: AuthDashboardIndexRoute,
   AuthDashboardDevicesIndexRoute: AuthDashboardDevicesIndexRoute,
-  AuthDashboardDevicesDeviceIdIndexRoute:
-    AuthDashboardDevicesDeviceIdIndexRoute,
   AuthDashboardGoalsIndexRoute: AuthDashboardGoalsIndexRoute,
   AuthDashboardWorkflowsIndexRoute: AuthDashboardWorkflowsIndexRoute,
+  AuthDashboardDevicesDeviceIdIndexRoute:
+    AuthDashboardDevicesDeviceIdIndexRoute,
 }
 
 const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)

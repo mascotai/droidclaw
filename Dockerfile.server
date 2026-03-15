@@ -9,8 +9,6 @@ COPY package.json ./
 COPY packages/shared ./packages/shared
 COPY server ./server
 
-# Remove "web" workspace entry (web is built separately)
-RUN sed -i 's/, "web"//' package.json
 RUN bun install
 
 WORKDIR /app/server

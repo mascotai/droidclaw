@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
+import { AppCombobox } from '@/components/shared/app-combobox';
 import {
 	Dialog,
 	DialogContent,
@@ -273,14 +274,13 @@ function GoalsPage() {
 							</div>
 
 							<div className="space-y-2">
-								<Label htmlFor="goal-app">App package</Label>
-								<Input
-									id="goal-app"
-									placeholder="e.g., com.instagram.android (optional)"
+								<Label>App package</Label>
+								<AppCombobox
 									value={formData.app}
-									onChange={(e) =>
-										setFormData({ ...formData, app: e.target.value })
+									onChange={(val) =>
+										setFormData({ ...formData, app: val })
 									}
+									className="w-full"
 								/>
 								<p className="text-xs text-stone-400">
 									The Android package to target. Leave empty for any app.
