@@ -7,11 +7,11 @@
  *   Phase 3 (Stress):    Run 5 times — measure recipe consistency/success rate
  *
  * Run selectively:
- *   npx vitest run --config vitest.config.e2e-social.ts --grep "Phase 1"     # discovery only
- *   npx vitest run --config vitest.config.e2e-social.ts --grep "Phase 2"     # recipe only
- *   npx vitest run --config vitest.config.e2e-social.ts --grep "stress"      # stress only
- *   npx vitest run --config vitest.config.e2e-social.ts --grep "Ensure"      # all phases for one workflow
- *   npm run test:social                                                       # everything
+ *   npx vitest run --config vitest.config.e2e-social.ts -t "Phase 1"     # discovery only
+ *   npx vitest run --config vitest.config.e2e-social.ts -t "Phase 2"     # recipe only
+ *   npx vitest run --config vitest.config.e2e-social.ts -t "stress"      # stress only
+ *   npx vitest run --config vitest.config.e2e-social.ts -t "Ensure"      # all phases for one workflow
+ *   npm run test:social                                                   # everything
  *
  * Requires env vars:
  *   DROIDCLAW_URL          — server URL (e.g., https://droidclaw.stack.mascott.ai)

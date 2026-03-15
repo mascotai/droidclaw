@@ -32,7 +32,7 @@ PHASE1_PASSED=false
 for attempt in $(seq 1 $MAX_FIX); do
   echo ""
   echo "🧪 Discovery attempt $attempt/$MAX_FIX"
-  npx vitest run --config vitest.config.e2e-social.ts --grep "Phase 1" || true
+  npx vitest run --config vitest.config.e2e-social.ts -t "Phase 1" || true
 
   # Check results
   if [ ! -f "$RESULTS" ]; then
@@ -126,7 +126,7 @@ echo "  Phase 2: Recipe Verification"
 echo "═══════════════════════════════════════"
 echo ""
 
-npx vitest run --config vitest.config.e2e-social.ts --grep "Phase 2" || true
+npx vitest run --config vitest.config.e2e-social.ts -t "Phase 2" || true
 
 if [ ! -f "$RESULTS" ]; then
   echo "⚠️  No test results file"
@@ -164,7 +164,7 @@ echo "  Phase 3: Stress Test (5 runs)"
 echo "═══════════════════════════════════════"
 echo ""
 
-npx vitest run --config vitest.config.e2e-social.ts --grep "stress" || true
+npx vitest run --config vitest.config.e2e-social.ts -t "stress" || true
 
 if [ ! -f "$RESULTS" ]; then
   echo "⚠️  No test results file"
